@@ -42,7 +42,7 @@ export default function TeamPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
+      <h1 className="text-3xl font-extrabold tracking-tight">Team</h1>
       <p className="mt-1 text-sm opacity-70">
         {active} active account{active === 1 ? '' : 's'}.{' '}
         {status?.signupOpen
@@ -50,12 +50,12 @@ export default function TeamPage() {
           : 'Sign-up is closed: set TEAM_SIGNUP_CODE on the server to let new staff join.'}
       </p>
 
-      {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
-      {notice && <p className="mt-4 text-sm text-[var(--accent)]">{notice}</p>}
+      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
+      {notice && <p className="mt-4 text-sm text-[var(--success)]">{notice}</p>}
 
       <div className="card mt-6 overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-white/10 text-xs uppercase tracking-wide opacity-60">
+          <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Videos watched</th>
@@ -63,7 +63,7 @@ export default function TeamPage() {
               <th className="px-4 py-3 font-medium" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10">
+          <tbody className="divide-y divide-[var(--border)]">
             {team.map((m) => {
               const self = m.userId === user?.userId;
               return (
@@ -85,7 +85,7 @@ export default function TeamPage() {
                           {m.role === 'ADMIN' ? 'Make stylist' : 'Make manager'}
                         </button>
                         <button
-                          className={`btn-ghost ${m.active ? 'text-red-300' : ''}`}
+                          className={`btn-ghost ${m.active ? 'text-[var(--danger)]' : ''}`}
                           onClick={() => void run(() => api.updateMember(m.userId, { active: !m.active }))}
                         >
                           {m.active ? 'Turn off' : 'Turn on'}

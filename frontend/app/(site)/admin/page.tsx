@@ -6,10 +6,10 @@ import { api, formatDuration, type AdminStatus, type UploadTicket, type VideoSum
 import { uploadToBunny } from '@/src/lib/upload';
 
 const STATUS_STYLE: Record<VideoSummary['status'], string> = {
-  UPLOADING: 'text-amber-200',
-  PROCESSING: 'text-amber-200',
-  READY: 'text-[var(--accent)]',
-  FAILED: 'text-red-300',
+  UPLOADING: 'text-[var(--warn)]',
+  PROCESSING: 'text-[var(--warn)]',
+  READY: 'text-[var(--success)]',
+  FAILED: 'text-[var(--danger)]',
 };
 const STATUS_LABEL: Record<VideoSummary['status'], string> = {
   UPLOADING: 'Waiting for upload',
@@ -41,8 +41,8 @@ export default function AdminVideosPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Manage videos</h1>
-      {error && <p className="text-red-300">{error}</p>}
+      <h1 className="text-3xl font-extrabold tracking-tight">Manage videos</h1>
+      {error && <p className="text-[var(--danger)]">{error}</p>}
 
       {status && !status.bunnyConfigured ? (
         <SetupHelp />
@@ -161,14 +161,14 @@ function UploadForm({ categories, onDone }: { categories: string[]; onDone: () =
           required
           disabled={uploading}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-[var(--foreground)]"
+          className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-[var(--accent-soft)] file:px-3 file:py-1.5 file:font-semibold file:text-[var(--accent-strong)]"
         />
         {file && <span className="mt-1 block text-xs opacity-60">{(file.size / 1024 / 1024).toFixed(0)} MB</span>}
       </label>
 
       {uploading && <ProgressBar fraction={progress} />}
-      {message && <p className="text-sm text-[var(--accent)]">{message}</p>}
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {message && <p className="text-sm text-[var(--success)]">{message}</p>}
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
 
       <button type="submit" className="btn" disabled={uploading || !file || !title.trim()}>
         {uploading ? `Uploading… ${Math.round((progress ?? 0) * 100)}%` : 'Upload'}
@@ -266,19 +266,19 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
               </>
             )}
             <button className="btn-ghost" onClick={() => setEditing(true)}>Edit</button>
-            <button className="btn-ghost text-red-300" onClick={() => void remove()}>Delete</button>
+            <button className="btn-ghost text-[var(--danger)]" onClick={() => void remove()}>Delete</button>
           </div>
         </div>
       )}
       {progress !== null && <div className="mt-3"><ProgressBar fraction={progress} /></div>}
-      {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
     </li>
   );
 }
 
 function ProgressBar({ fraction }: { fraction: number | null }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-white/10">
+    <div className="h-2 overflow-hidden rounded-full bg-[var(--accent-soft)]">
       <div className="h-full bg-[var(--accent)] transition-all" style={{ width: `${Math.round((fraction ?? 0) * 100)}%` }} />
     </div>
   );

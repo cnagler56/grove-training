@@ -17,24 +17,29 @@ function Header() {
   const tabs = user?.roles === 'ADMIN' ? [...TABS, ...ADMIN_TABS] : TABS;
 
   return (
-    <header className="border-b border-white/10">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          🌿 Grove Salons <span className="font-normal opacity-60">Training</span>
-        </Link>
-        {user && (
-          <div className="flex items-center gap-4 text-sm">
-            <span className="hidden opacity-80 sm:inline">{user.firstName || user.email}</span>
-            <button onClick={() => void logout()} className="btn-ghost">
-              Sign out
-            </button>
-          </div>
-        )}
+    <header>
+      <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+          <Link href="/" className="text-xl font-extrabold tracking-tight">
+            ✂️ Grove Salons <span className="font-semibold opacity-85">Training</span>
+          </Link>
+          {user && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="hidden font-semibold sm:inline">{user.firstName || user.email}</span>
+              <button
+                onClick={() => void logout()}
+                className="rounded-full bg-white/25 px-3.5 py-1.5 font-semibold hover:bg-white/35"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {user && (
-        <nav className="border-t border-white/10">
-          <div className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-2 text-sm">
+        <nav className="border-b border-[var(--border)] bg-[var(--surface)]">
+          <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm">
             {tabs.map((tab) => {
               const active = tab.href === '/'
                 ? pathname === '/' || pathname.startsWith('/videos')
@@ -43,10 +48,10 @@ function Header() {
                 <Link
                   key={tab.href}
                   href={tab.href}
-                  className={`whitespace-nowrap border-b-2 px-3 py-2.5 transition-colors ${
+                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 font-semibold transition-colors ${
                     active
-                      ? 'border-[var(--accent)] font-medium text-[var(--accent)]'
-                      : 'border-transparent opacity-70 hover:opacity-100'
+                      ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+                      : 'opacity-70 hover:bg-[var(--surface-2)] hover:opacity-100'
                   }`}
                 >
                   {tab.label}

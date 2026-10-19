@@ -32,7 +32,7 @@ export default function SignInPage() {
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="text-3xl font-extrabold tracking-tight">
         {mode === 'login' ? 'Sign in' : 'Join the team'}
       </h1>
       <p className="mt-1 text-sm opacity-70">
@@ -60,7 +60,7 @@ export default function SignInPage() {
           required
         />
 
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
 
         <button type="submit" disabled={busy} className="btn w-full">
           {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}

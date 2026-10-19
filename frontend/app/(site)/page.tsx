@@ -31,7 +31,7 @@ export default function LibraryPage() {
       a === UNCATEGORIZED ? 1 : b === UNCATEGORIZED ? -1 : a.localeCompare(b));
   }, [videos, query]);
 
-  if (error) return <p className="text-red-300">{error}</p>;
+  if (error) return <p className="text-[var(--danger)]">{error}</p>;
   if (!videos) return <p className="opacity-60">Loading videos…</p>;
 
   const ready = videos.filter((v) => v.status === 'READY');
@@ -41,7 +41,7 @@ export default function LibraryPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-extrabold tracking-tight">
             Hi{user?.firstName ? `, ${user.firstName}` : ''} 👋
           </h1>
           {ready.length > 0 && (
@@ -73,7 +73,7 @@ export default function LibraryPage() {
       ) : (
         groups.map(([category, list]) => (
           <section key={category} className="mt-8">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide opacity-70">{category}</h2>
+            <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-[var(--accent-strong)]">{category}</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {list.map((v) => <VideoCard key={v.id} video={v} />)}
             </div>

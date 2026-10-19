@@ -37,7 +37,7 @@ export default function VideoPage() {
     }
   }
 
-  if (error) return <p className="text-red-300">{error}</p>;
+  if (error) return <p className="text-[var(--danger)]">{error}</p>;
   if (!detail) return <p className="opacity-60">Loading…</p>;
 
   const { video, embedUrl } = detail;
@@ -47,7 +47,7 @@ export default function VideoPage() {
     <div>
       <Link href="/" className="text-sm opacity-70 hover:opacity-100">← All videos</Link>
 
-      <div className="mt-4 overflow-hidden rounded-xl bg-black">
+      <div className="mt-4 overflow-hidden rounded-2xl bg-black text-white shadow-lg">
         {embedUrl ? (
           <div className="relative aspect-video">
             <iframe
@@ -70,9 +70,9 @@ export default function VideoPage() {
       <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           {video.category && (
-            <p className="text-xs font-semibold uppercase tracking-wide opacity-60">{video.category}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--accent-strong)]">{video.category}</p>
           )}
-          <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">{video.title}</h1>
           {video.durationSeconds ? (
             <p className="mt-1 text-sm opacity-60">{formatDuration(video.durationSeconds)}</p>
           ) : null}
@@ -97,11 +97,11 @@ export default function VideoPage() {
           <h2 className="font-semibold">
             Who&apos;s watched it <span className="font-normal opacity-60">({watchedCount} of {report.employees.length})</span>
           </h2>
-          <ul className="mt-3 divide-y divide-white/10 text-sm">
+          <ul className="mt-3 divide-y divide-[var(--border)] text-sm">
             {report.employees.map((e) => (
               <li key={e.userId} className="flex justify-between gap-4 py-2">
                 <span>{e.name}</span>
-                <span className={e.completedAt ? 'text-[var(--accent)]' : 'opacity-50'}>
+                <span className={e.completedAt ? 'text-[var(--success)]' : 'opacity-50'}>
                   {e.completedAt ? `✓ ${new Date(e.completedAt).toLocaleDateString()}` : 'Not yet'}
                 </span>
               </li>
