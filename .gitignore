@@ -10,7 +10,6 @@
 **/.env
 **/.env.local
 **/.env.*.local
-**/dev-env.ps1
 **/application-local.yml
 **/application-local.yaml
 

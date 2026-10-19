@@ -26,12 +26,14 @@ this app only stores titles, categories, who's watched what, and accounts.
 Ports: backend **8084**, MySQL **3308** (container `grove-mysql`), frontend **3001**.
 These don't collide with AgriServer (8081/3306) or retirement-planner (8083/3307/3000).
 
+All local backend settings live in one gitignored file, `backend/.env`.
+docker-compose reads it for the MySQL password, and Spring Boot reads it
+for everything else (via spring-dotenv).
+
 ```powershell
 cd backend
-copy .env.example .env               # set MYSQL_ROOT_PASSWORD
-copy dev-env.example.ps1 dev-env.ps1 # match DB_PASSWORD, add Bunny keys
+copy .env.example .env               # set the password, team code, Bunny keys
 docker compose up -d
-. .\dev-env.ps1
 .\mvnw.cmd spring-boot:run
 ```
 

@@ -2,8 +2,7 @@ HELP.md
 target/
 bin/
 
-# Local environment — committed only as dev-env.example.ps1
-dev-env.ps1
+# Local settings — committed only as .env.example
 .env
 .env.local
 .env.*.local
