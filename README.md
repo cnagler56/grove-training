@@ -28,18 +28,29 @@ These don't collide with AgriServer (8081/3306) or retirement-planner (8083/3307
 
 All local backend settings live in one gitignored file, `backend/.env`.
 docker-compose reads it for the MySQL password, and Spring Boot reads it
-for everything else (via spring-dotenv).
+for everything else (via spring-dotenv). It holds:
+
+```
+MYSQL_ROOT_PASSWORD=...
+TEAM_SIGNUP_CODE=...
+ADMIN_EMAILS=you@example.com
+BUNNY_LIBRARY_ID=...
+BUNNY_API_KEY=...
+BUNNY_TOKEN_KEY=...
+BUNNY_CDN_HOSTNAME=vz-....b-cdn.net
+```
 
 ```powershell
 cd backend
-copy .env.example .env               # set the password, team code, Bunny keys
 docker compose up -d
 .\mvnw.cmd spring-boot:run
 ```
 
+The frontend needs no settings locally: it talks to `http://localhost:8084`
+by default. (In production, set `NEXT_PUBLIC_API_URL` in Vercel.)
+
 ```powershell
 cd frontend
-copy .env.local.example .env.local
 npm install
 npm run dev                          # http://localhost:3001
 ```

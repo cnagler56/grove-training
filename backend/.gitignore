@@ -2,7 +2,7 @@ HELP.md
 target/
 bin/
 
-# Local settings — committed only as .env.example
+# Local settings and secrets — never committed
 .env
 .env.local
 .env.*.local

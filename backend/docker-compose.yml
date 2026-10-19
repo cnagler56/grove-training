@@ -1,3 +1,8 @@
+# Explicit project name: without it compose uses the folder name ("backend"),
+# which retirement-planner also uses, and the two stacks would replace each
+# other's MySQL container.
+name: grove-training
+
 services:
   mysql:
     image: mysql:8.4
@@ -5,7 +10,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: grove_training
-      # Set MYSQL_ROOT_PASSWORD in backend/.env (copy from .env.example). Never commit it.
+      # Set MYSQL_ROOT_PASSWORD in backend/.env (gitignored). Never commit it.
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in backend/.env}
     # Host 3308 keeps this clear of AgriServer (3306) and retirement-planner (3307).
     ports:
