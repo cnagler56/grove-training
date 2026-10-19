@@ -1,0 +1,28 @@
+# Dependencies / build output
+**/node_modules/
+**/target/
+**/.next/
+**/build/
+**/dist/
+**/out/
+
+# Env / secrets — never commit
+**/.env
+**/.env.local
+**/.env.*.local
+**/dev-env.ps1
+**/application-local.yml
+**/application-local.yaml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Logs / misc
+*.log
+*.tsbuildinfo

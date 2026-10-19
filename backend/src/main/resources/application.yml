@@ -1,0 +1,44 @@
+server:
+  port: ${SERVER_PORT:8084}
+  error:
+    # Send our friendly ResponseStatusException messages ("That team code isn't right…") to the UI.
+    include-message: always
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3308/grove_training?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    hikari:
+      # Let idle connections close so a sleeping Railway service can actually sleep.
+      minimum-idle: 0
+      idle-timeout: 60000
+
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:false}
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+
+logging:
+  level:
+    root: warn
+    org.springframework.web: info
+    org.hibernate: error
+
+# App
+app:
+  # Employees type this code to create an account. Leave blank to turn sign-up off.
+  signup-code: ${TEAM_SIGNUP_CODE:}
+  # Comma-separated emails that become ADMIN (managers) when they sign up.
+  admin-emails: ${ADMIN_EMAILS:}
+  # true in production (HTTPS, frontend on a different domain) → Secure + SameSite=None.
+  cookie-secure: ${COOKIE_SECURE:false}
+  bunny:
+    # Bunny Stream → your video library → API. All blank = uploads disabled.
+    library-id: ${BUNNY_LIBRARY_ID:}
+    api-key: ${BUNNY_API_KEY:}
+    # Library → Security → "Embed view token authentication" key. Blank = unsigned embeds.
+    token-key: ${BUNNY_TOKEN_KEY:}
+    # Library → API → "CDN hostname" (e.g. vz-abc123.b-cdn.net), used for thumbnails.
+    cdn-hostname: ${BUNNY_CDN_HOSTNAME:}

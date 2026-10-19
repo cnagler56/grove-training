@@ -1,0 +1,63 @@
+package com.grove.Domain;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/** Request/response shapes for the video and team APIs. */
+public final class Dtos {
+
+	private Dtos() {}
+
+	/** A video as listed in the library, with whether the viewer has watched it. */
+	public record VideoSummary(
+		Long id,
+		String title,
+		String description,
+		String category,
+		VideoStatus status,
+		Integer durationSeconds,
+		String thumbnailUrl,
+		boolean completed,
+		LocalDateTime createdAt) {}
+
+	/** One video plus a short-lived signed player URL (null until READY). */
+	public record VideoDetail(VideoSummary video, String embedUrl) {}
+
+	/** Admin create/edit body. */
+	public record VideoRequest(String title, String description, String category) {}
+
+	/**
+	 * What the browser needs to upload a file straight to Bunny over TUS, so the
+	 * video bytes never pass through our server.
+	 */
+	public record UploadTicket(
+		Long videoId,
+		String endpoint,
+		String libraryId,
+		String bunnyVideoId,
+		long expires,
+		String signature) {}
+
+	/** Who has / hasn't watched a video (admin). */
+	public record CompletionReport(Long videoId, List<CompletionRow> employees) {}
+
+	public record CompletionRow(Long userId, String name, String email, LocalDateTime completedAt) {}
+
+	/** An employee row on the admin Team page. */
+	public record TeamMember(
+		Long userId,
+		String firstName,
+		String lastName,
+		String email,
+		Role role,
+		boolean active,
+		long videosCompleted,
+		LocalDateTime createdAt) {}
+
+	public record TeamMemberUpdate(Boolean active, Role role) {}
+
+	public record PasswordReset(String password) {}
+
+	/** Whether uploads are wired up — the admin page shows setup help when false. */
+	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}
+}

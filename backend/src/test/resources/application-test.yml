@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:grove;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+app:
+  signup-code: test-code
+  admin-emails: owner@grove.test
+  bunny:
+    library-id: ""
+    api-key: ""
+    token-key: ""
+    cdn-hostname: ""
