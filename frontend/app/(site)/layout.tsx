@@ -43,7 +43,9 @@ function Header() {
             {tabs.map((tab) => {
               const active = tab.href === '/'
                 ? pathname === '/' || pathname.startsWith('/videos')
-                : pathname === tab.href;
+                : tab.href === '/admin'
+                  ? pathname === '/admin'
+                  : pathname.startsWith(tab.href);
               return (
                 <Link
                   key={tab.href}

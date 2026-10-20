@@ -1,5 +1,6 @@
 package com.grove.Domain;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -43,16 +44,29 @@ public final class Dtos {
 
 	public record CompletionRow(Long userId, String name, String email, LocalDateTime completedAt) {}
 
-	/** An employee row on the admin Team page. */
+	/** An employee on the admin Team pages. */
 	public record TeamMember(
 		Long userId,
 		String firstName,
 		String lastName,
 		String email,
+		String phone,
+		LocalDate hireDate,
+		LocalDate birthday,
 		Role role,
 		boolean active,
+		LocalDateTime disabledAt,
 		long videosCompleted,
 		LocalDateTime createdAt) {}
+
+	/** Manager edit of an employee's details. Email is also their sign-in. */
+	public record EmployeeDetails(
+		String firstName,
+		String lastName,
+		String email,
+		String phone,
+		LocalDate hireDate,
+		LocalDate birthday) {}
 
 	public record TeamMemberUpdate(Boolean active, Role role) {}
 

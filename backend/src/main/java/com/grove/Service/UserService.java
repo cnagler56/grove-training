@@ -2,6 +2,7 @@ package com.grove.Service;
 
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -15,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.grove.Domain.Dtos.EmployeeDetails;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.LoginDTO;
@@ -93,7 +95,7 @@ public class UserService {
 			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
 		}
 		if (!user.isActive()) {
-			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This account has been turned off. Talk to your manager.");
+			throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "This account has been disabled. Talk to your manager.");
 		}
 		return user;
 	}
@@ -108,16 +110,22 @@ public class UserService {
 			.toList();
 	}
 
-	/** Turn an employee on/off or change their role. A manager can't lock themselves out. */
+	public TeamMember member(Long userId) {
+		return toTeamMember(find(userId));
+	}
+
+	/** Disable/re-enable an employee or change their role. A manager can't lock themselves out. */
 	public TeamMember update(User actor, Long userId, TeamMemberUpdate change) {
-		User user = userRepo.findById(userId)
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No such employee"));
+		User user = find(userId);
 		boolean self = user.getUserId().equals(actor.getUserId());
 		if (change.active() != null) {
 			if (self && !change.active()) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't turn off your own account");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't disable your own account");
 			}
-			user.setActive(change.active());
+			if (change.active() != user.isActive()) {
+				user.setActive(change.active());
+				user.setDisabledAt(change.active() ? null : LocalDateTime.now());
+			}
 		}
 		if (change.role() != null) {
 			if (self && change.role() != Role.ADMIN) {
@@ -128,18 +136,49 @@ public class UserService {
 		return toTeamMember(userRepo.save(user));
 	}
 
+	/** Update the details a manager keeps on file. Changing the email changes their sign-in. */
+	public TeamMember updateDetails(Long userId, EmployeeDetails d) {
+		User user = find(userId);
+		String email = d.email() == null ? "" : d.email().trim().toLowerCase();
+		if (!email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
+		}
+		if (!email.equals(user.getEmail()) && userRepo.existsByEmail(email)) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Another account already uses that email");
+		}
+		if (d.birthday() != null && d.birthday().isAfter(LocalDate.now())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Birthday can't be in the future");
+		}
+		String phone = trimOrNull(d.phone());
+		if (phone != null && phone.length() > 30) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone number is too long");
+		}
+		user.setFirstName(trimOrNull(d.firstName()));
+		user.setLastName(trimOrNull(d.lastName()));
+		user.setEmail(email);
+		user.setPhone(phone);
+		user.setHireDate(d.hireDate());
+		user.setBirthday(d.birthday());
+		return toTeamMember(userRepo.save(user));
+	}
+
 	/** Set a temporary password for someone who forgot theirs. */
 	public void resetPassword(Long userId, String newPassword) {
 		validatePassword(newPassword);
-		User user = userRepo.findById(userId)
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No such employee"));
+		User user = find(userId);
 		user.setPassword(passwordEncoder.encode(newPassword));
 		userRepo.save(user);
 	}
 
+	private User find(Long userId) {
+		return userRepo.findById(userId)
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No such employee"));
+	}
+
 	private TeamMember toTeamMember(User u) {
 		return new TeamMember(u.getUserId(), u.getFirstName(), u.getLastName(), u.getEmail(),
-			u.getRoles(), u.isActive(), completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
+			u.getPhone(), u.getHireDate(), u.getBirthday(), u.getRoles(), u.isActive(), u.getDisabledAt(),
+			completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
 	}
 
 	private static void validatePassword(String password) {

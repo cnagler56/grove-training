@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { api, type AdminStatus, type TeamMember } from '@/src/lib/api';
+import { employeeName, formatBirthday, formatDate, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 
 export default function TeamPage() {
@@ -9,7 +11,6 @@ export default function TeamPage() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.team().then(setTeam).catch((e) => setError(e.message));
@@ -19,90 +20,103 @@ export default function TeamPage() {
     api.adminStatus().then(setStatus).catch(() => {});
   }, [load]);
 
-  async function run(action: () => Promise<unknown>, done?: string) {
+  async function enable(m: TeamMember) {
     setError(null);
-    setNotice(null);
     try {
-      await action();
-      if (done) setNotice(done);
+      await api.updateMember(m.userId, { active: true });
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
     }
   }
 
-  function resetPassword(m: TeamMember) {
-    const pw = prompt(`New temporary password for ${name(m)} (8+ characters). Tell them in person, and have them use it to sign in.`);
-    if (!pw) return;
-    void run(() => api.resetPassword(m.userId, pw), `Password reset for ${name(m)}.`);
-  }
-
   if (!team) return <p className="opacity-60">{error ?? 'Loading team…'}</p>;
-  const active = team.filter((m) => m.active).length;
+  const current = team.filter((m) => m.active);
+  const former = team.filter((m) => !m.active);
 
   return (
     <div>
       <h1 className="text-3xl font-extrabold tracking-tight">Team</h1>
       <p className="mt-1 text-sm opacity-70">
-        {active} active account{active === 1 ? '' : 's'}.{' '}
+        {current.length} current employee{current.length === 1 ? '' : 's'}.{' '}
         {status?.signupOpen
-          ? 'New staff join with the team code (set as TEAM_SIGNUP_CODE on the server). Change it when someone leaves.'
+          ? 'New staff join with the team code (TEAM_SIGNUP_CODE). Change it when someone leaves.'
           : 'Sign-up is closed: set TEAM_SIGNUP_CODE on the server to let new staff join.'}
       </p>
 
       {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
-      {notice && <p className="mt-4 text-sm text-[var(--success)]">{notice}</p>}
 
       <div className="card mt-6 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
             <tr>
-              <th className="px-4 py-3 font-medium">Name</th>
-              <th className="px-4 py-3 font-medium">Videos watched</th>
-              <th className="px-4 py-3 font-medium">Role</th>
-              <th className="px-4 py-3 font-medium" />
+              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Phone</th>
+              <th className="px-4 py-3 font-semibold">Hired</th>
+              <th className="px-4 py-3 font-semibold">Birthday</th>
+              <th className="px-4 py-3 font-semibold">Videos</th>
+              <th className="px-4 py-3 font-semibold" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
-            {team.map((m) => {
-              const self = m.userId === user?.userId;
-              return (
-                <tr key={m.userId} className={m.active ? '' : 'opacity-50'}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{name(m)}{self && <span className="opacity-60"> (you)</span>}</div>
-                    <div className="text-xs opacity-60">{m.email}</div>
-                  </td>
-                  <td className="px-4 py-3">{m.videosCompleted}</td>
-                  <td className="px-4 py-3">{m.role === 'ADMIN' ? 'Manager' : 'Stylist'}</td>
-                  <td className="px-4 py-3">
-                    {!self && (
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button className="btn-ghost" onClick={() => resetPassword(m)}>Reset password</button>
-                        <button
-                          className="btn-ghost"
-                          onClick={() => void run(() => api.updateMember(m.userId, { role: m.role === 'ADMIN' ? 'USER' : 'ADMIN' }))}
-                        >
-                          {m.role === 'ADMIN' ? 'Make stylist' : 'Make manager'}
-                        </button>
-                        <button
-                          className={`btn-ghost ${m.active ? 'text-[var(--danger)]' : ''}`}
-                          onClick={() => void run(() => api.updateMember(m.userId, { active: !m.active }))}
-                        >
-                          {m.active ? 'Turn off' : 'Turn on'}
-                        </button>
-                      </div>
+            {current.map((m) => (
+              <tr key={m.userId} className="hover:bg-[var(--surface-2)]">
+                <td className="px-4 py-3">
+                  <div className="font-bold">
+                    {employeeName(m)}
+                    {m.userId === user?.userId && <span className="font-normal opacity-60"> (you)</span>}
+                    {m.role === 'ADMIN' && (
+                      <span className="ml-2 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent-strong)]">
+                        Manager
+                      </span>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
+                  </div>
+                  <div className="text-xs opacity-60">{m.email}</div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">{m.phone || <Missing />}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {m.hireDate ? (
+                    <>
+                      {formatDate(m.hireDate)}
+                      {tenure(m.hireDate) && <div className="text-xs opacity-60">{tenure(m.hireDate)}</div>}
+                    </>
+                  ) : <Missing />}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">{formatBirthday(m.birthday) || <Missing />}</td>
+                <td className="px-4 py-3">{m.videosCompleted}</td>
+                <td className="px-4 py-3 text-right">
+                  <Link href={`/admin/team/${m.userId}`} className="btn-ghost inline-block">Edit</Link>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+
+      {former.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-extrabold">Former employees</h2>
+          <p className="text-sm opacity-70">Disabled accounts can&apos;t sign in. Their watch history is kept.</p>
+          <ul className="card mt-3 divide-y divide-[var(--border)]">
+            {former.map((m) => (
+              <li key={m.userId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
+                <div>
+                  <Link href={`/admin/team/${m.userId}`} className="font-bold hover:underline">{employeeName(m)}</Link>
+                  <div className="text-xs opacity-60">
+                    {m.disabledAt ? `Disabled ${formatDate(m.disabledAt)}` : 'Disabled'}
+                    {m.hireDate && ` · hired ${formatDate(m.hireDate)}`}
+                  </div>
+                </div>
+                <button className="btn-ghost" onClick={() => void enable(m)}>Re-enable</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
 
-function name(m: TeamMember) {
-  return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
+function Missing() {
+  return <span className="opacity-40">—</span>;
 }

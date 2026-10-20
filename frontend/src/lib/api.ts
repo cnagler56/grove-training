@@ -72,10 +72,27 @@ export interface TeamMember {
   firstName: string | null;
   lastName: string | null;
   email: string;
+  phone: string | null;
+  /** ISO date "YYYY-MM-DD". */
+  hireDate: string | null;
+  /** ISO date "YYYY-MM-DD". */
+  birthday: string | null;
   role: UserRole;
   active: boolean;
+  /** When the account was disabled; null while active. */
+  disabledAt: string | null;
   videosCompleted: number;
   createdAt: string | null;
+}
+
+/** What a manager can edit on an employee. Dates are "YYYY-MM-DD" or null. */
+export interface EmployeeDetails {
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+  phone: string | null;
+  hireDate: string | null;
+  birthday: string | null;
 }
 
 export interface AdminStatus {
@@ -125,6 +142,9 @@ export const api = {
   completions: (id: number) => send<CompletionReport>(`/api/admin/videos/${id}/completions`),
 
   team: () => send<TeamMember[]>('/api/admin/team'),
+  member: (userId: number) => send<TeamMember>(`/api/admin/team/${userId}`),
+  updateDetails: (userId: number, d: EmployeeDetails) =>
+    send<TeamMember>(`/api/admin/team/${userId}/details`, 'PUT', d),
   updateMember: (userId: number, change: { active?: boolean; role?: UserRole }) =>
     send<TeamMember>(`/api/admin/team/${userId}`, 'PUT', change),
   resetPassword: (userId: number, password: string) =>

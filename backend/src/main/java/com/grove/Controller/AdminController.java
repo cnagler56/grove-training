@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.grove.Domain.Dtos.AdminStatus;
 import com.grove.Domain.Dtos.CompletionReport;
+import com.grove.Domain.Dtos.EmployeeDetails;
 import com.grove.Domain.Dtos.PasswordReset;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
@@ -99,6 +100,20 @@ public class AdminController {
 	public List<TeamMember> team(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		sessions.requireAdmin(token);
 		return users.team();
+	}
+
+	@GetMapping("/team/{userId}")
+	public TeamMember member(@PathVariable Long userId,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireAdmin(token);
+		return users.member(userId);
+	}
+
+	@PutMapping("/team/{userId}/details")
+	public TeamMember updateDetails(@PathVariable Long userId, @RequestBody EmployeeDetails details,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireAdmin(token);
+		return users.updateDetails(userId, details);
 	}
 
 	@PutMapping("/team/{userId}")

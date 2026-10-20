@@ -121,6 +121,56 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void managerEditsEmployeeDetails() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie employee = signUp("stylist@grove.test");
+		signUp("other@grove.test");
+		Long id = users.findByEmail("stylist@grove.test").orElseThrow().getUserId();
+		String body = "{\"firstName\":\"Sam\",\"lastName\":\"Lee\",\"email\":\"Sam.Lee@Grove.test\","
+			+ "\"phone\":\"555-0100\",\"hireDate\":\"2025-03-01\",\"birthday\":\"1995-07-14\"}";
+
+		mvc.perform(put("/api/admin/team/" + id + "/details").cookie(employee)
+				.contentType(MediaType.APPLICATION_JSON).content(body))
+			.andExpect(status().isForbidden());
+
+		mvc.perform(put("/api/admin/team/" + id + "/details").cookie(owner)
+				.contentType(MediaType.APPLICATION_JSON).content(body))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.email").value("sam.lee@grove.test"))
+			.andExpect(jsonPath("$.phone").value("555-0100"))
+			.andExpect(jsonPath("$.hireDate").value("2025-03-01"))
+			.andExpect(jsonPath("$.birthday").value("1995-07-14"));
+
+		// New email is now their sign-in.
+		mvc.perform(post("/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"sam.lee@grove.test\",\"password\":\"password1\"}"))
+			.andExpect(status().isOk());
+
+		// Can't take another employee's email, or set a future birthday.
+		mvc.perform(put("/api/admin/team/" + id + "/details").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"other@grove.test\"}"))
+			.andExpect(status().isConflict());
+		mvc.perform(put("/api/admin/team/" + id + "/details").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"sam.lee@grove.test\",\"birthday\":\"2999-01-01\"}"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void disablingRecordsTheDateAndReEnablingClearsIt() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("stylist@grove.test");
+		Long id = users.findByEmail("stylist@grove.test").orElseThrow().getUserId();
+
+		mvc.perform(put("/api/admin/team/" + id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"active\":false}"))
+			.andExpect(jsonPath("$.disabledAt").isNotEmpty());
+		mvc.perform(put("/api/admin/team/" + id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"active\":true}"))
+			.andExpect(jsonPath("$.active").value(true))
+			.andExpect(jsonPath("$.disabledAt").isEmpty());
+	}
+
+	@Test
 	void uploadsReportNotConfiguredWithoutBunnyKeys() throws Exception {
 		Cookie owner = signUp("owner@grove.test");
 		mvc.perform(get("/api/admin/status").cookie(owner))

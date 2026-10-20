@@ -1,5 +1,6 @@
 package com.grove.Domain;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -49,6 +50,20 @@ public class User {
 	@Column(name = "created_at")
 	private LocalDateTime createdAt;
 
+	// Employee details a manager keeps on file. All optional (nullable objects,
+	// so adding them under ddl-auto=update needs no backfill).
+	@Column(length = 30)
+	private String phone;
+
+	@Column(name = "hire_date")
+	private LocalDate hireDate;
+
+	private LocalDate birthday;
+
+	/** When a manager disabled the account (the employee left); null while active. */
+	@Column(name = "disabled_at")
+	private LocalDateTime disabledAt;
+
 	public Long getUserId() { return userId; }
 	public void setUserId(Long userId) { this.userId = userId; }
 
@@ -73,6 +88,18 @@ public class User {
 
 	public LocalDateTime getCreatedAt() { return createdAt; }
 	public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+	public String getPhone() { return phone; }
+	public void setPhone(String phone) { this.phone = phone; }
+
+	public LocalDate getHireDate() { return hireDate; }
+	public void setHireDate(LocalDate hireDate) { this.hireDate = hireDate; }
+
+	public LocalDate getBirthday() { return birthday; }
+	public void setBirthday(LocalDate birthday) { this.birthday = birthday; }
+
+	public LocalDateTime getDisabledAt() { return disabledAt; }
+	public void setDisabledAt(LocalDateTime disabledAt) { this.disabledAt = disabledAt; }
 
 	@JsonIgnore
 	public boolean isAdmin() { return roles == Role.ADMIN; }
