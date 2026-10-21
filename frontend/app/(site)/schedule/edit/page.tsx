@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, type RosterEntry, type ShiftInput, type WeekSchedule } from '@/src/lib/api';
 import { roleLabel } from '@/src/lib/roles';
+import CoverageRows from '@/src/components/CoverageRows';
 import { SALON } from '@/src/lib/salon';
 import {
-  addDays, dayLabel, hhmm, hoursLabel, shiftHours, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf, weekday,
+  addDays, addMinutes, dayLabel, hhmm, hoursLabel, shiftHours, shiftLabel, startsReceptionists, TIME_STEP_MINUTES, timeLabel,
+  timeOptions, todayIso, weekDates, weekRangeLabel, weekStartOf, weekday,
 } from '@/src/lib/schedule';
 
 type Cell = { start: string; end: string; note: string };
@@ -224,13 +226,17 @@ function ScheduleEditor() {
                     const k = key(m.userId, d);
                     const c = cells[k];
                     if (editing === k && c) {
+                      // Only times the salon is open that day; the end always comes after the start.
+                      const [open, close] = SALON.openClose[weekday(d)];
+                      const startChoices = timeOptions(open, addMinutes(close, -TIME_STEP_MINUTES));
+                      const endChoices = timeOptions(addMinutes(c.start, TIME_STEP_MINUTES), close);
                       return (
                         <td key={d} className="bg-[var(--surface-2)] px-2 py-2 align-top">
                           <div className="flex flex-col gap-1">
-                            <input type="time" step={900} className="input px-2 py-1 text-xs" value={c.start}
-                              aria-label="Start" onChange={(e) => update(k, { ...c, start: e.target.value })} />
-                            <input type="time" step={900} className="input px-2 py-1 text-xs" value={c.end}
-                              aria-label="End" onChange={(e) => update(k, { ...c, end: e.target.value })} />
+                            <TimeSelect label="Start" value={c.start} choices={startChoices}
+                              onChange={(start) => update(k, { ...c, start, end: c.end > start ? c.end : close })} />
+                            <TimeSelect label="End" value={c.end} choices={endChoices}
+                              onChange={(end) => update(k, { ...c, end })} />
                             <input className="input px-2 py-1 text-xs" value={c.note} placeholder="Note" maxLength={100}
                               aria-label="Note" onChange={(e) => update(k, { ...c, note: e.target.value })} />
                             <div className="flex gap-1">
@@ -269,20 +275,36 @@ function ScheduleEditor() {
               );
             })}
           </tbody>
-          <tfoot className="border-t border-[var(--border)] text-xs opacity-70">
-            <tr>
-              <td className="px-4 py-2 font-semibold">Working</td>
-              {days.map((d) => (
-                <td key={d} className="px-2 py-2">{staff.filter((m) => cells[key(m.userId, d)]).length}</td>
-              ))}
-              <td />
-            </tr>
-          </tfoot>
+          <CoverageRows
+            days={days}
+            shiftsOn={(d) => staff.flatMap((m) => {
+              const c = cells[key(m.userId, d)];
+              return c ? [{ name: m.name, start: c.start, end: c.end }] : [];
+            })}
+          />
         </table>
       </div>
       <p className="mt-3 text-xs opacity-60">
         Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day.
       </p>
     </div>
+  );
+}
+
+/**
+ * A time dropdown limited to the salon's open hours. A value outside them (say
+ * a shift saved before the hours changed) stays listed so it isn't silently lost.
+ */
+function TimeSelect({ label, value, choices, onChange }: {
+  label: string;
+  value: string;
+  choices: string[];
+  onChange: (v: string) => void;
+}) {
+  const options = choices.includes(value) ? choices : [value, ...choices];
+  return (
+    <select className="input px-2 py-1 text-xs" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((t) => <option key={t} value={t}>{timeLabel(t)}</option>)}
+    </select>
   );
 }

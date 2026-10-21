@@ -81,3 +81,37 @@ export const hhmm = (t: string) => t.slice(0, 5);
 export function startsReceptionists(rows: { role: string }[], i: number) {
   return rows[i].role === 'RECEPTIONIST' && (i === 0 || rows[i - 1].role !== 'RECEPTIONIST');
 }
+
+/**
+ * Who opens and who closes on a day: an opener starts at or before the salon's
+ * opening time, a closer ends at or after closing. Times are "HH:MM[:SS]" and
+ * compare as strings since they're zero-padded.
+ */
+export function dayCoverage(
+  date: string,
+  shifts: { name: string; start: string; end: string }[],
+  openClose: [string, string][],
+) {
+  const [open, close] = openClose[weekday(date)];
+  const first = (n: string) => n.split(' ')[0];
+  return {
+    openers: shifts.filter((s) => hhmm(s.start) <= open).map((s) => first(s.name)),
+    closers: shifts.filter((s) => hhmm(s.end) >= close).map((s) => first(s.name)),
+  };
+}
+
+/** Minutes between choices in the schedule editor's time dropdowns. */
+export const TIME_STEP_MINUTES = 15;
+
+const toMinutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const fromMinutes = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+
+/** "HH:MM" times from `from` through `to` (inclusive), every TIME_STEP_MINUTES. */
+export function timeOptions(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let m = toMinutes(from); m <= toMinutes(to); m += TIME_STEP_MINUTES) out.push(fromMinutes(m));
+  return out;
+}
+
+/** Shift a "HH:MM" time by some minutes. */
+export const addMinutes = (t: string, n: number) => fromMinutes(toMinutes(t) + n);

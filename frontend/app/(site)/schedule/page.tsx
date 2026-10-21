@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
+import CoverageRows from '@/src/components/CoverageRows';
 import { roleLabel } from '@/src/lib/roles';
 import {
   addDays, dayLabel, hoursLabel, shiftHours, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
@@ -127,6 +128,7 @@ export default function SalonSchedulePage() {
                 );
               })}
             </tbody>
+            <CoverageRows days={days} shiftsOn={(d) => current.shifts.filter((s) => s.date === d)} />
           </table>
         </div>
       )}
