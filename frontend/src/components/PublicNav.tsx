@@ -7,7 +7,7 @@ import { SALON } from '@/src/lib/salon';
 
 /**
  * Navigation bar for the public pages (home, apply). Shows "Sign in", or
- * "Staff training" when someone on the team is already signed in.
+ * "My home" when someone is already signed in.
  */
 export default function PublicNav() {
   const [signedIn, setSignedIn] = useState(false);
@@ -29,8 +29,8 @@ export default function PublicNav() {
           <Link href="/apply" className="rounded-full px-3 py-1.5 font-semibold opacity-75 hover:bg-[var(--surface-2)] hover:opacity-100">
             Join our team
           </Link>
-          <Link href={signedIn ? '/videos' : '/signin'} className="btn">
-            {signedIn ? 'Staff training' : 'Sign in'}
+          <Link href={signedIn ? '/home' : '/signin'} className="btn">
+            {signedIn ? 'My home' : 'Sign in'}
           </Link>
         </div>
       </div>

@@ -4,7 +4,7 @@ import SiteShell from './SiteShell';
 // The staff area (sign-in, training videos, manager pages) stays out of search
 // engines. The public home and /apply pages are left indexable.
 export const metadata: Metadata = {
-  title: 'Grove Salons Training',
+  title: 'Grove Salons',
   robots: { index: false, follow: false },
 };
 

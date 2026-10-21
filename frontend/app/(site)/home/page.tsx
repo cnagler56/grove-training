@@ -1,0 +1,159 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { api, formatDuration, type VideoSummary } from '@/src/lib/api';
+import { canManageSite, roleLabel } from '@/src/lib/roles';
+import { SALON } from '@/src/lib/salon';
+import { useUser } from '@/src/lib/UserContext';
+import VideoCard from '@/src/components/VideoCard';
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
+/** Where staff land after signing in. */
+export default function StaffHomePage() {
+  const { user } = useUser();
+  const isStaff = user?.roles !== 'CUSTOMER';
+  const isManager = canManageSite(user?.roles);
+  const isOwner = user?.roles === 'OWNER';
+
+  const [videos, setVideos] = useState<VideoSummary[] | null>(null);
+  const [newApplicants, setNewApplicants] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
+    if (isOwner) api.newApplicationCount().then(setNewApplicants).catch(() => {});
+  }, [isStaff, isOwner]);
+
+  if (!user) return null;
+  const ready = (videos ?? []).filter((v) => v.status === 'READY');
+  const watched = ready.filter((v) => v.completed).length;
+  const pct = ready.length ? Math.round((watched / ready.length) * 100) : 0;
+  // Oldest unwatched first: work through the library in the order it was built.
+  const upNext = [...ready].reverse().find((v) => !v.completed);
+  const newest = ready.slice(0, 3);
+  const today = new Date().getDay();
+  const todayHours = SALON.hoursByDay[today];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-extrabold tracking-tight">
+          {greeting()}{user.firstName ? `, ${user.firstName}` : ''} 👋
+        </h1>
+        <p className="mt-1 text-sm opacity-70">
+          {roleLabel(user.roles)} at {SALON.name} · {DAYS[today]}, {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {isStaff && (
+          <section className="card p-5 md:col-span-2">
+            <h2 className="text-lg font-extrabold">Your training</h2>
+            {videos === null ? (
+              <p className="mt-3 text-sm opacity-60">Loading…</p>
+            ) : ready.length === 0 ? (
+              <p className="mt-3 text-sm opacity-70">No training videos yet. Check back soon.</p>
+            ) : (
+              <>
+                <div className="mt-3 flex items-baseline justify-between text-sm">
+                  <span><b className="text-2xl">{watched}</b> of {ready.length} videos watched</span>
+                  <span className="font-bold text-[var(--accent-strong)]">{pct}%</span>
+                </div>
+                <div className="mt-2 h-3 overflow-hidden rounded-full bg-[var(--accent-soft)]">
+                  <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                {upNext ? (
+                  <Link href={`/videos/${upNext.id}`}
+                    className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface-2)] p-4 hover:bg-[var(--accent-soft)]">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold uppercase tracking-wide text-[var(--accent-strong)]">Up next</div>
+                      <div className="truncate font-bold">{upNext.title}</div>
+                      <div className="text-xs opacity-60">
+                        {[upNext.category, formatDuration(upNext.durationSeconds)].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white">▶</span>
+                  </Link>
+                ) : (
+                  <p className="mt-4 rounded-2xl bg-[var(--success-soft)] p-4 text-sm font-semibold text-[var(--success)]">
+                    🎉 You&apos;re all caught up. Nice work!
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
+        <section className={`card p-5 ${isStaff ? '' : 'md:col-span-3'}`}>
+          <h2 className="text-lg font-extrabold">The salon</h2>
+          <div className="mt-3 text-sm">
+            <div className="text-xs font-bold uppercase tracking-wide opacity-60">Open today</div>
+            <div className="font-semibold">{todayHours || 'Closed'}</div>
+          </div>
+          {SALON.phone && (
+            <div className="mt-3 text-sm">
+              <div className="text-xs font-bold uppercase tracking-wide opacity-60">Phone</div>
+              <a href={`tel:${SALON.phone}`} className="font-semibold hover:underline">{SALON.phone}</a>
+            </div>
+          )}
+          {SALON.address.length > 0 && (
+            <div className="mt-3 text-sm">
+              <div className="text-xs font-bold uppercase tracking-wide opacity-60">Address</div>
+              {SALON.address.map((l) => <div key={l}>{l}</div>)}
+            </div>
+          )}
+          <Link href="/#visit" className="mt-3 inline-block text-sm font-semibold text-[var(--accent-strong)] underline underline-offset-4">
+            All hours
+          </Link>
+        </section>
+      </div>
+
+      {isManager && (
+        <section className="card p-5">
+          <h2 className="text-lg font-extrabold">Manager shortcuts</h2>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/admin" className="btn">⬆️ Upload a video</Link>
+            <Link href="/admin/team" className="btn-ghost">👥 Team</Link>
+            {isOwner && (
+              <>
+                <Link href="/admin/team/new" className="btn-ghost">➕ Add employee</Link>
+                <Link href="/admin/applicants" className="btn-ghost">
+                  📋 Applicants
+                  {!!newApplicants && (
+                    <span className="ml-1.5 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-white">
+                      {newApplicants} new
+                    </span>
+                  )}
+                </Link>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {isStaff && newest.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-end justify-between">
+            <h2 className="text-lg font-extrabold">Newest videos</h2>
+            <Link href="/videos" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">See all →</Link>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {newest.map((v) => <VideoCard key={v.id} video={v} />)}
+          </div>
+        </section>
+      )}
+
+      {!isStaff && (
+        <p className="card p-5 text-sm opacity-80">
+          Thanks for being a {SALON.name} customer! Need an appointment? Give us a call.
+        </p>
+      )}
+    </div>
+  );
+}

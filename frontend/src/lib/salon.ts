@@ -9,11 +9,18 @@ export const SALON = {
     'From quick trims to full color makeovers, our stylists take the time to get it right. Walk in or call ahead, whatever works for you.',
 
   /** e.g. "(555) 555-0100". Shown as a tap-to-call button. */
-  phone: '',
+  phone: '(763) 391-6664',
   /** Street address, one line per entry. */
-  address: [] as string[],
+  address: ['9859 Maple Grove Pkwy', 'Maple Grove, MN 55369'] as string[],
   /** e.g. [["Mon–Fri", "9am–8pm"], ["Sat", "9am–6pm"], ["Sun", "10am–5pm"]] */
-  hours: [] as [string, string][],
+  hours: [
+    ['Monday – Thursday', '10am – 8pm'],
+    ['Friday', '10am – 6pm'],
+    ['Saturday', '9am – 5pm'],
+    ['Sunday', '11am – 4pm'],
+  ] as [string, string][],
+  /** Same hours by weekday, Sunday first, for "Open today" on the staff home page. '' = closed. */
+  hoursByDay: ['11am – 4pm', '10am – 8pm', '10am – 8pm', '10am – 8pm', '10am – 8pm', '10am – 6pm', '9am – 5pm'],
   /** Online booking link, if you have one. */
   bookingUrl: '',
   /** Full Instagram/Facebook links. */

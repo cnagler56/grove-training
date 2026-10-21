@@ -72,7 +72,7 @@ function AddEmployee() {
   if (created) {
     const { member, password } = created;
     const signin = `${window.location.origin}/signin`;
-    const handout = `Welcome to Grove Salons training!\nSign in at ${signin}\nEmail: ${member.email}\nTemporary password: ${password}`;
+    const handout = `Welcome to the Grove Salons team site!\nSign in at ${signin}\nEmail: ${member.email}\nTemporary password: ${password}`;
     return (
       <div className="mx-auto max-w-xl">
         <div className="card p-6">

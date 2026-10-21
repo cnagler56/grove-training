@@ -38,7 +38,7 @@ export default function SignInPage() {
       </h1>
       <p className="mt-1 text-sm opacity-70">
         {mode === 'login'
-          ? 'Training videos for Grove Salons staff.'
+          ? 'For the Grove Salons team.'
           : 'You need the team code from your manager.'}
       </p>
 

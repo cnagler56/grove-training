@@ -7,7 +7,8 @@ import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
 import { canManageSite } from '@/src/lib/roles';
 
-const TABS = [{ href: '/videos', label: 'Videos' }];
+const TABS = [{ href: '/home', label: 'Home' }];
+const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
 const ADMIN_TABS = [
   { href: '/admin', label: 'Manage videos' },
   { href: '/admin/team', label: 'Team' },
@@ -20,6 +21,7 @@ function Header() {
   const isOwner = user?.roles === 'OWNER';
   const tabs = [
     ...TABS,
+    ...(user?.roles !== 'CUSTOMER' ? STAFF_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -35,8 +37,8 @@ function Header() {
     <header>
       <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <Link href={user ? '/videos' : '/'} className="text-xl font-extrabold tracking-tight">
-            ✂️ Grove Salons <span className="font-semibold opacity-85">Training</span>
+          <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight">
+            ✂️ Grove Salons
           </Link>
           {user && (
             <div className="flex items-center gap-3 text-sm">
@@ -102,8 +104,8 @@ function Gate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (!user && !isSignin) router.replace('/signin');
-    else if (user && isSignin) router.replace('/videos');
-    else if (blocked) router.replace('/videos');
+    else if (user && isSignin) router.replace('/home');
+    else if (blocked) router.replace('/home');
   }, [user, loading, isSignin, blocked, router]);
 
   if (loading) return <p className="opacity-60">Loading…</p>;
