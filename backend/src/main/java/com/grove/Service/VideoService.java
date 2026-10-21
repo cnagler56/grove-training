@@ -49,8 +49,9 @@ public class VideoService {
 		this.bunny = bunny;
 	}
 
-	/** Employees see READY videos; managers also see ones still in progress. */
+	/** Staff see READY videos; managers also see ones still in progress; customers see none. */
 	public List<VideoSummary> list(User viewer) {
+		if (!viewer.getRoles().isStaff()) return List.of();
 		List<Video> videos = videoRepo.findAllByOrderByCreatedAtDesc();
 		if (viewer.isAdmin()) videos.forEach(this::refreshStatus);
 		Set<Long> done = completedIds(viewer);
@@ -61,7 +62,7 @@ public class VideoService {
 	}
 
 	public VideoDetail detail(User viewer, Long id) {
-		Video v = find(id);
+		Video v = find(viewer, id);
 		refreshStatus(v);
 		if (!viewer.isAdmin() && v.getStatus() != VideoStatus.READY) {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
@@ -73,7 +74,7 @@ public class VideoService {
 
 	@Transactional
 	public void setCompleted(User viewer, Long id, boolean completed) {
-		Video v = find(id);
+		Video v = find(viewer, id);
 		var existing = completionRepo.findByUserIdAndVideoId(viewer.getUserId(), v.getId());
 		if (completed && existing.isEmpty()) {
 			VideoCompletion c = new VideoCompletion();
@@ -135,7 +136,7 @@ public class VideoService {
 		Map<Long, LocalDateTime> watched = completionRepo.findByVideoId(v.getId()).stream()
 			.collect(Collectors.toMap(VideoCompletion::getUserId, VideoCompletion::getCompletedAt, (a, b) -> a));
 		List<CompletionRow> rows = userRepo.findAll().stream()
-			.filter(User::isActive)
+			.filter(u -> u.isActive() && u.getRoles().isStaff())
 			.map(u -> new CompletionRow(u.getUserId(), displayName(u), u.getEmail(), watched.get(u.getUserId())))
 			.sorted((a, b) -> a.name().compareToIgnoreCase(b.name()))
 			.toList();
@@ -178,6 +179,12 @@ public class VideoService {
 		String thumb = v.getStatus() == VideoStatus.READY ? bunny.thumbnailUrl(v.getBunnyVideoId()) : null;
 		return new VideoSummary(v.getId(), v.getTitle(), v.getDescription(), v.getCategory(), v.getStatus(),
 			v.getDurationSeconds(), thumb, completed, v.getCreatedAt());
+	}
+
+	/** Training videos are staff-only: a customer gets the same 404 as a missing video. */
+	private Video find(User viewer, Long id) {
+		if (!viewer.getRoles().isStaff()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
+		return find(id);
 	}
 
 	private Video find(Long id) {

@@ -7,10 +7,17 @@ this app only stores titles, categories, who's watched what, and accounts.
 
 ## How it works
 
-- **Accounts:** staff sign up with a shared team code (`TEAM_SIGNUP_CODE`).
-  Emails in `ADMIN_EMAILS` become managers. Managers can turn accounts off
-  (when someone leaves), reset passwords, and promote other managers on the
-  **Team** page. When someone leaves, turn them off *and* change the team code.
+- **Accounts:** staff sign up with a shared team code (`TEAM_SIGNUP_CODE`) and
+  start as Stylist. Emails in `ADMIN_EMAILS` become Owner. When someone leaves,
+  disable them on the **Team** page *and* change the team code.
+- **Roles:** Owner > General manager > Manager > Lead > Stylist = Receptionist
+  > Customer. Owner, GM, and Manager get the manager pages (uploads, Team).
+  You can only change people ranked below you and only give roles below your
+  own; an Owner can do anything except remove the last Owner. Customers can
+  sign in but can't see training videos.
+- **Hiring:** anyone can apply at `/apply` (no sign-in; honeypot + 5/hour per
+  connection against spam). Only Owners see applicants (the **Applicants** tab,
+  with a count of new ones) and only Owners get emailed about them.
 - **Uploading:** a manager fills in title/category/notes and picks a file. The
   backend creates the video in Bunny and hands the browser a signed, 6-hour TUS
   ticket. The browser then uploads straight to Bunny (resumable). The file never
@@ -38,7 +45,15 @@ BUNNY_LIBRARY_ID=...
 BUNNY_API_KEY=...
 BUNNY_TOKEN_KEY=...
 BUNNY_CDN_HOSTNAME=vz-....b-cdn.net
+# Optional: email owners about new job applications (blank = off, just logged)
+MAIL_HOST=smtp.gmail.com
+MAIL_USERNAME=you@gmail.com
+MAIL_PASSWORD=...          # Gmail: a 16-character app password, not your normal one
+APP_FRONTEND_URL=http://localhost:3001
 ```
+
+For Gmail, turn on 2-Step Verification, then create an app password at
+myaccount.google.com/apppasswords and use it as `MAIL_PASSWORD`.
 
 ```powershell
 cd backend
@@ -75,8 +90,10 @@ Tests use in-memory H2, so no Docker is needed: `.\mvnw.cmd test`.
 | `CORS_ALLOWED_ORIGINS` | your Vercel URL, e.g. `https://training.grovesalons.com` |
 | `COOKIE_SECURE` | `true` (needed for the cross-site cookie: Secure + SameSite=None) |
 | `TEAM_SIGNUP_CODE` | the code you give staff |
-| `ADMIN_EMAILS` | managers' emails, comma-separated |
+| `ADMIN_EMAILS` | owners' emails, comma-separated |
 | `BUNNY_*` | from the Bunny setup above |
+| `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | for new-application emails to owners |
+| `APP_FRONTEND_URL` | your Vercel URL, so email links point at the live site |
 
 **Frontend (Vercel):** root directory `frontend`, env `NEXT_PUBLIC_API_URL` = Railway backend URL.
 

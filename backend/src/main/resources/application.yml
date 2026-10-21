@@ -21,6 +21,22 @@ spring:
     hibernate:
       ddl-auto: update
 
+  # Outgoing email (new-application notices to owners). Blank MAIL_HOST = off.
+  # Gmail: MAIL_HOST=smtp.gmail.com, MAIL_USERNAME=you@gmail.com, MAIL_PASSWORD=<16-char app password>.
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+
 logging:
   level:
     root: warn
@@ -31,8 +47,13 @@ logging:
 app:
   # Employees type this code to create an account. Leave blank to turn sign-up off.
   signup-code: ${TEAM_SIGNUP_CODE:}
-  # Comma-separated emails that become ADMIN (managers) when they sign up.
+  # Comma-separated emails that become OWNER when they sign up.
   admin-emails: ${ADMIN_EMAILS:}
+  # Where links in emails point (the Next.js site).
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:3001}
+  mail:
+    # "From" address on emails. Defaults to MAIL_USERNAME (Gmail requires that anyway).
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
   # true in production (HTTPS, frontend on a different domain) → Secure + SameSite=None.
   cookie-secure: ${COOKIE_SECURE:false}
   bunny:

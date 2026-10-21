@@ -6,8 +6,13 @@ spring:
   jpa:
     hibernate:
       ddl-auto: create-drop
+  # Turns email notices on; the tests swap in a mock JavaMailSender, so nothing is sent.
+  mail:
+    host: test-smtp
 
 app:
+  mail:
+    from: noreply@grove.test
   signup-code: test-code
   admin-emails: owner@grove.test
   bunny:

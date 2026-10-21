@@ -3,6 +3,9 @@ package com.grove.Domain;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import jakarta.persistence.Column;
@@ -42,7 +45,10 @@ public class User {
 	private String password;
 
 	@Enumerated(EnumType.STRING)
-	private Role roles = Role.USER;
+	// VARCHAR rather than a native MySQL ENUM, so adding a role later needs no ALTER TABLE.
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(length = 30, nullable = false)
+	private Role roles = Role.STYLIST;
 
 	@Column(nullable = false)
 	private boolean active = true;
@@ -102,5 +108,5 @@ public class User {
 	public void setDisabledAt(LocalDateTime disabledAt) { this.disabledAt = disabledAt; }
 
 	@JsonIgnore
-	public boolean isAdmin() { return roles == Role.ADMIN; }
+	public boolean isAdmin() { return roles.canManageSite(); }
 }

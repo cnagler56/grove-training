@@ -112,8 +112,7 @@ public class AdminController {
 	@PutMapping("/team/{userId}/details")
 	public TeamMember updateDetails(@PathVariable Long userId, @RequestBody EmployeeDetails details,
 			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
-		sessions.requireAdmin(token);
-		return users.updateDetails(userId, details);
+		return users.updateDetails(sessions.requireAdmin(token), userId, details);
 	}
 
 	@PutMapping("/team/{userId}")
@@ -125,8 +124,7 @@ public class AdminController {
 	@PostMapping("/team/{userId}/password")
 	public ResponseEntity<Void> resetPassword(@PathVariable Long userId, @RequestBody PasswordReset body,
 			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
-		sessions.requireAdmin(token);
-		users.resetPassword(userId, body.password());
+		users.resetPassword(sessions.requireAdmin(token), userId, body.password());
 		return ResponseEntity.noContent().build();
 	}
 }

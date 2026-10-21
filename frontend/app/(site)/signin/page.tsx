@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useUser } from '@/src/lib/UserContext';
 
 export default function SignInPage() {
@@ -81,6 +82,11 @@ export default function SignInPage() {
       </p>
       {mode === 'login' && (
         <p className="mt-2 text-xs opacity-50">Forgot your password? Ask your manager to reset it.</p>
+      )}
+      {mode === 'login' && (
+        <p className="mt-6 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-sm">
+          Not on the team yet? <Link href="/apply" className="font-bold text-[var(--accent-strong)] underline underline-offset-4">Apply to work at Grove</Link>
+        </p>
       )}
     </div>
   );

@@ -1,6 +1,8 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8084';
+import type { UserRole } from './roles';
 
-export type UserRole = 'USER' | 'ADMIN';
+export type { UserRole };
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8084';
 
 export interface User {
   userId: number;
@@ -95,6 +97,43 @@ export interface EmployeeDetails {
   birthday: string | null;
 }
 
+export type ApplicationStatus = 'NEW' | 'CONTACTED' | 'INTERVIEW' | 'HIRED' | 'NOT_A_FIT';
+
+/** What the public /apply form sends. `website` is a hidden spam trap; leave it empty. */
+export interface ApplicationRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  position: string;
+  licensed: boolean | null;
+  licenseNumber?: string;
+  yearsExperience: number | null;
+  availability?: string;
+  portfolio?: string;
+  message?: string;
+  website?: string;
+}
+
+/** A job application as the owner sees it. */
+export interface JobApplication {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  position: string;
+  licensed: boolean | null;
+  licenseNumber: string | null;
+  yearsExperience: number | null;
+  availability: string | null;
+  portfolio: string | null;
+  message: string | null;
+  status: ApplicationStatus;
+  ownerNotes: string | null;
+  createdAt: string;
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -117,9 +156,9 @@ async function send<T>(path: string, method = 'GET', body?: unknown): Promise<T>
     try { const j = await res.json(); msg = j.message || j.error || msg; } catch { /* ignore */ }
     throw new Error(msg);
   }
-  // 204 No Content (e.g. logout) has an empty body.
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // Some responses have no body: 204 No Content (logout), 201 Created (apply).
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const api = {
@@ -140,6 +179,15 @@ export const api = {
   updateVideo: (id: number, r: VideoRequest) => send<VideoSummary>(`/api/admin/videos/${id}`, 'PUT', r),
   deleteVideo: (id: number) => send<void>(`/api/admin/videos/${id}`, 'DELETE'),
   completions: (id: number) => send<CompletionReport>(`/api/admin/videos/${id}/completions`),
+
+  positions: () => send<string[]>('/api/apply/positions'),
+  apply: (a: ApplicationRequest) => send<void>('/api/apply', 'POST', a),
+  applications: () => send<JobApplication[]>('/api/owner/applications'),
+  newApplicationCount: () => send<number>('/api/owner/applications/new-count'),
+  application: (id: number) => send<JobApplication>(`/api/owner/applications/${id}`),
+  updateApplication: (id: number, u: { status?: ApplicationStatus; ownerNotes?: string }) =>
+    send<JobApplication>(`/api/owner/applications/${id}`, 'PUT', u),
+  deleteApplication: (id: number) => send<void>(`/api/owner/applications/${id}`, 'DELETE'),
 
   team: () => send<TeamMember[]>('/api/admin/team'),
   member: (userId: number) => send<TeamMember>(`/api/admin/team/${userId}`),

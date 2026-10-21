@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Domain.UserSession;
 import com.grove.Repository.UserRepository;
@@ -78,6 +79,15 @@ public class SessionService {
         User user = requireUser(token);
         if (!user.isAdmin()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Managers only");
+        }
+        return user;
+    }
+
+    /** The signed-in owner, or 401/403. Job applications are owner-only. */
+    public User requireOwner(String token) {
+        User user = requireUser(token);
+        if (user.getRoles() != Role.OWNER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Owners only");
         }
         return user;
     }

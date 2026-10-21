@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { api, type EmployeeDetails, type TeamMember } from '@/src/lib/api';
+import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src/lib/api';
+import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { employeeName, formatDate, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 
@@ -71,6 +72,7 @@ export default function EmployeePage() {
   }
 
   if (!member || !form) return <p className="opacity-60">{error ?? 'Loading…'}</p>;
+  const editable = self || (!!user && canManage(user.roles, member.role));
   const set = (k: keyof EmployeeDetails) => (v: string) => setForm({ ...form, [k]: v === '' ? null : v });
 
   return (
@@ -82,9 +84,9 @@ export default function EmployeePage() {
         {!member.active && (
           <span className="rounded-full bg-[var(--danger)] px-2.5 py-0.5 text-xs font-bold text-white">Disabled</span>
         )}
-        {member.role === 'ADMIN' && (
-          <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-xs font-bold text-[var(--accent-strong)]">Manager</span>
-        )}
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${roleBadgeClass(member.role)}`}>
+          {roleLabel(member.role)}
+        </span>
       </div>
       <p className="mt-1 text-sm opacity-70">
         {member.videosCompleted} video{member.videosCompleted === 1 ? '' : 's'} watched
@@ -94,10 +96,15 @@ export default function EmployeePage() {
 
       {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
       {notice && <p className="mt-4 text-sm font-semibold text-[var(--success)]">{notice}</p>}
+      {!editable && (
+        <p className="mt-4 text-sm opacity-70">
+          Only someone ranked above {article(roleLabel(member.role))} {roleLabel(member.role).toLowerCase()} can change this account.
+        </p>
+      )}
 
       <form onSubmit={save} className="card mt-6 space-y-4 p-5">
         <h2 className="text-lg font-extrabold">Details</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <fieldset disabled={!editable} className="grid gap-4 disabled:opacity-60 sm:grid-cols-2">
           <Field label="First name" value={form.firstName} onChange={set('firstName')} />
           <Field label="Last name" value={form.lastName} onChange={set('lastName')} />
           <Field
@@ -111,26 +118,33 @@ export default function EmployeePage() {
           <Field label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(555) 555-0100" />
           <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
           <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
-        </div>
-        <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
+        </fieldset>
+        {editable && (
+          <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
+        )}
       </form>
 
-      {!self && (
+      {!self && editable && user && (
         <section className="card mt-6 space-y-4 p-5">
           <h2 className="text-lg font-extrabold">Account</h2>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm">
-              <div className="font-bold">Role: {member.role === 'ADMIN' ? 'Manager' : 'Stylist'}</div>
-              <div className="opacity-60">Managers can upload videos and manage the team.</div>
+              <div className="font-bold">Role</div>
+              <div className="opacity-60">Owners and managers can upload videos and manage the team. Customers can&apos;t see training videos.</div>
             </div>
-            <button
-              className="btn-ghost"
-              onClick={() => void run(
-                () => api.updateMember(userId, { role: member.role === 'ADMIN' ? 'USER' : 'ADMIN' }),
-                'Role updated.')}
+            <select
+              aria-label="Role"
+              value={member.role}
+              onChange={(e) => {
+                const role = e.target.value as UserRole;
+                void run(() => api.updateMember(userId, { role }), `Role changed to ${roleLabel(role)}.`);
+              }}
+              className="input w-auto cursor-pointer font-semibold"
             >
-              {member.role === 'ADMIN' ? 'Make stylist' : 'Make manager'}
-            </button>
+              {roleOptions(user.roles, member.role).map(({ value: r }) => (
+                <option key={r} value={r}>{roleLabel(r)}</option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
             <div className="text-sm">
@@ -196,4 +210,8 @@ function Field({
       {hint && <span className="mt-1 block text-xs opacity-60">{hint}</span>}
     </label>
   );
+}
+
+function article(word: string) {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }

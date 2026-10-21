@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api, type VideoSummary } from '@/src/lib/api';
 import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
+import { canManageSite } from '@/src/lib/roles';
 
 const UNCATEGORIZED = 'Other';
 
@@ -63,8 +64,10 @@ export default function LibraryPage() {
 
       {videos.length === 0 ? (
         <div className="card mt-8 p-6 text-center">
-          <p className="opacity-80">No training videos yet.</p>
-          {user?.roles === 'ADMIN' && (
+          <p className="opacity-80">
+            {user?.roles === 'CUSTOMER' ? 'Training videos are for the Grove Salons team.' : 'No training videos yet.'}
+          </p>
+          {canManageSite(user?.roles) && (
             <Link href="/admin" className="btn mt-4 inline-block">Upload the first one</Link>
           )}
         </div>

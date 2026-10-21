@@ -81,7 +81,7 @@ public class UserService {
 		user.setFirstName(trimOrNull(request.getFirstName()));
 		user.setLastName(trimOrNull(request.getLastName()));
 		user.setPassword(passwordEncoder.encode(request.getPassword()));
-		user.setRoles(adminEmails.contains(email) ? Role.ADMIN : Role.USER);
+		user.setRoles(adminEmails.contains(email) ? Role.OWNER : Role.STYLIST);
 		user.setCreatedAt(LocalDateTime.now());
 		return userRepo.save(user);
 	}
@@ -102,9 +102,11 @@ public class UserService {
 
 	// ---- Manager controls ----------------------------------------------------
 
+	/** Active first, then by role (Role is declared highest-first), then first name. */
 	public List<TeamMember> team() {
 		return userRepo.findAll().stream()
 			.sorted(Comparator.comparing(User::isActive).reversed()
+				.thenComparing(u -> u.getRoles().ordinal())
 				.thenComparing(u -> (u.getFirstName() == null ? "" : u.getFirstName()).toLowerCase()))
 			.map(this::toTeamMember)
 			.toList();
@@ -114,31 +116,38 @@ public class UserService {
 		return toTeamMember(find(userId));
 	}
 
-	/** Disable/re-enable an employee or change their role. A manager can't lock themselves out. */
+	/**
+	 * Disable/re-enable someone or change their role. You can only change people
+	 * ranked below you and only give roles below your own; an owner can do
+	 * anything except lock themselves out or remove the last owner.
+	 */
 	public TeamMember update(User actor, Long userId, TeamMemberUpdate change) {
 		User user = find(userId);
 		boolean self = user.getUserId().equals(actor.getUserId());
-		if (change.active() != null) {
-			if (self && !change.active()) {
+		if (!self) requireCanManage(actor, user);
+		if (change.active() != null && change.active() != user.isActive()) {
+			if (self) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't disable your own account");
 			}
-			if (change.active() != user.isActive()) {
-				user.setActive(change.active());
-				user.setDisabledAt(change.active() ? null : LocalDateTime.now());
-			}
+			if (!change.active() && user.getRoles() == Role.OWNER) requireAnotherOwner(user);
+			user.setActive(change.active());
+			user.setDisabledAt(change.active() ? null : LocalDateTime.now());
 		}
-		if (change.role() != null) {
-			if (self && change.role() != Role.ADMIN) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't remove your own manager access");
+		if (change.role() != null && change.role() != user.getRoles()) {
+			if (self) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't change your own role");
 			}
+			requireCanAssign(actor, change.role());
+			if (user.getRoles() == Role.OWNER) requireAnotherOwner(user);
 			user.setRoles(change.role());
 		}
 		return toTeamMember(userRepo.save(user));
 	}
 
-	/** Update the details a manager keeps on file. Changing the email changes their sign-in. */
-	public TeamMember updateDetails(Long userId, EmployeeDetails d) {
+	/** Update the details kept on file. Changing the email changes their sign-in. */
+	public TeamMember updateDetails(User actor, Long userId, EmployeeDetails d) {
 		User user = find(userId);
+		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
 		String email = d.email() == null ? "" : d.email().trim().toLowerCase();
 		if (!email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
@@ -163,11 +172,32 @@ public class UserService {
 	}
 
 	/** Set a temporary password for someone who forgot theirs. */
-	public void resetPassword(Long userId, String newPassword) {
+	public void resetPassword(User actor, Long userId, String newPassword) {
 		validatePassword(newPassword);
 		User user = find(userId);
+		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
 		user.setPassword(passwordEncoder.encode(newPassword));
 		userRepo.save(user);
+	}
+
+	private static void requireCanManage(User actor, User target) {
+		if (actor.getRoles() == Role.OWNER || actor.getRoles().outranks(target.getRoles())) return;
+		throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+			"Only someone ranked above a " + target.getRoles().label().toLowerCase() + " can change their account");
+	}
+
+	private static void requireCanAssign(User actor, Role role) {
+		if (actor.getRoles() == Role.OWNER || actor.getRoles().outranks(role)) return;
+		throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only give roles below your own");
+	}
+
+	/** Never leave the salon without an active owner. */
+	private void requireAnotherOwner(User leaving) {
+		boolean another = userRepo.findAll().stream().anyMatch(u -> u.getRoles() == Role.OWNER && u.isActive()
+			&& !u.getUserId().equals(leaving.getUserId()));
+		if (!another) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "There has to be at least one owner");
+		}
 	}
 
 	private User find(Long userId) {

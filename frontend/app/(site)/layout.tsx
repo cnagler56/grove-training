@@ -2,19 +2,34 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
+import { canManageSite } from '@/src/lib/roles';
 
 const TABS = [{ href: '/', label: 'Videos' }];
 const ADMIN_TABS = [
   { href: '/admin', label: 'Manage videos' },
   { href: '/admin/team', label: 'Team' },
 ];
+const OWNER_TABS = [{ href: '/admin/applicants', label: 'Applicants' }];
 
 function Header() {
   const { user, logout } = useUser();
   const pathname = usePathname();
-  const tabs = user?.roles === 'ADMIN' ? [...TABS, ...ADMIN_TABS] : TABS;
+  const isOwner = user?.roles === 'OWNER';
+  const tabs = [
+    ...TABS,
+    ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
+    ...(isOwner ? OWNER_TABS : []),
+  ];
+
+  // Owners see how many applications are still "New"; refreshed on every page change.
+  const [newApplicants, setNewApplicants] = useState(0);
+  useEffect(() => {
+    if (!isOwner) return;
+    api.newApplicationCount().then(setNewApplicants).catch(() => {});
+  }, [isOwner, pathname]);
 
   return (
     <header>
@@ -57,6 +72,14 @@ function Header() {
                   }`}
                 >
                   {tab.label}
+                  {tab.href === '/admin/applicants' && isOwner && newApplicants > 0 && (
+                    <span
+                      className="ml-1.5 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-white"
+                      aria-label={`${newApplicants} new`}
+                    >
+                      {newApplicants}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -74,17 +97,20 @@ function Gate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isSignin = pathname === '/signin';
   const needsAdmin = pathname.startsWith('/admin');
+  // Applicants' personal details are for owners only.
+  const needsOwner = pathname.startsWith('/admin/applicants');
+  const blocked = !!user && ((needsAdmin && !canManageSite(user.roles)) || (needsOwner && user.roles !== 'OWNER'));
 
   useEffect(() => {
     if (loading) return;
     if (!user && !isSignin) router.replace('/signin');
     else if (user && isSignin) router.replace('/');
-    else if (user && needsAdmin && user.roles !== 'ADMIN') router.replace('/');
-  }, [user, loading, isSignin, needsAdmin, router]);
+    else if (blocked) router.replace('/');
+  }, [user, loading, isSignin, blocked, router]);
 
   if (loading) return <p className="opacity-60">Loading…</p>;
   if (!user && !isSignin) return null;
-  if (user && needsAdmin && user.roles !== 'ADMIN') return null;
+  if (blocked) return null;
   return <>{children}</>;
 }
 

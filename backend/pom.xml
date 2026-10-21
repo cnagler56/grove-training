@@ -39,6 +39,14 @@
 			<artifactId>spring-security-crypto</artifactId>
 		</dependency>
 		<!--
+			SMTP email: tells owners about new job applications. Inert until
+			MAIL_HOST is set; until then the notice is just logged.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<!--
 			Reads .env from the project root at startup and exposes the values
 			to Spring's property resolver. Real OS env vars still win, so
 			production deployments don't accidentally pick up a committed .env.

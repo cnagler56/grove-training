@@ -5,12 +5,13 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, formatDuration, type CompletionReport, type VideoDetail } from '@/src/lib/api';
 import { useUser } from '@/src/lib/UserContext';
+import { canManageSite } from '@/src/lib/roles';
 
 export default function VideoPage() {
   const { id } = useParams<{ id: string }>();
   const videoId = Number(id);
   const { user } = useUser();
-  const isAdmin = user?.roles === 'ADMIN';
+  const isAdmin = canManageSite(user?.roles);
 
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [report, setReport] = useState<CompletionReport | null>(null);

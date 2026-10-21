@@ -1,6 +1,10 @@
 package com.grove;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -14,15 +18,23 @@ import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.grove.Domain.Role;
+import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoStatus;
+import com.grove.Repository.JobApplicationRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VideoCompletionRepository;
@@ -39,9 +51,12 @@ class GroveServerApplicationTests {
 	@Autowired UserSessionRepository sessions;
 	@Autowired VideoRepository videos;
 	@Autowired VideoCompletionRepository completions;
+	@Autowired JobApplicationRepository applications;
+	@MockBean JavaMailSender mailSender;
 
 	@BeforeEach
 	void clean() {
+		applications.deleteAll();
 		completions.deleteAll();
 		videos.deleteAll();
 		sessions.deleteAll();
@@ -57,7 +72,7 @@ class GroveServerApplicationTests {
 		mvc.perform(post("/register").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"email\":\"a@grove.test\",\"password\":\"password1\",\"teamCode\":\"test-code\"}"))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.roles").value("USER"))
+			.andExpect(jsonPath("$.roles").value("STYLIST"))
 			.andExpect(jsonPath("$.password").doesNotExist());
 	}
 
@@ -66,7 +81,7 @@ class GroveServerApplicationTests {
 		mvc.perform(post("/register").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"email\":\"Owner@Grove.test\",\"password\":\"password1\",\"teamCode\":\"test-code\"}"))
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.roles").value("ADMIN"));
+			.andExpect(jsonPath("$.roles").value("OWNER"));
 	}
 
 	@Test
@@ -171,6 +186,149 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void managersOnlyChangePeopleBelowThem() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie manager = signUp("manager@grove.test");
+		signUp("gm@grove.test");
+		signUp("stylist@grove.test");
+		setRole("manager@grove.test", Role.MANAGER);
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		Long gm = idOf("gm@grove.test");
+		Long stylist = idOf("stylist@grove.test");
+
+		// A manager can make a stylist a lead, but not a manager (their own level) or higher.
+		mvc.perform(roleChange(manager, stylist, "LEAD")).andExpect(status().isOk())
+			.andExpect(jsonPath("$.role").value("LEAD"));
+		mvc.perform(roleChange(manager, stylist, "MANAGER")).andExpect(status().isForbidden());
+
+		// ...and can't touch a general manager at all.
+		mvc.perform(roleChange(manager, gm, "STYLIST")).andExpect(status().isForbidden());
+		mvc.perform(put("/api/admin/team/" + gm).cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"active\":false}"))
+			.andExpect(status().isForbidden());
+
+		// The owner can give any role, including owner.
+		mvc.perform(roleChange(owner, stylist, "OWNER")).andExpect(status().isOk());
+	}
+
+	@Test
+	void theLastOwnerCantBeRemoved() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("second@grove.test");
+		setRole("second@grove.test", Role.OWNER);
+		Cookie second = login("second@grove.test");
+		Long first = idOf("owner@grove.test");
+		Long secondId = idOf("second@grove.test");
+
+		// With two owners, one can step the other down; then the last one is protected.
+		mvc.perform(roleChange(second, first, "GENERAL_MANAGER")).andExpect(status().isOk());
+		mvc.perform(roleChange(second, secondId, "MANAGER")).andExpect(status().isBadRequest());
+		mvc.perform(get("/api/admin/team").cookie(owner)).andExpect(status().isOk()); // a GM still manages
+	}
+
+	@Test
+	void customersCantSeeTrainingVideos() throws Exception {
+		Cookie customer = signUp("client@grove.test");
+		setRole("client@grove.test", Role.CUSTOMER);
+		Long id = seedVideo("Color theory", VideoStatus.READY);
+
+		mvc.perform(get("/api/videos").cookie(customer))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(0));
+		mvc.perform(get("/api/videos/" + id).cookie(customer)).andExpect(status().isNotFound());
+		mvc.perform(get("/api/admin/team").cookie(customer)).andExpect(status().isForbidden());
+	}
+
+	private static final String APPLICATION = "{\"firstName\":\"Pat\",\"lastName\":\"Rivera\",\"email\":\"Pat@Example.com\","
+		+ "\"phone\":\"555-0199\",\"position\":\"Stylist\",\"licensed\":true,\"yearsExperience\":4,"
+		+ "\"availability\":\"Weekends\",\"message\":\"Love color work\"}";
+
+	@Test
+	void anyoneCanApplyButOnlyOwnersSeeApplications() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		Cookie gm = login("gm@grove.test");
+
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.1")
+				.contentType(MediaType.APPLICATION_JSON).content(APPLICATION))
+			.andExpect(status().isCreated());
+
+		mvc.perform(get("/api/owner/applications")).andExpect(status().isUnauthorized());
+		mvc.perform(get("/api/owner/applications").cookie(gm)).andExpect(status().isForbidden());
+		mvc.perform(get("/api/owner/applications").cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].email").value("pat@example.com"))
+			.andExpect(jsonPath("$[0].status").value("NEW"));
+
+		Long id = applications.findAll().get(0).getId();
+		mvc.perform(put("/api/owner/applications/" + id).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"status\":\"INTERVIEW\",\"ownerNotes\":\"Call Tuesday\"}"))
+			.andExpect(jsonPath("$.status").value("INTERVIEW"))
+			.andExpect(jsonPath("$.ownerNotes").value("Call Tuesday"));
+	}
+
+	@Test
+	void applicationFormValidatesAndDropsBots() throws Exception {
+		// Missing phone.
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.2").contentType(MediaType.APPLICATION_JSON)
+				.content(APPLICATION.replace("\"phone\":\"555-0199\",", "")))
+			.andExpect(status().isBadRequest())
+			.andExpect(status().reason("Phone is required"));
+		// Made-up position.
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.2").contentType(MediaType.APPLICATION_JSON)
+				.content(APPLICATION.replace("Stylist", "CEO")))
+			.andExpect(status().isBadRequest());
+		// Honeypot filled: looks accepted, but nothing is saved.
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.2").contentType(MediaType.APPLICATION_JSON)
+				.content(APPLICATION.replace("}", ",\"website\":\"http://spam.example\"}")))
+			.andExpect(status().isCreated());
+		assertThat(applications.count()).isZero();
+	}
+
+	@Test
+	void onlyOwnersAreEmailedAboutApplications() throws Exception {
+		signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		signUp("stylist@grove.test");
+
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.5")
+				.contentType(MediaType.APPLICATION_JSON).content(APPLICATION))
+			.andExpect(status().isCreated());
+
+		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(mailSender, timeout(3000)).send(sent.capture());
+		assertThat(sent.getValue().getTo()).containsExactly("owner@grove.test");
+		assertThat(sent.getValue().getSubject()).contains("Pat Rivera").contains("Stylist");
+
+		// Bots caught by the honeypot don't trigger an email.
+		org.mockito.Mockito.clearInvocations(mailSender);
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.6").contentType(MediaType.APPLICATION_JSON)
+				.content(APPLICATION.replace("}", ",\"website\":\"x\"}")))
+			.andExpect(status().isCreated());
+		Thread.sleep(300);
+		verify(mailSender, never()).send(any(SimpleMailMessage.class));
+	}
+
+	@Test
+	void applicationsAreRateLimited() throws Exception {
+		for (int i = 0; i < 5; i++) {
+			mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.3")
+					.contentType(MediaType.APPLICATION_JSON).content(APPLICATION))
+				.andExpect(status().isCreated());
+		}
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.3")
+				.contentType(MediaType.APPLICATION_JSON).content(APPLICATION))
+			.andExpect(status().isTooManyRequests());
+		// A different connection is unaffected.
+		mvc.perform(post("/api/apply").header("X-Forwarded-For", "10.0.0.4")
+				.contentType(MediaType.APPLICATION_JSON).content(APPLICATION))
+			.andExpect(status().isCreated());
+	}
+
+	@Test
 	void uploadsReportNotConfiguredWithoutBunnyKeys() throws Exception {
 		Cookie owner = signUp("owner@grove.test");
 		mvc.perform(get("/api/admin/status").cookie(owner))
@@ -187,6 +345,29 @@ class GroveServerApplicationTests {
 			.andReturn().getResponse().getHeader("Set-Cookie");
 		String token = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
 		return new Cookie(SessionService.COOKIE_NAME, token);
+	}
+
+	private Cookie login(String email) throws Exception {
+		String setCookie = mvc.perform(post("/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"" + email + "\",\"password\":\"password1\"}"))
+			.andExpect(status().isOk())
+			.andReturn().getResponse().getHeader("Set-Cookie");
+		return new Cookie(SessionService.COOKIE_NAME, setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';')));
+	}
+
+	private void setRole(String email, Role role) {
+		User u = users.findByEmail(email).orElseThrow();
+		u.setRoles(role);
+		users.save(u);
+	}
+
+	private Long idOf(String email) {
+		return users.findByEmail(email).orElseThrow().getUserId();
+	}
+
+	private MockHttpServletRequestBuilder roleChange(Cookie actor, Long userId, String role) {
+		return put("/api/admin/team/" + userId).cookie(actor).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"role\":\"" + role + "\"}");
 	}
 
 	private Long seedVideo(String title, VideoStatus status) {

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, type AdminStatus, type TeamMember } from '@/src/lib/api';
+import { api, type AdminStatus, type TeamMember, type UserRole } from '@/src/lib/api';
+import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { employeeName, formatBirthday, formatDate, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 
@@ -11,6 +12,7 @@ export default function TeamPage() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.team().then(setTeam).catch((e) => setError(e.message));
@@ -20,10 +22,12 @@ export default function TeamPage() {
     api.adminStatus().then(setStatus).catch(() => {});
   }, [load]);
 
-  async function enable(m: TeamMember) {
+  async function change(m: TeamMember, c: { active?: boolean; role?: UserRole }, done?: string) {
     setError(null);
+    setNotice(null);
     try {
-      await api.updateMember(m.userId, { active: true });
+      await api.updateMember(m.userId, c);
+      if (done) setNotice(done);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong');
@@ -45,12 +49,14 @@ export default function TeamPage() {
       </p>
 
       {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
+      {notice && <p className="mt-4 text-sm font-semibold text-[var(--success)]">{notice}</p>}
 
       <div className="card mt-6 overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
             <tr>
               <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Role</th>
               <th className="px-4 py-3 font-semibold">Phone</th>
               <th className="px-4 py-3 font-semibold">Hired</th>
               <th className="px-4 py-3 font-semibold">Birthday</th>
@@ -65,13 +71,29 @@ export default function TeamPage() {
                   <div className="font-bold">
                     {employeeName(m)}
                     {m.userId === user?.userId && <span className="font-normal opacity-60"> (you)</span>}
-                    {m.role === 'ADMIN' && (
-                      <span className="ml-2 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--accent-strong)]">
-                        Manager
-                      </span>
-                    )}
                   </div>
                   <div className="text-xs opacity-60">{m.email}</div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {user && m.userId !== user.userId && canManage(user.roles, m.role) ? (
+                    <select
+                      aria-label={`Role for ${employeeName(m)}`}
+                      value={m.role}
+                      onChange={(e) => {
+                        const role = e.target.value as UserRole;
+                        void change(m, { role }, `${employeeName(m)} is now ${article(roleLabel(role))} ${roleLabel(role).toLowerCase()}.`);
+                      }}
+                      className={`cursor-pointer rounded-full border-0 py-1 pl-3 pr-7 text-xs font-bold ${roleBadgeClass(m.role)}`}
+                    >
+                      {roleOptions(user.roles, m.role).map(({ value: r }) => (
+                        <option key={r} value={r}>{roleLabel(r)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${roleBadgeClass(m.role)}`}>
+                      {roleLabel(m.role)}
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">{m.phone || <Missing />}</td>
                 <td className="whitespace-nowrap px-4 py-3">
@@ -85,7 +107,9 @@ export default function TeamPage() {
                 <td className="whitespace-nowrap px-4 py-3">{formatBirthday(m.birthday) || <Missing />}</td>
                 <td className="px-4 py-3">{m.videosCompleted}</td>
                 <td className="px-4 py-3 text-right">
-                  <Link href={`/admin/team/${m.userId}`} className="btn-ghost inline-block">Edit</Link>
+                  {user && (m.userId === user.userId || canManage(user.roles, m.role)) && (
+                    <Link href={`/admin/team/${m.userId}`} className="btn-ghost inline-block">Edit</Link>
+                  )}
                 </td>
               </tr>
             ))}
@@ -107,7 +131,9 @@ export default function TeamPage() {
                     {m.hireDate && ` · hired ${formatDate(m.hireDate)}`}
                   </div>
                 </div>
-                <button className="btn-ghost" onClick={() => void enable(m)}>Re-enable</button>
+                {user && canManage(user.roles, m.role) && (
+                  <button className="btn-ghost" onClick={() => void change(m, { active: true }, `${employeeName(m)} can sign in again.`)}>Re-enable</button>
+                )}
               </li>
             ))}
           </ul>
@@ -119,4 +145,8 @@ export default function TeamPage() {
 
 function Missing() {
   return <span className="opacity-40">—</span>;
+}
+
+function article(word: string) {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }

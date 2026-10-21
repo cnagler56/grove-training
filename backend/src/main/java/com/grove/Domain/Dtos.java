@@ -72,6 +72,24 @@ public final class Dtos {
 
 	public record PasswordReset(String password) {}
 
+	/** What the public /apply form sends. {@code website} is a honeypot: real people leave it empty. */
+	public record ApplicationRequest(
+		String firstName,
+		String lastName,
+		String email,
+		String phone,
+		String position,
+		Boolean licensed,
+		String licenseNumber,
+		Integer yearsExperience,
+		String availability,
+		String portfolio,
+		String message,
+		String website) {}
+
+	/** Owner's changes to an application. */
+	public record ApplicationUpdate(ApplicationStatus status, String ownerNotes) {}
+
 	/** Whether uploads are wired up — the admin page shows setup help when false. */
 	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}
 }
