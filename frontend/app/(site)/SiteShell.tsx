@@ -5,10 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
-import { canManageSite } from '@/src/lib/roles';
+import { canEditSchedule, canManageSite } from '@/src/lib/roles';
 
 const TABS = [{ href: '/home', label: 'Home' }];
-const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
+const STAFF_TABS = [
+  { href: '/videos', label: 'Videos' },
+  { href: '/schedule', label: 'Schedule' },
+];
 const ADMIN_TABS = [
   { href: '/admin', label: 'Manage videos' },
   { href: '/admin/team', label: 'Team' },
@@ -34,7 +37,7 @@ function Header() {
   }, [isOwner, pathname]);
 
   return (
-    <header>
+    <header className="print:hidden">
       <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight">
@@ -99,7 +102,14 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsAdmin = pathname.startsWith('/admin');
   // Applicants' personal details, and adding accounts, are for owners only.
   const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new';
-  const blocked = !!user && ((needsAdmin && !canManageSite(user.roles)) || (needsOwner && user.roles !== 'OWNER'));
+  // The schedule is for staff; editing it is for owners and general managers.
+  const needsStaff = pathname.startsWith('/schedule') || pathname.startsWith('/videos');
+  const needsScheduler = pathname.startsWith('/schedule/edit');
+  const blocked = !!user && (
+    (needsAdmin && !canManageSite(user.roles))
+    || (needsOwner && user.roles !== 'OWNER')
+    || (needsStaff && user.roles === 'CUSTOMER')
+    || (needsScheduler && !canEditSchedule(user.roles)));
 
   useEffect(() => {
     if (loading) return;
@@ -118,7 +128,7 @@ export default function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <UserProvider>
       <Header />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 print:max-w-none print:p-0">
         <Gate>{children}</Gate>
       </main>
     </UserProvider>

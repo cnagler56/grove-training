@@ -27,6 +27,14 @@ body {
   font-family: var(--font-nunito), system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
+/* Printouts (the paper schedule form) are plain black on white. */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
+
 /* A white, rounded card with a soft blue-gray edge. */
 .card {
   background: var(--surface);

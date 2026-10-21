@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.servlet.http.Cookie;
@@ -35,6 +36,8 @@ import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoStatus;
 import com.grove.Repository.JobApplicationRepository;
+import com.grove.Repository.ScheduleWeekRepository;
+import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VideoCompletionRepository;
@@ -52,10 +55,14 @@ class GroveServerApplicationTests {
 	@Autowired VideoRepository videos;
 	@Autowired VideoCompletionRepository completions;
 	@Autowired JobApplicationRepository applications;
+	@Autowired ShiftRepository shifts;
+	@Autowired ScheduleWeekRepository scheduleWeeks;
 	@MockBean JavaMailSender mailSender;
 
 	@BeforeEach
 	void clean() {
+		shifts.deleteAll();
+		scheduleWeeks.deleteAll();
 		applications.deleteAll();
 		completions.deleteAll();
 		videos.deleteAll();
@@ -368,6 +375,124 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void scheduleWeeksRunSaturdayToFriday() {
+		LocalDate saturday = LocalDate.of(2026, 10, 17);
+		assertThat(saturday.getDayOfWeek()).isEqualTo(java.time.DayOfWeek.SATURDAY);
+		assertThat(com.grove.Service.ScheduleService.weekStart(saturday)).isEqualTo(saturday);
+		assertThat(com.grove.Service.ScheduleService.weekStart(LocalDate.of(2026, 10, 21))).isEqualTo(saturday); // Wed
+		assertThat(com.grove.Service.ScheduleService.weekStart(LocalDate.of(2026, 10, 23))).isEqualTo(saturday); // Fri
+		assertThat(com.grove.Service.ScheduleService.weekStart(LocalDate.of(2026, 10, 24))).isEqualTo(LocalDate.of(2026, 10, 24));
+	}
+
+	@Test
+	void onlyOwnersAndGeneralManagersEditTheSchedule() throws Exception {
+		signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		signUp("manager@grove.test");
+		signUp("stylist@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		setRole("manager@grove.test", Role.MANAGER);
+		Cookie gm = login("gm@grove.test");
+		Cookie manager = login("manager@grove.test");
+		String week = "{\"shifts\":[" + shiftJson(idOf("stylist@grove.test"), "2026-10-17", "10:00", "18:00") + "]}";
+
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isForbidden());
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(gm).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.shifts.length()").value(1))
+			.andExpect(jsonPath("$.weekEnd").value("2026-10-23"));
+		// Weeks are keyed by their Saturday.
+		mvc.perform(put("/api/schedule/2026-10-18").cookie(gm).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void staffOnlySeeAWeekOnceItsPosted() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+		Cookie customer = signUp("client@grove.test");
+		setRole("client@grove.test", Role.CUSTOMER);
+		LocalDate today = LocalDate.now();
+		LocalDate start = com.grove.Service.ScheduleService.weekStart(today);
+		String week = "{\"shifts\":[" + shiftJson(idOf("stylist@grove.test"), today.toString(), "09:00", "17:00") + "]}";
+
+		mvc.perform(put("/api/schedule/" + start).cookie(owner).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isOk());
+
+		// Draft: the stylist sees nothing yet, the owner sees the shift.
+		mvc.perform(get("/api/schedule").cookie(stylist))
+			.andExpect(jsonPath("$.published").value(false))
+			.andExpect(jsonPath("$.shifts.length()").value(0));
+		mvc.perform(get("/api/schedule/mine").cookie(stylist)).andExpect(jsonPath("$.length()").value(0));
+		mvc.perform(get("/api/schedule").cookie(owner)).andExpect(jsonPath("$.shifts.length()").value(1));
+
+		mvc.perform(put("/api/schedule/" + start + "/published").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"published\":true}"))
+			.andExpect(jsonPath("$.published").value(true));
+
+		mvc.perform(get("/api/schedule?date=" + today).cookie(stylist))
+			.andExpect(jsonPath("$.shifts.length()").value(1))
+			.andExpect(jsonPath("$.shifts[0].start").value("09:00:00"))
+			.andExpect(jsonPath("$.canEdit").value(false));
+		mvc.perform(get("/api/schedule/mine").cookie(stylist))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].date").value(today.toString()));
+
+		mvc.perform(get("/api/schedule").cookie(customer)).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void scheduleRejectsBadShifts() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("stylist@grove.test");
+		signUp("client@grove.test");
+		setRole("client@grove.test", Role.CUSTOMER);
+		Long stylist = idOf("stylist@grove.test");
+
+		String[] bad = {
+			shiftJson(stylist, "2026-10-17", "18:00", "10:00"),                                              // ends first
+			shiftJson(stylist, "2026-10-24", "10:00", "18:00"),                                              // next week
+			shiftJson(stylist, "2026-10-17", "10:00", "14:00") + "," + shiftJson(stylist, "2026-10-17", "15:00", "18:00"), // two in a day
+			shiftJson(idOf("client@grove.test"), "2026-10-17", "10:00", "18:00"),                          // a customer
+			shiftJson(idOf("owner@grove.test"), "2026-10-17", "10:00", "18:00"),                           // the owner
+		};
+		for (String shift : bad) {
+			mvc.perform(put("/api/schedule/2026-10-17").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+					.content("{\"shifts\":[" + shift + "]}"))
+				.andExpect(status().isBadRequest());
+		}
+		assertThat(shifts.count()).isZero();
+	}
+
+	@Test
+	void scheduleRosterListsHairStaffThenReceptionists() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("zoe@grove.test", "Zoe");
+		signUp("ava@grove.test", "Ava");
+		signUp("mia@grove.test", "Mia");
+		signUp("ben@grove.test", "Ben");
+		signUp("client@grove.test", "Cal");
+		setRole("ava@grove.test", Role.RECEPTIONIST);
+		setRole("mia@grove.test", Role.MANAGER);
+		setRole("ben@grove.test", Role.GENERAL_MANAGER);
+		setRole("client@grove.test", Role.CUSTOMER);
+
+		// Owner and customer are left off; receptionists go to the bottom; the rest alphabetical.
+		mvc.perform(get("/api/schedule").cookie(owner))
+			.andExpect(jsonPath("$.roster.length()").value(4))
+			.andExpect(jsonPath("$.roster[0].name").value("Ben"))
+			.andExpect(jsonPath("$.roster[1].name").value("Mia"))
+			.andExpect(jsonPath("$.roster[2].name").value("Zoe"))
+			.andExpect(jsonPath("$.roster[3].name").value("Ava"))
+			.andExpect(jsonPath("$.roster[3].role").value("RECEPTIONIST"));
+	}
+
+	private static String shiftJson(Long userId, String date, String start, String end) {
+		return "{\"userId\":" + userId + ",\"date\":\"" + date + "\",\"start\":\"" + start + "\",\"end\":\"" + end + "\"}";
+	}
+
+	@Test
 	void uploadsReportNotConfiguredWithoutBunnyKeys() throws Exception {
 		Cookie owner = signUp("owner@grove.test");
 		mvc.perform(get("/api/admin/status").cookie(owner))
@@ -378,8 +503,13 @@ class GroveServerApplicationTests {
 	}
 
 	private Cookie signUp(String email) throws Exception {
+		return signUp(email, null);
+	}
+
+	private Cookie signUp(String email, String firstName) throws Exception {
+		String name = firstName == null ? "" : ",\"firstName\":\"" + firstName + "\"";
 		String setCookie = mvc.perform(post("/register").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"email\":\"" + email + "\",\"password\":\"password1\",\"teamCode\":\"test-code\"}"))
+				.content("{\"email\":\"" + email + "\",\"password\":\"password1\",\"teamCode\":\"test-code\"" + name + "}"))
 			.andExpect(status().isCreated())
 			.andReturn().getResponse().getHeader("Set-Cookie");
 		String token = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));

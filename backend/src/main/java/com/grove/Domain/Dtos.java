@@ -2,6 +2,7 @@ package com.grove.Domain;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 /** Request/response shapes for the video and team APIs. */
@@ -100,6 +101,41 @@ public final class Dtos {
 
 	/** Owner's changes to an application. */
 	public record ApplicationUpdate(ApplicationStatus status, String ownerNotes) {}
+
+	/** One shift as shown on a schedule. */
+	public record ShiftView(
+		Long id,
+		Long userId,
+		String name,
+		Role role,
+		LocalDate date,
+		LocalTime start,
+		LocalTime end,
+		String note) {}
+
+	/**
+	 * A Saturday-to-Friday week. Unposted weeks show staff no shifts. The roster
+	 * is the Name column: everyone in a scheduled role, receptionists last.
+	 */
+	public record WeekSchedule(
+		LocalDate weekStart,
+		LocalDate weekEnd,
+		boolean published,
+		LocalDateTime publishedAt,
+		boolean canEdit,
+		List<RosterEntry> roster,
+		List<ShiftView> shifts) {}
+
+	/** One row of the schedule. {@code active=false} only for a former employee with shifts that week. */
+	public record RosterEntry(Long userId, String name, Role role, boolean active) {}
+
+	/** One cell from the schedule editor. */
+	public record ShiftInput(Long userId, LocalDate date, LocalTime start, LocalTime end, String note) {}
+
+	/** The whole week from the editor; replaces whatever was saved before. */
+	public record WeekSave(List<ShiftInput> shifts) {}
+
+	public record WeekPublish(boolean published) {}
 
 	/** Whether uploads are wired up — the admin page shows setup help when false. */
 	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}

@@ -24,6 +24,7 @@ import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.LoginDTO;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
+import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VideoCompletionRepository;
@@ -43,17 +44,19 @@ public class UserService {
 	private final UserRepository userRepo;
 	private final VideoCompletionRepository completionRepo;
 	private final UserSessionRepository sessionRepo;
+	private final ShiftRepository shiftRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
 
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
-			UserSessionRepository sessionRepo, PasswordEncoder passwordEncoder,
+			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
 		this.completionRepo = completionRepo;
 		this.sessionRepo = sessionRepo;
+		this.shiftRepo = shiftRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -190,7 +193,7 @@ public class UserService {
 
 	/**
 	 * Owner permanently deletes an account: the user, their sessions, and their
-	 * watch history. (Disabling is the gentler option and keeps history.)
+	 * watch history, and shifts. (Disabling is the gentler option and keeps history.)
 	 */
 	@Transactional
 	public void delete(User actor, Long userId) {
@@ -201,6 +204,7 @@ public class UserService {
 		if (user.getRoles() == Role.OWNER && user.isActive()) requireAnotherOwner(user);
 		sessionRepo.deleteByUserId(user.getUserId());
 		completionRepo.deleteByUserId(user.getUserId());
+		shiftRepo.deleteByUserId(user.getUserId());
 		userRepo.delete(user);
 	}
 

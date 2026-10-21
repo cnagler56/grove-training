@@ -29,6 +29,14 @@ public enum Role {
 	/** Managers and up get the manager pages: upload videos, manage the team. */
 	public boolean canManageSite() { return rank >= MANAGER.rank; }
 
+	/** Who appears on the weekly schedule: everyone but owners and customers. */
+	public boolean isScheduled() {
+		return this == GENERAL_MANAGER || this == MANAGER || this == LEAD || this == STYLIST || this == RECEPTIONIST;
+	}
+
+	/** Owners and general managers build and post the weekly schedule. */
+	public boolean canEditSchedule() { return this == OWNER || this == GENERAL_MANAGER; }
+
 	/** Training videos are for staff only. */
 	public boolean isStaff() { return this != CUSTOMER; }
 }

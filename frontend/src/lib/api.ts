@@ -103,6 +103,49 @@ export interface NewEmployee extends EmployeeDetails {
   password: string;
 }
 
+/** One shift. Dates are "YYYY-MM-DD"; times are "HH:MM" or "HH:MM:SS". */
+export interface ShiftView {
+  id: number;
+  userId: number;
+  name: string;
+  role: UserRole | null;
+  date: string;
+  start: string;
+  end: string;
+  note: string | null;
+}
+
+/** One row of the schedule's Name column. */
+export interface RosterEntry {
+  userId: number;
+  name: string;
+  role: UserRole;
+  /** false only for a former employee who still has shifts that week. */
+  active: boolean;
+}
+
+/**
+ * A Saturday-to-Friday week. Staff get no shifts until it's posted. `roster` is
+ * the Name column: stylists, leads, managers, and GMs (A–Z), then receptionists.
+ */
+export interface WeekSchedule {
+  weekStart: string;
+  weekEnd: string;
+  published: boolean;
+  publishedAt: string | null;
+  canEdit: boolean;
+  roster: RosterEntry[];
+  shifts: ShiftView[];
+}
+
+export interface ShiftInput {
+  userId: number;
+  date: string;
+  start: string;
+  end: string;
+  note?: string | null;
+}
+
 export type ApplicationStatus = 'NEW' | 'CONTACTED' | 'INTERVIEW' | 'HIRED' | 'NOT_A_FIT';
 
 /** What the public /apply form sends. `website` is a hidden spam trap; leave it empty. */
@@ -185,6 +228,13 @@ export const api = {
   updateVideo: (id: number, r: VideoRequest) => send<VideoSummary>(`/api/admin/videos/${id}`, 'PUT', r),
   deleteVideo: (id: number) => send<void>(`/api/admin/videos/${id}`, 'DELETE'),
   completions: (id: number) => send<CompletionReport>(`/api/admin/videos/${id}/completions`),
+
+  schedule: (date?: string) => send<WeekSchedule>(`/api/schedule${date ? `?date=${date}` : ''}`),
+  mySchedule: () => send<ShiftView[]>('/api/schedule/mine'),
+  saveSchedule: (weekStart: string, shifts: ShiftInput[]) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts }),
+  publishSchedule: (weekStart: string, published: boolean) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}/published`, 'PUT', { published }),
 
   positions: () => send<string[]>('/api/apply/positions'),
   apply: (a: ApplicationRequest) => send<void>('/api/apply', 'POST', a),

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDuration, type VideoSummary } from '@/src/lib/api';
+import { api, formatDuration, type ShiftView, type VideoSummary } from '@/src/lib/api';
+import { longDayLabel, shiftLabel, todayIso } from '@/src/lib/schedule';
 import { canManageSite, roleLabel } from '@/src/lib/roles';
 import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
@@ -24,9 +25,11 @@ export default function StaffHomePage() {
 
   const [videos, setVideos] = useState<VideoSummary[] | null>(null);
   const [newApplicants, setNewApplicants] = useState<number | null>(null);
+  const [myShifts, setMyShifts] = useState<ShiftView[] | null>(null);
 
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
+    if (isStaff) api.mySchedule().then(setMyShifts).catch(() => setMyShifts([]));
     if (isOwner) api.newApplicationCount().then(setNewApplicants).catch(() => {});
   }, [isStaff, isOwner]);
 
@@ -113,6 +116,34 @@ export default function StaffHomePage() {
           </Link>
         </section>
       </div>
+
+      {isStaff && (
+        <section className="card p-5">
+          <div className="flex items-end justify-between">
+            <h2 className="text-lg font-extrabold">Your schedule</h2>
+            <Link href="/schedule" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">
+              Salon schedule
+            </Link>
+          </div>
+          {myShifts === null ? (
+            <p className="mt-3 text-sm opacity-60">Loading…</p>
+          ) : myShifts.length === 0 ? (
+            <p className="mt-3 text-sm opacity-70">No upcoming shifts posted yet.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-[var(--border)] text-sm">
+              {myShifts.map((s) => {
+                const isToday = s.date === todayIso();
+                return (
+                  <li key={s.id} className={`flex flex-wrap justify-between gap-2 py-2 ${isToday ? 'font-bold text-[var(--accent-strong)]' : ''}`}>
+                    <span>{isToday ? 'Today' : longDayLabel(s.date)}</span>
+                    <span>{shiftLabel(s.start, s.end)}{s.note ? ` · ${s.note}` : ''}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {isManager && (
         <section className="card p-5">

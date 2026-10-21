@@ -21,6 +21,11 @@ export const SALON = {
   ] as [string, string][],
   /** Same hours by weekday, Sunday first, for "Open today" on the staff home page. '' = closed. */
   hoursByDay: ['11am – 4pm', '10am – 8pm', '10am – 8pm', '10am – 8pm', '10am – 8pm', '10am – 6pm', '9am – 5pm'],
+  /** Same hours as 24-hour [open, close], Sunday first. The schedule editor starts new shifts from these. */
+  openClose: [
+    ['11:00', '16:00'], ['10:00', '20:00'], ['10:00', '20:00'], ['10:00', '20:00'],
+    ['10:00', '20:00'], ['10:00', '18:00'], ['09:00', '17:00'],
+  ] as [string, string][],
   /** Online booking link, if you have one. */
   bookingUrl: '',
   /** Full Instagram/Facebook links. */

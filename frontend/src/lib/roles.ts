@@ -22,6 +22,9 @@ export const roleLabel = (r: UserRole) => byValue[r]?.label ?? r;
 /** Managers and up get the manager pages (upload videos, manage the team). */
 export const canManageSite = (r: UserRole | undefined) => !!r && rank(r) >= rank('MANAGER');
 
+/** Owners and general managers build and post the weekly schedule. */
+export const canEditSchedule = (r: UserRole | undefined) => r === 'OWNER' || r === 'GENERAL_MANAGER';
+
 /** You can change people ranked below you; an owner can change anyone. */
 export const canManage = (actor: UserRole, target: UserRole) => actor === 'OWNER' || rank(actor) > rank(target);
 
