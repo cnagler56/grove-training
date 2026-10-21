@@ -52,7 +52,7 @@ export default function ApplicantPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href="/admin/applicants" className="text-sm opacity-70 hover:opacity-100">← Applicants</Link>
+      <Link href="/admin/applicants" className="text-sm opacity-70 hover:opacity-100">Back to applicants</Link>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-extrabold tracking-tight">{app.firstName} {app.lastName}</h1>
@@ -65,8 +65,8 @@ export default function ApplicantPage() {
 
       <section className="card mt-6 p-5">
         <div className="flex flex-wrap gap-2">
-          <a href={`tel:${app.phone}`} className="btn">📞 {app.phone}</a>
-          <a href={`mailto:${app.email}`} className="btn-ghost">✉️ {app.email}</a>
+          <a href={`tel:${app.phone}`} className="btn">Call {app.phone}</a>
+          <a href={`mailto:${app.email}`} className="btn-ghost">Email {app.email}</a>
         </div>
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
           <Item label="Licensed">
@@ -126,7 +126,7 @@ export default function ApplicantPage() {
         </div>
         {app.status === 'HIRED' && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--success-soft)] px-4 py-3 text-sm">
-            <span>🎉 Ready to give {app.firstName} access to training videos?</span>
+            <span>Ready to give {app.firstName} access to training videos?</span>
             <Link href={`/admin/team/new?application=${app.id}`} className="btn">Create their account</Link>
           </div>
         )}

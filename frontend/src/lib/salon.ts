@@ -28,11 +28,11 @@ export const SALON = {
   facebook: '',
 
   services: [
-    { name: 'Haircuts', blurb: 'Classic cuts and fresh styles for women, men, and kids.', icon: '💇' },
-    { name: 'Color', blurb: 'All-over color, gray coverage, and glosses.', icon: '🎨' },
-    { name: 'Highlights & balayage', blurb: 'Sun-kissed dimension, foils or hand-painted.', icon: '✨' },
-    { name: 'Blowouts & styling', blurb: 'Smooth, bouncy, or ready for a big night.', icon: '💨' },
-    { name: 'Kids’ cuts', blurb: 'Patient stylists and quick, happy cuts.', icon: '🧒' },
-    { name: 'Treatments', blurb: 'Deep conditioning and scalp care.', icon: '💧' },
+    { name: 'Haircuts', blurb: 'Classic cuts and fresh styles for women, men, and kids.' },
+    { name: 'Color', blurb: 'All-over color, gray coverage, and glosses.' },
+    { name: 'Highlights & balayage', blurb: 'Sun-kissed dimension, foils or hand-painted.' },
+    { name: 'Blowouts & styling', blurb: 'Smooth, bouncy, or ready for a big night.' },
+    { name: 'Kids’ cuts', blurb: 'Patient stylists and quick, happy cuts.' },
+    { name: 'Treatments', blurb: 'Deep conditioning and scalp care.' },
   ],
 };

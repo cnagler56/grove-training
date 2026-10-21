@@ -76,8 +76,7 @@ function AddEmployee() {
     return (
       <div className="mx-auto max-w-xl">
         <div className="card p-6">
-          <p className="text-3xl">🎉</p>
-          <h1 className="mt-1 text-2xl font-extrabold">{employeeName(member)}&apos;s account is ready</h1>
+          <h1 className="text-2xl font-extrabold">{employeeName(member)}&apos;s account is ready</h1>
           <p className="mt-2 text-sm opacity-80">Give them these sign-in details. You won&apos;t see this password again.</p>
           <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-[var(--surface-2)] p-4 font-sans text-sm">{handout}</pre>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -92,7 +91,7 @@ function AddEmployee() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href="/admin/team" className="text-sm opacity-70 hover:opacity-100">← Team</Link>
+      <Link href="/admin/team" className="text-sm opacity-70 hover:opacity-100">Back to team</Link>
       <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Add employee</h1>
       <p className="mt-1 text-sm opacity-70">
         Creates their account directly, so they don&apos;t need the team code.

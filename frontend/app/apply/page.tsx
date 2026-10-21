@@ -54,8 +54,7 @@ export default function ApplyPage() {
       <main className="mx-auto max-w-2xl px-4 py-8">
         {sentTo ? (
           <div className="card p-8 text-center">
-            <p className="text-4xl">🎉</p>
-            <h2 className="mt-2 text-2xl font-extrabold">Thanks, {sentTo}!</h2>
+            <h2 className="text-2xl font-extrabold">Thanks, {sentTo}!</h2>
             <p className="mt-2 opacity-80">Your application is in. We&apos;ll reach out by phone or email soon.</p>
           </div>
         ) : (

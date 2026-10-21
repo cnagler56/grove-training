@@ -46,7 +46,7 @@ export default function VideoPage() {
 
   return (
     <div>
-      <Link href="/videos" className="text-sm opacity-70 hover:opacity-100">← All videos</Link>
+      <Link href="/videos" className="text-sm opacity-70 hover:opacity-100">Back to all videos</Link>
 
       <div className="mt-4 overflow-hidden rounded-2xl bg-black text-white shadow-lg">
         {embedUrl ? (
@@ -84,7 +84,7 @@ export default function VideoPage() {
             disabled={saving}
             className={video.completed ? 'btn-ghost' : 'btn'}
           >
-            {video.completed ? '✓ Watched — undo' : 'Mark as watched'}
+            {video.completed ? 'Watched (undo)' : 'Mark as watched'}
           </button>
         )}
       </div>
@@ -103,7 +103,7 @@ export default function VideoPage() {
               <li key={e.userId} className="flex justify-between gap-4 py-2">
                 <span>{e.name}</span>
                 <span className={e.completedAt ? 'text-[var(--success)]' : 'opacity-50'}>
-                  {e.completedAt ? `✓ ${new Date(e.completedAt).toLocaleDateString()}` : 'Not yet'}
+                  {e.completedAt ? `Watched ${new Date(e.completedAt).toLocaleDateString()}` : 'Not yet'}
                 </span>
               </li>
             ))}

@@ -44,7 +44,7 @@ export default function StaffHomePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight">
-          {greeting()}{user.firstName ? `, ${user.firstName}` : ''} 👋
+          {greeting()}{user.firstName ? `, ${user.firstName}` : ''}
         </h1>
         <p className="mt-1 text-sm opacity-70">
           {roleLabel(user.roles)} at {SALON.name} · {DAYS[today]}, {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
@@ -78,11 +78,11 @@ export default function StaffHomePage() {
                         {[upNext.category, formatDuration(upNext.durationSeconds)].filter(Boolean).join(' · ')}
                       </div>
                     </div>
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white">▶</span>
+                    <span className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-sm font-bold text-white">Watch</span>
                   </Link>
                 ) : (
                   <p className="mt-4 rounded-2xl bg-[var(--success-soft)] p-4 text-sm font-semibold text-[var(--success)]">
-                    🎉 You&apos;re all caught up. Nice work!
+                    You&apos;re all caught up. Nice work!
                   </p>
                 )}
               </>
@@ -118,13 +118,13 @@ export default function StaffHomePage() {
         <section className="card p-5">
           <h2 className="text-lg font-extrabold">Manager shortcuts</h2>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/admin" className="btn">⬆️ Upload a video</Link>
-            <Link href="/admin/team" className="btn-ghost">👥 Team</Link>
+            <Link href="/admin" className="btn">Upload a video</Link>
+            <Link href="/admin/team" className="btn-ghost">Team</Link>
             {isOwner && (
               <>
-                <Link href="/admin/team/new" className="btn-ghost">➕ Add employee</Link>
+                <Link href="/admin/team/new" className="btn-ghost">Add employee</Link>
                 <Link href="/admin/applicants" className="btn-ghost">
-                  📋 Applicants
+                  Applicants
                   {!!newApplicants && (
                     <span className="ml-1.5 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-white">
                       {newApplicants} new
@@ -141,7 +141,7 @@ export default function StaffHomePage() {
         <section>
           <div className="mb-3 flex items-end justify-between">
             <h2 className="text-lg font-extrabold">Newest videos</h2>
-            <Link href="/videos" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">See all →</Link>
+            <Link href="/videos" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">See all videos</Link>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {newest.map((v) => <VideoCard key={v.id} video={v} />)}

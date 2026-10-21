@@ -28,7 +28,7 @@ export default function HomePage() {
             {SALON.phone && (
               <a href={`tel:${SALON.phone}`}
                 className="rounded-full bg-white/20 px-6 py-3 font-bold ring-1 ring-white/50 hover:bg-white/30">
-                📞 Call {SALON.phone}
+                Call {SALON.phone}
               </a>
             )}
             <Link href="#services"
@@ -47,8 +47,7 @@ export default function HomePage() {
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {SALON.services.map((s) => (
               <div key={s.name} className="card p-5">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-xl">{s.icon}</div>
-                <h3 className="mt-3 text-lg font-extrabold">{s.name}</h3>
+                <h3 className="text-lg font-extrabold">{s.name}</h3>
                 <p className="mt-1 text-sm opacity-75">{s.blurb}</p>
               </div>
             ))}

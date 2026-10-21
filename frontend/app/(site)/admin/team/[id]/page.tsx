@@ -91,7 +91,7 @@ export default function EmployeePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href="/admin/team" className="text-sm opacity-70 hover:opacity-100">← Team</Link>
+      <Link href="/admin/team" className="text-sm opacity-70 hover:opacity-100">Back to team</Link>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-extrabold tracking-tight">{employeeName(member)}</h1>

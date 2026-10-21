@@ -18,8 +18,8 @@ export default function VideoCard({ video }: { video: VideoSummary }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={video.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-xl text-[var(--accent)] shadow">▶</span>
+          <div className="flex h-full items-center justify-center text-sm font-semibold text-[var(--accent-strong)] opacity-70">
+            No preview yet
           </div>
         )}
         {duration && (
@@ -27,7 +27,7 @@ export default function VideoCard({ video }: { video: VideoSummary }) {
         )}
         {video.completed && (
           <span className="absolute left-2 top-2 rounded-full bg-[var(--success)] px-2 py-0.5 text-xs font-bold text-white">
-            ✓ Watched
+            Watched
           </span>
         )}
       </div>
