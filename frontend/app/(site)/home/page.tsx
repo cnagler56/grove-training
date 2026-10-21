@@ -93,57 +93,59 @@ export default function StaffHomePage() {
           </section>
         )}
 
-        <section className={`card p-5 ${isStaff ? '' : 'md:col-span-3'}`}>
-          <h2 className="text-lg font-extrabold">The salon</h2>
-          <div className="mt-3 text-sm">
-            <div className="text-xs font-bold uppercase tracking-wide opacity-60">Open today</div>
-            <div className="font-semibold">{todayHours || 'Closed'}</div>
-          </div>
-          {SALON.phone && (
-            <div className="mt-3 text-sm">
-              <div className="text-xs font-bold uppercase tracking-wide opacity-60">Phone</div>
-              <a href={`tel:${SALON.phone}`} className="font-semibold hover:underline">{SALON.phone}</a>
+        {isStaff ? (
+          <section className="card p-5">
+            <div className="flex items-end justify-between gap-2">
+              <h2 className="text-lg font-extrabold">Your schedule</h2>
+              <Link href="/schedule" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">
+                Full schedule
+              </Link>
             </div>
-          )}
-          {SALON.address.length > 0 && (
+            {myShifts === null ? (
+              <p className="mt-3 text-sm opacity-60">Loading…</p>
+            ) : myShifts.length === 0 ? (
+              <p className="mt-3 text-sm opacity-70">No upcoming shifts posted yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-[var(--border)] text-sm">
+                {myShifts.map((s) => {
+                  const isToday = s.date === todayIso();
+                  return (
+                    <li key={s.id} className={`flex flex-wrap justify-between gap-x-2 py-2 ${isToday ? 'font-bold text-[var(--accent-strong)]' : ''}`}>
+                      <span>{isToday ? 'Today' : longDayLabel(s.date)}</span>
+                      <span className="whitespace-nowrap">{shiftLabel(s.start, s.end)}</span>
+                      {s.note && <span className="w-full text-xs opacity-60">{s.note}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        ) : (
+          // Customers don't have a schedule; they get the salon's details instead.
+          <section className="card p-5 md:col-span-3">
+            <h2 className="text-lg font-extrabold">The salon</h2>
             <div className="mt-3 text-sm">
-              <div className="text-xs font-bold uppercase tracking-wide opacity-60">Address</div>
-              {SALON.address.map((l) => <div key={l}>{l}</div>)}
+              <div className="text-xs font-bold uppercase tracking-wide opacity-60">Open today</div>
+              <div className="font-semibold">{todayHours || 'Closed'}</div>
             </div>
-          )}
-          <Link href="/#visit" className="mt-3 inline-block text-sm font-semibold text-[var(--accent-strong)] underline underline-offset-4">
-            All hours
-          </Link>
-        </section>
-      </div>
-
-      {isStaff && (
-        <section className="card p-5">
-          <div className="flex items-end justify-between">
-            <h2 className="text-lg font-extrabold">Your schedule</h2>
-            <Link href="/schedule" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">
-              Salon schedule
+            {SALON.phone && (
+              <div className="mt-3 text-sm">
+                <div className="text-xs font-bold uppercase tracking-wide opacity-60">Phone</div>
+                <a href={`tel:${SALON.phone}`} className="font-semibold hover:underline">{SALON.phone}</a>
+              </div>
+            )}
+            {SALON.address.length > 0 && (
+              <div className="mt-3 text-sm">
+                <div className="text-xs font-bold uppercase tracking-wide opacity-60">Address</div>
+                {SALON.address.map((l) => <div key={l}>{l}</div>)}
+              </div>
+            )}
+            <Link href="/#visit" className="mt-3 inline-block text-sm font-semibold text-[var(--accent-strong)] underline underline-offset-4">
+              All hours
             </Link>
-          </div>
-          {myShifts === null ? (
-            <p className="mt-3 text-sm opacity-60">Loading…</p>
-          ) : myShifts.length === 0 ? (
-            <p className="mt-3 text-sm opacity-70">No upcoming shifts posted yet.</p>
-          ) : (
-            <ul className="mt-3 divide-y divide-[var(--border)] text-sm">
-              {myShifts.map((s) => {
-                const isToday = s.date === todayIso();
-                return (
-                  <li key={s.id} className={`flex flex-wrap justify-between gap-2 py-2 ${isToday ? 'font-bold text-[var(--accent-strong)]' : ''}`}>
-                    <span>{isToday ? 'Today' : longDayLabel(s.date)}</span>
-                    <span>{shiftLabel(s.start, s.end)}{s.note ? ` · ${s.note}` : ''}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      )}
+          </section>
+        )}
+      </div>
 
       {isManager && (
         <section className="card p-5">

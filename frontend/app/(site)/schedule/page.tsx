@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
-import CoverageRows from '@/src/components/CoverageRows';
 import { roleLabel } from '@/src/lib/roles';
 import {
   addDays, dayLabel, hoursLabel, shiftHours, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
@@ -46,10 +45,10 @@ export default function SalonSchedulePage() {
         </div>
         <div className="flex gap-2">
           {visible && (
-            <Link href={`/schedule/print?week=${weekStart}`} className="btn-ghost">Print</Link>
+            <Link href={`/schedule/print?week=${weekStart}`} className="btn">Print schedule</Link>
           )}
           {current?.canEdit && (
-            <Link href={`/schedule/edit?week=${weekStart}`} className="btn">Edit this week</Link>
+            <Link href={`/schedule/edit?week=${weekStart}`} className="btn-ghost">Edit this week</Link>
           )}
         </div>
       </div>
@@ -128,7 +127,6 @@ export default function SalonSchedulePage() {
                 );
               })}
             </tbody>
-            <CoverageRows days={days} shiftsOn={(d) => current.shifts.filter((s) => s.date === d)} />
           </table>
         </div>
       )}

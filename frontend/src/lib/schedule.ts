@@ -100,8 +100,8 @@ export function dayCoverage(
   };
 }
 
-/** Minutes between choices in the schedule editor's time dropdowns. */
-export const TIME_STEP_MINUTES = 15;
+/** Minutes between choices in the schedule editor's time dropdowns: every half hour. */
+export const TIME_STEP_MINUTES = 30;
 
 const toMinutes = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 const fromMinutes = (n: number) => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
