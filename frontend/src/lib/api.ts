@@ -97,6 +97,12 @@ export interface EmployeeDetails {
   birthday: string | null;
 }
 
+/** An owner adding someone directly. `password` is temporary; hand it to them. */
+export interface NewEmployee extends EmployeeDetails {
+  role: UserRole;
+  password: string;
+}
+
 export type ApplicationStatus = 'NEW' | 'CONTACTED' | 'INTERVIEW' | 'HIRED' | 'NOT_A_FIT';
 
 /** What the public /apply form sends. `website` is a hidden spam trap; leave it empty. */
@@ -191,6 +197,8 @@ export const api = {
 
   team: () => send<TeamMember[]>('/api/admin/team'),
   member: (userId: number) => send<TeamMember>(`/api/admin/team/${userId}`),
+  createMember: (n: NewEmployee) => send<TeamMember>('/api/admin/team', 'POST', n),
+  deleteMember: (userId: number) => send<void>(`/api/admin/team/${userId}`, 'DELETE'),
   updateDetails: (userId: number, d: EmployeeDetails) =>
     send<TeamMember>(`/api/admin/team/${userId}/details`, 'PUT', d),
   updateMember: (userId: number, change: { active?: boolean; role?: UserRole }) =>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src/lib/api';
 import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { employeeName, formatDate, tenure } from '@/src/lib/format';
@@ -14,7 +14,21 @@ export default function EmployeePage() {
   const { id } = useParams<{ id: string }>();
   const userId = Number(id);
   const { user } = useUser();
+  const router = useRouter();
   const self = user?.userId === userId;
+
+  async function remove() {
+    if (!member) return;
+    const name = employeeName(member);
+    if (!confirm(`Permanently delete ${name}'s account?\n\nThis erases their account and watch history and can't be undone. ` +
+      `To just stop them signing in, use "Disable account" instead.`)) return;
+    try {
+      await api.deleteMember(userId);
+      router.push('/admin/team');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete');
+    }
+  }
 
   const [member, setMember] = useState<TeamMember | null>(null);
   const [form, setForm] = useState<EmployeeDetails | null>(null);
@@ -177,6 +191,17 @@ export default function EmployeePage() {
               </>
             )}
           </div>
+          {user?.roles === 'OWNER' && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+              <div className="text-sm">
+                <div className="font-bold">Delete permanently</div>
+                <div className="opacity-60">Erases the account and their watch history. Usually disabling is better.</div>
+              </div>
+              <button className="text-sm font-bold text-[var(--danger)] hover:underline" onClick={() => void remove()}>
+                Delete account
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>

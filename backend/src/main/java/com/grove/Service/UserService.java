@@ -14,22 +14,26 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.Dtos.EmployeeDetails;
+import com.grove.Domain.Dtos.NewEmployee;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.LoginDTO;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Repository.UserRepository;
+import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VideoCompletionRepository;
 
 /**
  * Account creation, credential checks, and the manager's team controls.
  *
  * Sign-up is gated by a shared team code (TEAM_SIGNUP_CODE) so only staff can
- * make accounts; emails listed in ADMIN_EMAILS become managers on sign-up.
+ * make accounts; emails listed in ADMIN_EMAILS become owners on sign-up. Owners can also add
+ * and permanently delete accounts directly.
  */
 @Service
 public class UserService {
@@ -38,16 +42,18 @@ public class UserService {
 
 	private final UserRepository userRepo;
 	private final VideoCompletionRepository completionRepo;
+	private final UserSessionRepository sessionRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
 
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
-			PasswordEncoder passwordEncoder,
+			UserSessionRepository sessionRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
 		this.completionRepo = completionRepo;
+		this.sessionRepo = sessionRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -148,27 +154,54 @@ public class UserService {
 	public TeamMember updateDetails(User actor, Long userId, EmployeeDetails d) {
 		User user = find(userId);
 		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
-		String email = d.email() == null ? "" : d.email().trim().toLowerCase();
-		if (!email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
-		}
-		if (!email.equals(user.getEmail()) && userRepo.existsByEmail(email)) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Another account already uses that email");
-		}
-		if (d.birthday() != null && d.birthday().isAfter(LocalDate.now())) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Birthday can't be in the future");
-		}
-		String phone = trimOrNull(d.phone());
-		if (phone != null && phone.length() > 30) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone number is too long");
-		}
+		String email = checkEmail(d.email(), user.getEmail());
+		checkBirthday(d.birthday());
 		user.setFirstName(trimOrNull(d.firstName()));
 		user.setLastName(trimOrNull(d.lastName()));
 		user.setEmail(email);
-		user.setPhone(phone);
+		user.setPhone(checkPhone(d.phone()));
 		user.setHireDate(d.hireDate());
 		user.setBirthday(d.birthday());
 		return toTeamMember(userRepo.save(user));
+	}
+
+	/** Owner adds someone directly, with a temporary password to hand them. */
+	public TeamMember create(NewEmployee n) {
+		if (n.firstName() == null || n.firstName().isBlank()) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "First name is required");
+		}
+		if (n.role() == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick a role");
+		String email = checkEmail(n.email(), null);
+		checkBirthday(n.birthday());
+		validatePassword(n.password());
+
+		User user = new User();
+		user.setFirstName(n.firstName().trim());
+		user.setLastName(trimOrNull(n.lastName()));
+		user.setEmail(email);
+		user.setPhone(checkPhone(n.phone()));
+		user.setHireDate(n.hireDate());
+		user.setBirthday(n.birthday());
+		user.setRoles(n.role());
+		user.setPassword(passwordEncoder.encode(n.password()));
+		user.setCreatedAt(LocalDateTime.now());
+		return toTeamMember(userRepo.save(user));
+	}
+
+	/**
+	 * Owner permanently deletes an account: the user, their sessions, and their
+	 * watch history. (Disabling is the gentler option and keeps history.)
+	 */
+	@Transactional
+	public void delete(User actor, Long userId) {
+		User user = find(userId);
+		if (user.getUserId().equals(actor.getUserId())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't delete your own account");
+		}
+		if (user.getRoles() == Role.OWNER && user.isActive()) requireAnotherOwner(user);
+		sessionRepo.deleteByUserId(user.getUserId());
+		completionRepo.deleteByUserId(user.getUserId());
+		userRepo.delete(user);
 	}
 
 	/** Set a temporary password for someone who forgot theirs. */
@@ -178,6 +211,32 @@ public class UserService {
 		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
 		user.setPassword(passwordEncoder.encode(newPassword));
 		userRepo.save(user);
+	}
+
+	/** Lower-cased, valid, and not used by another account (currentEmail = this account's own). */
+	private String checkEmail(String raw, String currentEmail) {
+		String email = raw == null ? "" : raw.trim().toLowerCase();
+		if (!email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address");
+		}
+		if (!email.equals(currentEmail) && userRepo.existsByEmail(email)) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Another account already uses that email");
+		}
+		return email;
+	}
+
+	private static void checkBirthday(LocalDate birthday) {
+		if (birthday != null && birthday.isAfter(LocalDate.now())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Birthday can't be in the future");
+		}
+	}
+
+	private static String checkPhone(String raw) {
+		String phone = trimOrNull(raw);
+		if (phone != null && phone.length() > 30) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phone number is too long");
+		}
+		return phone;
 	}
 
 	private static void requireCanManage(User actor, User target) {

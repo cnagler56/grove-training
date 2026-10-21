@@ -40,7 +40,10 @@ export default function TeamPage() {
 
   return (
     <div>
-      <h1 className="text-3xl font-extrabold tracking-tight">Team</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-extrabold tracking-tight">Team</h1>
+        {user?.roles === 'OWNER' && <Link href="/admin/team/new" className="btn">+ Add employee</Link>}
+      </div>
       <p className="mt-1 text-sm opacity-70">
         {current.length} current employee{current.length === 1 ? '' : 's'}.{' '}
         {status?.signupOpen

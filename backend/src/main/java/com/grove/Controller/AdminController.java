@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.grove.Domain.Dtos.AdminStatus;
 import com.grove.Domain.Dtos.CompletionReport;
 import com.grove.Domain.Dtos.EmployeeDetails;
+import com.grove.Domain.Dtos.NewEmployee;
 import com.grove.Domain.Dtos.PasswordReset;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
@@ -100,6 +101,22 @@ public class AdminController {
 	public List<TeamMember> team(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		sessions.requireAdmin(token);
 		return users.team();
+	}
+
+	/** Owner adds an employee directly. */
+	@PostMapping("/team")
+	public ResponseEntity<TeamMember> create(@RequestBody NewEmployee employee,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireOwner(token);
+		return ResponseEntity.status(HttpStatus.CREATED).body(users.create(employee));
+	}
+
+	/** Owner permanently deletes an account and its watch history. */
+	@DeleteMapping("/team/{userId}")
+	public ResponseEntity<Void> deleteMember(@PathVariable Long userId,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		users.delete(sessions.requireOwner(token), userId);
+		return ResponseEntity.noContent().build();
 	}
 
 	@GetMapping("/team/{userId}")

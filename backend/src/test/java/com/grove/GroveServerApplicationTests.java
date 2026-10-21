@@ -288,6 +288,45 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void ownerAddsAndDeletesEmployees() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		Cookie gm = login("gm@grove.test");
+		String newHire = "{\"firstName\":\"Robin\",\"lastName\":\"Hale\",\"email\":\"Robin@Grove.test\","
+			+ "\"phone\":\"555-0123\",\"hireDate\":\"2026-10-01\",\"role\":\"RECEPTIONIST\",\"password\":\"password1\"}";
+
+		// Only owners can add or delete.
+		mvc.perform(post("/api/admin/team").cookie(gm).contentType(MediaType.APPLICATION_JSON).content(newHire))
+			.andExpect(status().isForbidden());
+
+		mvc.perform(post("/api/admin/team").cookie(owner).contentType(MediaType.APPLICATION_JSON).content(newHire))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.email").value("robin@grove.test"))
+			.andExpect(jsonPath("$.role").value("RECEPTIONIST"))
+			.andExpect(jsonPath("$.hireDate").value("2026-10-01"));
+		mvc.perform(post("/api/admin/team").cookie(owner).contentType(MediaType.APPLICATION_JSON).content(newHire))
+			.andExpect(status().isConflict());
+
+		// The new hire signs in with the temporary password.
+		Cookie robin = login("robin@grove.test");
+		Long robinId = idOf("robin@grove.test");
+		seedVideo("Front desk basics", VideoStatus.READY);
+		mvc.perform(put("/api/videos/" + videos.findAll().get(0).getId() + "/completed").cookie(robin))
+			.andExpect(status().isNoContent());
+
+		mvc.perform(delete("/api/admin/team/" + robinId).cookie(gm)).andExpect(status().isForbidden());
+		mvc.perform(delete("/api/admin/team/" + robinId).cookie(owner)).andExpect(status().isNoContent());
+		assertThat(users.findByEmail("robin@grove.test")).isEmpty();
+		assertThat(completions.count()).isZero();
+		mvc.perform(get("/me").cookie(robin)).andExpect(status().isUnauthorized());
+
+		// Can't delete yourself (and so never the last owner).
+		mvc.perform(delete("/api/admin/team/" + idOf("owner@grove.test")).cookie(owner))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void onlyOwnersAreEmailedAboutApplications() throws Exception {
 		signUp("owner@grove.test");
 		signUp("gm@grove.test");

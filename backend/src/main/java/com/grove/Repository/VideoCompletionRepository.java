@@ -25,4 +25,8 @@ public interface VideoCompletionRepository extends JpaRepository<VideoCompletion
 	@Modifying
 	@Query("delete from VideoCompletion c where c.videoId = :videoId")
 	void deleteByVideoId(@Param("videoId") Long videoId);
+
+	@Modifying
+	@Query("delete from VideoCompletion c where c.userId = :userId")
+	void deleteByUserId(@Param("userId") Long userId);
 }

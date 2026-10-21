@@ -125,10 +125,10 @@ export default function ApplicantPage() {
           </button>
         </div>
         {app.status === 'HIRED' && (
-          <p className="rounded-xl bg-[var(--success-soft)] px-4 py-3 text-sm">
-            🎉 To give {app.firstName} access to training videos, share the team code so they can create an account,
-            then set their role on the Team page.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--success-soft)] px-4 py-3 text-sm">
+            <span>🎉 Ready to give {app.firstName} access to training videos?</span>
+            <Link href={`/admin/team/new?application=${app.id}`} className="btn">Create their account</Link>
+          </div>
         )}
       </section>
     </div>

@@ -46,7 +46,7 @@ export default function VideoPage() {
 
   return (
     <div>
-      <Link href="/" className="text-sm opacity-70 hover:opacity-100">← All videos</Link>
+      <Link href="/videos" className="text-sm opacity-70 hover:opacity-100">← All videos</Link>
 
       <div className="mt-4 overflow-hidden rounded-2xl bg-black text-white shadow-lg">
         {embedUrl ? (

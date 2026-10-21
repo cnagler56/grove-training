@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, type ApplicationRequest } from '@/src/lib/api';
+import PublicNav from '@/src/components/PublicNav';
 
 /** Public job application. Lives outside the (site) group so no sign-in is needed. */
 export default function ApplyPage() {
@@ -39,6 +40,7 @@ export default function ApplyPage() {
 
   return (
     <>
+      <PublicNav />
       <header className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
         <div className="mx-auto max-w-2xl px-4 py-8">
           <p className="text-sm font-bold opacity-90">✂️ Grove Salons</p>

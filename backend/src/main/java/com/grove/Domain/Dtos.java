@@ -70,6 +70,17 @@ public final class Dtos {
 
 	public record TeamMemberUpdate(Boolean active, Role role) {}
 
+	/** An owner adding someone directly (instead of them signing up with the team code). */
+	public record NewEmployee(
+		String firstName,
+		String lastName,
+		String email,
+		String phone,
+		LocalDate hireDate,
+		LocalDate birthday,
+		Role role,
+		String password) {}
+
 	public record PasswordReset(String password) {}
 
 	/** What the public /apply form sends. {@code website} is a honeypot: real people leave it empty. */
