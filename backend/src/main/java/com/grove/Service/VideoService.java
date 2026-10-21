@@ -18,9 +18,11 @@ import com.grove.Domain.Dtos.UploadTicket;
 import com.grove.Domain.Dtos.VideoDetail;
 import com.grove.Domain.Dtos.VideoRequest;
 import com.grove.Domain.Dtos.VideoSummary;
+import com.grove.Domain.Dtos.YouTubeRequest;
 import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoCompletion;
+import com.grove.Domain.VideoSource;
 import com.grove.Domain.VideoStatus;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.VideoCompletionRepository;
@@ -68,8 +70,7 @@ public class VideoService {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
 		}
 		boolean completed = completionRepo.findByUserIdAndVideoId(viewer.getUserId(), id).isPresent();
-		String embed = v.getStatus() == VideoStatus.READY ? bunny.embedUrl(v.getBunnyVideoId()) : null;
-		return new VideoDetail(toSummary(v, completed), embed);
+		return new VideoDetail(toSummary(v, completed), embedUrl(v));
 	}
 
 	@Transactional
@@ -105,9 +106,33 @@ public class VideoService {
 		return bunny.uploadTicket(v.getId(), guid);
 	}
 
+	/**
+	 * Add a YouTube video by link. It's live right away: nothing to upload or
+	 * process. The video must be public or unlisted on YouTube to play here.
+	 */
+	public VideoSummary createYouTube(User admin, YouTubeRequest req) {
+		String youtubeId = YouTube.parseId(req == null ? null : req.url())
+			.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+				"That doesn't look like a YouTube link. Copy it from the Share button on YouTube."));
+		String title = requireTitle(new VideoRequest(req.title(), req.description(), req.category()));
+		Video v = new Video();
+		v.setTitle(title);
+		v.setDescription(blankToNull(req.description()));
+		v.setCategory(blankToNull(req.category()));
+		v.setSource(VideoSource.YOUTUBE);
+		v.setYoutubeId(youtubeId);
+		v.setStatus(VideoStatus.READY);
+		v.setCreatedBy(admin.getUserId());
+		v.setCreatedAt(LocalDateTime.now());
+		return toSummary(videoRepo.save(v), false);
+	}
+
 	/** A fresh ticket to retry or resume an upload. */
 	public UploadTicket uploadTicket(Long id) {
 		Video v = find(id);
+		if (v.getSource() == VideoSource.YOUTUBE) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "YouTube videos don't need uploading");
+		}
 		if (v.getStatus() == VideoStatus.READY) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "This video is already uploaded");
 		}
@@ -175,9 +200,17 @@ public class VideoService {
 			.map(VideoCompletion::getVideoId).collect(Collectors.toSet());
 	}
 
+	/** Player URL: YouTube's privacy-enhanced player, or a signed Bunny embed once processing is done. */
+	private String embedUrl(Video v) {
+		if (v.getSource() == VideoSource.YOUTUBE) return YouTube.embedUrl(v.getYoutubeId());
+		return v.getStatus() == VideoStatus.READY ? bunny.embedUrl(v.getBunnyVideoId()) : null;
+	}
+
 	private VideoSummary toSummary(Video v, boolean completed) {
-		String thumb = v.getStatus() == VideoStatus.READY ? bunny.thumbnailUrl(v.getBunnyVideoId()) : null;
-		return new VideoSummary(v.getId(), v.getTitle(), v.getDescription(), v.getCategory(), v.getStatus(),
+		String thumb = v.getSource() == VideoSource.YOUTUBE
+			? YouTube.thumbnailUrl(v.getYoutubeId())
+			: v.getStatus() == VideoStatus.READY ? bunny.thumbnailUrl(v.getBunnyVideoId()) : null;
+		return new VideoSummary(v.getId(), v.getTitle(), v.getDescription(), v.getCategory(), v.getSource(), v.getStatus(),
 			v.getDurationSeconds(), thumb, completed, v.getCreatedAt());
 	}
 

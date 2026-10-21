@@ -29,10 +29,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getMe()
+    const check = () => api.getMe()
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
+    void check();
+    // Sign-in is shared by every tab. If someone signs in as a different person
+    // (or out) in another tab, re-check when this tab comes back into view so it
+    // doesn't keep showing the previous person's pages.
+    const onVisible = () => { if (document.visibilityState === 'visible') void check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, []);
 
   const login = useCallback(async (c: Credentials) => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api, formatDuration, type AdminStatus, type UploadTicket, type VideoSummary } from '@/src/lib/api';
 import { uploadToBunny } from '@/src/lib/upload';
+import { youTubeId, youTubeThumbnail } from '@/src/lib/youtube';
 
 const STATUS_STYLE: Record<VideoSummary['status'], string> = {
   UPLOADING: 'text-[var(--warn)]',
@@ -23,6 +24,7 @@ export default function AdminVideosPage() {
   const [videos, setVideos] = useState<VideoSummary[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'upload' | 'youtube'>('upload');
 
   const load = useCallback(() => {
     api.adminStatus().then(setStatus).catch((e) => setError(e.message));
@@ -44,11 +46,30 @@ export default function AdminVideosPage() {
       <h1 className="text-3xl font-extrabold tracking-tight">Manage videos</h1>
       {error && <p className="text-[var(--danger)]">{error}</p>}
 
-      {status && !status.bunnyConfigured ? (
-        <SetupHelp />
-      ) : (
-        <UploadForm categories={categories} onDone={load} />
-      )}
+      <div>
+        <div className="mb-3 flex gap-2" role="tablist">
+          {([['upload', 'Upload a file'], ['youtube', 'Add a YouTube video']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              role="tab"
+              aria-selected={mode === value}
+              onClick={() => setMode(value)}
+              className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                mode === value ? 'bg-[var(--accent)] text-white' : 'border border-[var(--border)] bg-[var(--surface)] opacity-80 hover:opacity-100'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === 'youtube' ? (
+          <YouTubeForm categories={categories} onDone={load} />
+        ) : status && !status.bunnyConfigured ? (
+          <SetupHelp />
+        ) : (
+          <UploadForm categories={categories} onDone={load} />
+        )}
+      </div>
 
       <section>
         <h2 className="mb-3 font-semibold">All videos ({videos.length})</h2>
@@ -80,6 +101,98 @@ function SetupHelp() {
         <li>Set <code>BUNNY_LIBRARY_ID</code>, <code>BUNNY_API_KEY</code>, <code>BUNNY_CDN_HOSTNAME</code>, and <code>BUNNY_TOKEN_KEY</code> on the backend, then restart it.</li>
       </ol>
     </section>
+  );
+}
+
+/** Add a YouTube video by link. It's live as soon as it's added. */
+function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () => void }) {
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const id = youTubeId(url);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.addYouTube({ url, title, category, description });
+      setMessage(`"${title}" added. It's live for the team now.`);
+      setUrl('');
+      setTitle('');
+      setDescription('');
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add the video');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="card space-y-4 p-5">
+      <h2 className="font-semibold">Add a YouTube video</h2>
+      <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+        <label className="block text-sm">
+          <span className="mb-1 block opacity-70">YouTube link</span>
+          <input
+            className="input"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://youtu.be/…"
+            required
+            disabled={busy}
+          />
+          <span className="mt-1 block text-xs opacity-60">
+            On YouTube, click Share and copy the link. The video must be Public or Unlisted.
+          </span>
+          {url.trim() && !id && (
+            <span className="mt-1 block text-xs font-semibold text-[var(--danger)]">That doesn&apos;t look like a YouTube video link yet.</span>
+          )}
+        </label>
+        {id && (
+          // YouTube's thumbnail, so you can tell it's the right video before adding it.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={youTubeThumbnail(id)} alt="" className="h-24 w-auto rounded-lg object-cover" />
+        )}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="mb-1 block opacity-70">Title</span>
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} required disabled={busy} />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block opacity-70">Category</span>
+          <input
+            className="input"
+            list="categories"
+            placeholder="e.g. Color, Cuts, Front desk"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={busy}
+          />
+          <datalist id="categories">
+            {categories.map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </label>
+      </div>
+      <label className="block text-sm">
+        <span className="mb-1 block opacity-70">Notes for the team (optional)</span>
+        <textarea className="input min-h-20" value={description} onChange={(e) => setDescription(e.target.value)} disabled={busy} />
+      </label>
+
+      {message && <p className="text-sm text-[var(--success)]">{message}</p>}
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+
+      <button type="submit" className="btn" disabled={busy || !id || !title.trim()}>
+        {busy ? 'Adding…' : 'Add video'}
+      </button>
+    </form>
   );
 }
 
@@ -201,7 +314,10 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
   }
 
   async function remove() {
-    if (!confirm(`Delete "${video.title}"? This removes it from Bunny too, along with everyone's watch history for it.`)) return;
+    const where = video.source === 'YOUTUBE'
+      ? "It stays on YouTube, but everyone's watch history for it is removed."
+      : "This removes it from Bunny too, along with everyone's watch history for it.";
+    if (!confirm(`Delete "${video.title}"? ${where}`)) return;
     try {
       await api.deleteVideo(video.id);
       onChange();
@@ -247,6 +363,7 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
             <Link href={`/videos/${video.id}`} className="font-medium hover:underline">{video.title}</Link>
             <p className="text-xs opacity-70">
               <span className={STATUS_STYLE[video.status]}>{STATUS_LABEL[video.status]}</span>
+              {video.source === 'YOUTUBE' && ' · YouTube'}
               {video.category && ` · ${video.category}`}
               {video.durationSeconds ? ` · ${formatDuration(video.durationSeconds)}` : ''}
               {` · added ${new Date(video.createdAt).toLocaleDateString()}`}

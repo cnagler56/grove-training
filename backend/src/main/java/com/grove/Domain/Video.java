@@ -2,6 +2,9 @@ package com.grove.Domain;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -36,6 +39,20 @@ public class Video {
 	@Column(name = "bunny_video_id", length = 64, unique = true)
 	private String bunnyVideoId;
 
+	/**
+	 * Where the video plays from. Null on rows from before YouTube links existed,
+	 * which are all Bunny uploads; {@link #getSource()} reads null as BUNNY, so
+	 * old rows need no backfill.
+	 */
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(length = 20)
+	private VideoSource source;
+
+	/** The 11-character YouTube video id, for YOUTUBE videos. */
+	@Column(name = "youtube_id", length = 20)
+	private String youtubeId;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private VideoStatus status = VideoStatus.UPLOADING;
@@ -51,6 +68,12 @@ public class Video {
 
 	public Long getId() { return id; }
 	public void setId(Long id) { this.id = id; }
+
+	public VideoSource getSource() { return source == null ? VideoSource.BUNNY : source; }
+	public void setSource(VideoSource source) { this.source = source; }
+
+	public String getYoutubeId() { return youtubeId; }
+	public void setYoutubeId(String youtubeId) { this.youtubeId = youtubeId; }
 
 	public String getTitle() { return title; }
 	public void setTitle(String title) { this.title = title; }

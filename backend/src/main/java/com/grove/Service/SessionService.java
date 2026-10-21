@@ -78,7 +78,9 @@ public class SessionService {
     public User requireAdmin(String token) {
         User user = requireUser(token);
         if (!user.isAdmin()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Managers only");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Only owners, general managers, and managers can do this. Your account is set up as "
+                + user.getRoles().label().toLowerCase() + ".");
         }
         return user;
     }

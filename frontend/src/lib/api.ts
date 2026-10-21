@@ -28,6 +28,8 @@ export interface VideoSummary {
   title: string;
   description: string | null;
   category: string | null;
+  /** BUNNY = uploaded file; YOUTUBE = a linked YouTube video. */
+  source: 'BUNNY' | 'YOUTUBE';
   status: VideoStatus;
   durationSeconds: number | null;
   thumbnailUrl: string | null;
@@ -224,6 +226,7 @@ export const api = {
   adminStatus: () => send<AdminStatus>('/api/admin/status'),
   categories: () => send<string[]>('/api/admin/categories'),
   createVideo: (r: VideoRequest) => send<UploadTicket>('/api/admin/videos', 'POST', r),
+  addYouTube: (r: VideoRequest & { url: string }) => send<VideoSummary>('/api/admin/videos/youtube', 'POST', r),
   uploadTicket: (id: number) => send<UploadTicket>(`/api/admin/videos/${id}/upload-ticket`, 'POST'),
   updateVideo: (id: number, r: VideoRequest) => send<VideoSummary>(`/api/admin/videos/${id}`, 'PUT', r),
   deleteVideo: (id: number) => send<void>(`/api/admin/videos/${id}`, 'DELETE'),

@@ -92,6 +92,39 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void managersAddYouTubeVideosThatStaffCanWatch() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+		String body = "{\"url\":\"https://youtu.be/dQw4w9WgXcQ?si=x\",\"title\":\"Fade basics\",\"category\":\"Cuts\"}";
+
+		mvc.perform(post("/api/admin/videos/youtube").cookie(stylist).contentType(MediaType.APPLICATION_JSON).content(body))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/admin/videos/youtube").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"url\":\"https://vimeo.com/123\",\"title\":\"Nope\"}"))
+			.andExpect(status().isBadRequest());
+
+		// Works even though Bunny isn't configured in tests, and it's live immediately.
+		mvc.perform(post("/api/admin/videos/youtube").cookie(owner).contentType(MediaType.APPLICATION_JSON).content(body))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.source").value("YOUTUBE"))
+			.andExpect(jsonPath("$.status").value("READY"))
+			.andExpect(jsonPath("$.thumbnailUrl").value("https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"));
+		Long id = videos.findAll().get(0).getId();
+
+		mvc.perform(get("/api/videos").cookie(stylist))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].category").value("Cuts"));
+		mvc.perform(get("/api/videos/" + id).cookie(stylist))
+			.andExpect(jsonPath("$.embedUrl").value(org.hamcrest.Matchers.startsWith("https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ")));
+		mvc.perform(put("/api/videos/" + id + "/completed").cookie(stylist)).andExpect(status().isNoContent());
+		mvc.perform(post("/api/admin/videos/" + id + "/upload-ticket").cookie(owner)).andExpect(status().isBadRequest());
+
+		// Bunny uploads from before this feature have no source and still read as BUNNY.
+		Long old = seedVideo("Old upload", VideoStatus.READY);
+		mvc.perform(get("/api/videos/" + old).cookie(stylist)).andExpect(jsonPath("$.video.source").value("BUNNY"));
+	}
+
+	@Test
 	void employeesCantReachAdminAndOnlySeeReadyVideos() throws Exception {
 		Cookie employee = signUp("stylist@grove.test");
 		seedVideo("Balayage basics", VideoStatus.READY);

@@ -24,6 +24,7 @@ import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.Dtos.UploadTicket;
 import com.grove.Domain.Dtos.VideoRequest;
 import com.grove.Domain.Dtos.VideoSummary;
+import com.grove.Domain.Dtos.YouTubeRequest;
 import com.grove.Service.BunnyStreamService;
 import com.grove.Service.SessionService;
 import com.grove.Service.UserService;
@@ -64,6 +65,13 @@ public class AdminController {
 	public ResponseEntity<UploadTicket> create(@RequestBody VideoRequest req,
 			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(videos.create(sessions.requireAdmin(token), req));
+	}
+
+	/** Add a YouTube video by link (works without Bunny set up). */
+	@PostMapping("/videos/youtube")
+	public ResponseEntity<VideoSummary> addYouTube(@RequestBody YouTubeRequest req,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		return ResponseEntity.status(HttpStatus.CREATED).body(videos.createYouTube(sessions.requireAdmin(token), req));
 	}
 
 	@PostMapping("/videos/{id}/upload-ticket")
