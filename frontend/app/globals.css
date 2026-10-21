@@ -1,23 +1,24 @@
 @import "tailwindcss";
 
-/* Grove: bright and friendly. Airy white page, white cards, turquoise brand
-   color with a turquoise → sky-blue header, green for "watched"/"live". */
+/* Grove: steel blue and medium gray. Cool light-gray page, white cards,
+   steel-blue brand color with a solid steel-blue header, green for "watched"/"live". */
 :root {
-  --background: #f4fbfa;
-  --foreground: #1c2b33;
+  --background: #eef1f4;
+  --foreground: #1f2a33;
   --surface: #ffffff;
-  --surface-2: #e9f8f6;
-  --border: #d3ebe8;
-  --accent: #0d9b8f;        /* turquoise: buttons, progress */
-  --accent-strong: #0b766d; /* turquoise text on white (readable) */
-  --accent-soft: #d4f4ef;   /* turquoise tint: placeholders, chips, tracks */
+  --surface-2: #e7edf3;
+  --border: #d3dae1;
+  --accent: #3f74a3;        /* steel blue: buttons, progress (white text stays readable) */
+  --accent-strong: #2c5a82; /* darker steel blue for text on white */
+  --accent-soft: #dce7f1;   /* steel-blue tint: placeholders, chips, tracks */
   --accent-ink: #ffffff;
-  --success: #1d9a4b;       /* green: watched / live */
-  --success-soft: #dcf7e5;
+  --success: #2e8b57;       /* green: watched / live */
+  --success-soft: #dcf1e4;
   --warn: #b45309;
-  --danger: #d6293e;
-  --header-from: #14b8a6;
-  --header-to: #38bdf8;
+  --danger: #c8323f;
+  /* Headers are solid steel blue (from = to, so the gradient classes render flat). */
+  --header-from: #4682b4;
+  --header-to: #4682b4;
 }
 
 body {
@@ -26,12 +27,12 @@ body {
   font-family: var(--font-nunito), system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-/* A white, rounded card with a soft turquoise edge. */
+/* A white, rounded card with a soft blue-gray edge. */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 1.25rem;
-  box-shadow: 0 1px 2px rgba(13, 110, 102, 0.05), 0 4px 16px rgba(13, 110, 102, 0.06);
+  box-shadow: 0 1px 2px rgba(44, 70, 96, 0.05), 0 4px 16px rgba(44, 70, 96, 0.06);
 }
 
 a.card {
@@ -39,7 +40,7 @@ a.card {
 }
 a.card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 2px 4px rgba(13, 110, 102, 0.08), 0 10px 24px rgba(13, 110, 102, 0.12);
+  box-shadow: 0 2px 4px rgba(44, 70, 96, 0.08), 0 10px 24px rgba(44, 70, 96, 0.12);
 }
 
 .btn {

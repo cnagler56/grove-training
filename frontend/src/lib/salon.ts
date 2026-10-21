@@ -28,7 +28,7 @@ export const SALON = {
   facebook: '',
 
   services: [
-    { name: 'Haircuts', blurb: 'Classic cuts and fresh styles for women, men, and kids.', icon: '✂️' },
+    { name: 'Haircuts', blurb: 'Classic cuts and fresh styles for women, men, and kids.', icon: '💇' },
     { name: 'Color', blurb: 'All-over color, gray coverage, and glosses.', icon: '🎨' },
     { name: 'Highlights & balayage', blurb: 'Sun-kissed dimension, foils or hand-painted.', icon: '✨' },
     { name: 'Blowouts & styling', blurb: 'Smooth, bouncy, or ready for a big night.', icon: '💨' },

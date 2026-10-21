@@ -38,7 +38,7 @@ function Header() {
       <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight">
-            ✂️ Grove Salons
+            Grove Salons
           </Link>
           {user && (
             <div className="flex items-center gap-3 text-sm">

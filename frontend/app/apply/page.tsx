@@ -43,7 +43,7 @@ export default function ApplyPage() {
       <PublicNav />
       <header className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
         <div className="mx-auto max-w-2xl px-4 py-8">
-          <p className="text-sm font-bold opacity-90">✂️ Grove Salons</p>
+          <p className="text-sm font-bold opacity-90">Grove Salons</p>
           <h1 className="mt-1 text-4xl font-extrabold tracking-tight">Join our team</h1>
           <p className="mt-2 max-w-lg opacity-95">
             We&apos;re always looking for talented, friendly people. Tell us a little about yourself and we&apos;ll be in touch.
