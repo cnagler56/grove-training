@@ -61,6 +61,8 @@ public final class Dtos {
 		Role role,
 		boolean active,
 		LocalDateTime disabledAt,
+		/** Off the schedule since this date (time off); null = on the schedule. */
+		LocalDate inactiveSince,
 		long videosCompleted,
 		LocalDateTime createdAt) {}
 
@@ -73,7 +75,8 @@ public final class Dtos {
 		LocalDate hireDate,
 		LocalDate birthday) {}
 
-	public record TeamMemberUpdate(Boolean active, Role role) {}
+	/** {@code inactive}: true takes them off the schedule (time off), false puts them back. */
+	public record TeamMemberUpdate(Boolean active, Role role, Boolean inactive) {}
 
 	/** An owner adding someone directly (instead of them signing up with the team code). */
 	public record NewEmployee(

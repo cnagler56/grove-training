@@ -712,6 +712,30 @@ class GroveServerApplicationTests {
 			.andExpect(jsonPath("$.roster[3].role").value("RECEPTIONIST"));
 	}
 
+	@Test
+	void inactiveStaffAreLeftOffTheScheduleButCanStillSignIn() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("zoe@grove.test", "Zoe");
+		Cookie mia = signUp("mia@grove.test", "Mia");
+		Long miaId = users.findByEmail("mia@grove.test").orElseThrow().getUserId();
+
+		mvc.perform(put("/api/admin/team/" + miaId).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"inactive\":true}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.inactiveSince").isNotEmpty())
+			.andExpect(jsonPath("$.active").value(true));
+		mvc.perform(get("/api/schedule").cookie(owner))
+			.andExpect(jsonPath("$.roster.length()").value(1))
+			.andExpect(jsonPath("$.roster[0].name").value("Zoe"));
+		mvc.perform(get("/me").cookie(mia)).andExpect(status().isOk());
+
+		mvc.perform(put("/api/admin/team/" + miaId).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"inactive\":false}"))
+			.andExpect(jsonPath("$.inactiveSince").isEmpty());
+		mvc.perform(get("/api/schedule").cookie(owner))
+			.andExpect(jsonPath("$.roster.length()").value(2));
+	}
+
 	private static String shiftJson(Long userId, String date, String start, String end) {
 		return "{\"userId\":" + userId + ",\"date\":\"" + date + "\",\"start\":\"" + start + "\",\"end\":\"" + end + "\"}";
 	}

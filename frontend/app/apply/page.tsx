@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, type ApplicationRequest } from '@/src/lib/api';
+import { formatPhone } from '@/src/lib/format';
 import PublicNav from '@/src/components/PublicNav';
 
 /** Public job application. Lives outside the (site) group so no sign-in is needed. */
@@ -64,7 +65,7 @@ export default function ApplyPage() {
                 <Field label="First name" value={form.firstName} onChange={set('firstName')} required autoComplete="given-name" />
                 <Field label="Last name" value={form.lastName} onChange={set('lastName')} required autoComplete="family-name" />
                 <Field label="Email" type="email" value={form.email} onChange={set('email')} required autoComplete="email" />
-                <Field label="Phone" type="tel" value={form.phone} onChange={set('phone')} required autoComplete="tel" />
+                <Field label="Phone" type="tel" value={form.phone} onChange={(v) => set('phone')(formatPhone(v))} required autoComplete="tel" placeholder="555-555-0100" />
               </div>
             </Section>
 

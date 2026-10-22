@@ -142,6 +142,9 @@ public class UserService {
 			user.setActive(change.active());
 			user.setDisabledAt(change.active() ? null : LocalDateTime.now());
 		}
+		if (change.inactive() != null && change.inactive() != (user.getInactiveSince() != null)) {
+			user.setInactiveSince(change.inactive() ? LocalDate.now() : null);
+		}
 		if (change.role() != null && change.role() != user.getRoles()) {
 			if (self) {
 				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You can't change your own role");
@@ -271,7 +274,7 @@ public class UserService {
 	private TeamMember toTeamMember(User u) {
 		return new TeamMember(u.getUserId(), u.getFirstName(), u.getLastName(), u.getEmail(),
 			u.getPhone(), u.getHireDate(), u.getBirthday(), u.getRoles(), u.isActive(), u.getDisabledAt(),
-			completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
+			u.getInactiveSince(), completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
 	}
 
 	private static void validatePassword(String password) {

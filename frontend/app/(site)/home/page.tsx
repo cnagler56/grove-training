@@ -49,7 +49,7 @@ export default function StaffHomePage() {
   const pct = ready.length ? Math.round((watched / ready.length) * 100) : 0;
   // Oldest unwatched first: work through the library in the order it was built.
   const upNext = [...ready].reverse().find((v) => !v.completed);
-  const newest = ready.slice(0, 3);
+  const newest = ready.slice(0, 2);
   const today = new Date().getDay();
   const todayHours = SALON.hoursByDay[today];
 
@@ -66,6 +66,8 @@ export default function StaffHomePage() {
 
       <TodayCelebrations items={celebrations?.todays ?? []} viewerId={user?.userId} />
 
+      {/* Everything below "Celebrating today" is half width, two to a row. */}
+      <div className="grid items-start gap-4 md:grid-cols-2">
       {toApprove.length > 0 && (
         <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
           <h2 className="text-lg font-extrabold">Schedule waiting for your approval</h2>
@@ -83,9 +85,9 @@ export default function StaffHomePage() {
         </section>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {isStaff && (
-          <section className={`card p-5 ${isOwner ? 'md:col-span-3' : 'md:col-span-2'}`}>
+        {/* Owners don't work shifts or take the training, so they skip both cards. */}
+        {isStaff && !isOwner && (
+          <section className="card p-5">
             <h2 className="text-lg font-extrabold">Your training</h2>
             {videos === null ? (
               <p className="mt-3 text-sm opacity-60">Loading…</p>
@@ -122,7 +124,6 @@ export default function StaffHomePage() {
           </section>
         )}
 
-        {/* Owners don't work shifts, so they have no schedule card. */}
         {isOwner ? null : isStaff ? (
           <section className="card p-5">
             <div className="flex items-end justify-between gap-2">
@@ -152,7 +153,7 @@ export default function StaffHomePage() {
           </section>
         ) : (
           // Customers don't have a schedule; they get the salon's details instead.
-          <section className="card p-5 md:col-span-3">
+          <section className="card p-5">
             <h2 className="text-lg font-extrabold">The salon</h2>
             <div className="mt-3 text-sm">
               <div className="text-xs font-bold uppercase tracking-wide opacity-60">Open today</div>
@@ -175,7 +176,6 @@ export default function StaffHomePage() {
             </Link>
           </section>
         )}
-      </div>
 
       {isManager && celebrations && <UpcomingCelebrations items={celebrations.upcoming} />}
 
@@ -185,7 +185,7 @@ export default function StaffHomePage() {
             <h2 className="text-lg font-extrabold">Newest videos</h2>
             <Link href="/videos" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">See all videos</Link>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {newest.map((v) => <VideoCard key={v.id} video={v} />)}
           </div>
         </section>
@@ -196,6 +196,7 @@ export default function StaffHomePage() {
           Thanks for being a {SALON.name} customer! Need an appointment? Give us a call.
         </p>
       )}
+      </div>
     </div>
   );
 }

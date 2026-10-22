@@ -96,13 +96,15 @@ public class ScheduleService {
 
 	/**
 	 * The Name column: every active stylist, lead, manager, and general manager
-	 * (alphabetical), then receptionists. Plus anyone no longer on staff who
-	 * still has shifts that week, so old weeks keep their history.
+	 * (alphabetical), then receptionists. People marked inactive (time off) are
+	 * left off. Plus anyone inactive or no longer on staff who still has shifts
+	 * that week, so those weeks keep their history.
 	 */
 	private List<RosterEntry> roster(List<Shift> weekShifts) {
 		Set<Long> withShifts = weekShifts.stream().map(Shift::getUserId).collect(Collectors.toSet());
 		return users.findAll().stream()
-			.filter(u -> (u.isActive() && u.getRoles().isScheduled()) || withShifts.contains(u.getUserId()))
+			.filter(u -> (u.isActive() && u.getInactiveSince() == null && u.getRoles().isScheduled())
+				|| withShifts.contains(u.getUserId()))
 			.sorted(Comparator.comparing((User u) -> u.getRoles() == Role.RECEPTIONIST)
 				.thenComparing(u -> name(u).toLowerCase()))
 			.map(u -> new RosterEntry(u.getUserId(), name(u), u.getRoles(), u.isActive() && u.getRoles().isScheduled()))

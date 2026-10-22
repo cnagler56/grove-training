@@ -87,6 +87,8 @@ export interface TeamMember {
   active: boolean;
   /** When the account was disabled; null while active. */
   disabledAt: string | null;
+  /** Off the schedule (time off) since this date, "YYYY-MM-DD"; null = on the schedule. */
+  inactiveSince: string | null;
   videosCompleted: number;
   createdAt: string | null;
 }
@@ -333,7 +335,7 @@ export const api = {
   deleteMember: (userId: number) => send<void>(`/api/admin/team/${userId}`, 'DELETE'),
   updateDetails: (userId: number, d: EmployeeDetails) =>
     send<TeamMember>(`/api/admin/team/${userId}/details`, 'PUT', d),
-  updateMember: (userId: number, change: { active?: boolean; role?: UserRole }) =>
+  updateMember: (userId: number, change: { active?: boolean; role?: UserRole; inactive?: boolean }) =>
     send<TeamMember>(`/api/admin/team/${userId}`, 'PUT', change),
   resetPassword: (userId: number, password: string) =>
     send<void>(`/api/admin/team/${userId}/password`, 'POST', { password }),

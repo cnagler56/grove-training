@@ -35,3 +35,24 @@ export function tenure(hireDate: string | null): string {
 export function employeeName(m: { firstName: string | null; lastName: string | null; email: string }): string {
   return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
 }
+
+/**
+ * US phone with dashes as it's typed: "7633" → "763-3", "7633916664" → "763-391-6664".
+ * A leading country code 1 is dropped. Dashes only appear once the next digit
+ * is typed, so backspacing works normally.
+ */
+export function formatPhone(value: string): string {
+  let d = value.replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+  d = d.slice(0, 10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** A saved phone shown with dashes; anything that isn't a 10-digit US number is shown as entered. */
+export function displayPhone(phone: string | null): string {
+  if (!phone) return '';
+  const f = formatPhone(phone);
+  return f.length === 12 ? f : phone;
+}

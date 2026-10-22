@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, type AdminStatus, type TeamMember, type UserRole } from '@/src/lib/api';
 import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
-import { employeeName, formatBirthday, formatDate, tenure } from '@/src/lib/format';
+import { displayPhone, employeeName, formatBirthday, formatDate, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 
 export default function TeamPage() {
@@ -74,6 +74,10 @@ export default function TeamPage() {
                   <div className="font-bold">
                     {employeeName(m)}
                     {m.userId === user?.userId && <span className="font-normal opacity-60"> (you)</span>}
+                    {m.inactiveSince && (
+                      <span className="ml-2 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-bold opacity-80"
+                        title={`Off the schedule since ${formatDate(m.inactiveSince)}`}>Inactive</span>
+                    )}
                   </div>
                   <div className="text-xs opacity-60">{m.email}</div>
                 </td>
@@ -98,7 +102,7 @@ export default function TeamPage() {
                     </span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3">{m.phone || <Missing />}</td>
+                <td className="whitespace-nowrap px-4 py-3">{displayPhone(m.phone) || <Missing />}</td>
                 <td className="whitespace-nowrap px-4 py-3">
                   {m.hireDate ? (
                     <>

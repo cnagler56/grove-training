@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api, type ApplicationStatus, type JobApplication } from '@/src/lib/api';
 import { APPLICATION_STATUSES, statusBadge, statusLabel } from '@/src/lib/applications';
-import { formatDate } from '@/src/lib/format';
+import { displayPhone, formatDate } from '@/src/lib/format';
 import { useDialogs } from '@/src/components/Dialogs';
 
 export default function ApplicantPage() {
@@ -72,7 +72,7 @@ export default function ApplicantPage() {
 
       <section className="card mt-6 p-5">
         <div className="flex flex-wrap gap-2">
-          <a href={`tel:${app.phone}`} className="btn">Call {app.phone}</a>
+          <a href={`tel:${app.phone}`} className="btn">Call {displayPhone(app.phone)}</a>
           <a href={`mailto:${app.email}`} className="btn-ghost">Email {app.email}</a>
         </div>
         <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">

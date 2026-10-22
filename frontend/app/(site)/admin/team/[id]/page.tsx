@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src/lib/api';
 import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
-import { employeeName, formatDate, tenure } from '@/src/lib/format';
+import { displayPhone, employeeName, formatDate, formatPhone, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 import { useDialogs } from '@/src/components/Dialogs';
 
@@ -46,7 +46,7 @@ export default function EmployeePage() {
     setMember(m);
     setForm({
       firstName: m.firstName, lastName: m.lastName, email: m.email,
-      phone: m.phone, hireDate: m.hireDate, birthday: m.birthday,
+      phone: m.phone && displayPhone(m.phone), hireDate: m.hireDate, birthday: m.birthday,
     });
   }, []);
 
@@ -106,120 +106,128 @@ export default function EmployeePage() {
   const set = (k: keyof EmployeeDetails) => (v: string) => setForm({ ...form, [k]: v === '' ? null : v });
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div>
       <Link href="/admin/team" className="text-sm opacity-70 hover:opacity-100">Back to team</Link>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="text-3xl font-extrabold tracking-tight">{employeeName(member)}</h1>
         {!member.active && (
           <span className="rounded-full bg-[var(--danger)] px-2.5 py-0.5 text-xs font-bold text-white">Disabled</span>
         )}
+        {member.active && member.inactiveSince && (
+          <span className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-bold opacity-80">Inactive</span>
+        )}
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${roleBadgeClass(member.role)}`}>
           {roleLabel(member.role)}
         </span>
+        <span className="text-sm opacity-70">
+          {member.videosCompleted} video{member.videosCompleted === 1 ? '' : 's'} watched
+          {member.hireDate && tenure(member.hireDate) && ` · with Grove ${tenure(member.hireDate)}`}
+          {member.createdAt && ` · joined the site ${formatDate(member.createdAt)}`}
+        </span>
       </div>
-      <p className="mt-1 text-sm opacity-70">
-        {member.videosCompleted} video{member.videosCompleted === 1 ? '' : 's'} watched
-        {member.hireDate && tenure(member.hireDate) && ` · with Grove ${tenure(member.hireDate)}`}
-        {member.createdAt && ` · joined the site ${formatDate(member.createdAt)}`}
-      </p>
 
-      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
-      {notice && <p className="mt-4 text-sm font-semibold text-[var(--success)]">{notice}</p>}
+      {error && <p className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
+      {notice && <p className="mt-3 text-sm font-semibold text-[var(--success)]">{notice}</p>}
       {!editable && (
-        <p className="mt-4 text-sm opacity-70">
+        <p className="mt-3 text-sm opacity-70">
           Only someone ranked above {article(roleLabel(member.role))} {roleLabel(member.role).toLowerCase()} can change this account.
         </p>
       )}
 
-      <form onSubmit={save} className="card mt-6 space-y-4 p-5">
-        <h2 className="text-lg font-extrabold">Details</h2>
-        <fieldset disabled={!editable} className="grid gap-4 disabled:opacity-60 sm:grid-cols-2">
-          <Field label="First name" value={form.firstName} onChange={set('firstName')} />
-          <Field label="Last name" value={form.lastName} onChange={set('lastName')} />
-          <Field
-            label="Email"
-            hint="Also what they sign in with"
-            type="email"
-            value={form.email}
-            onChange={(v) => setForm({ ...form, email: v })}
-            required
-          />
-          <Field label="Phone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(555) 555-0100" />
-          <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
-          <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
-        </fieldset>
-        {editable && (
-          <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
-        )}
-      </form>
-
-      {!self && editable && user && (
-        <section className="card mt-6 space-y-4 p-5">
-          <h2 className="text-lg font-extrabold">Account</h2>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm">
-              <div className="font-bold">Role</div>
-              <div className="opacity-60">Owners and managers can upload videos and manage the team. Customers can&apos;t see training videos.</div>
-            </div>
-            <select
-              aria-label="Role"
-              value={member.role}
-              onChange={(e) => {
-                const role = e.target.value as UserRole;
-                void run(() => api.updateMember(userId, { role }), `Role changed to ${roleLabel(role)}.`);
-              }}
-              className="input w-auto cursor-pointer font-semibold"
-            >
-              {roleOptions(user.roles, member.role).map(({ value: r }) => (
-                <option key={r} value={r}>{roleLabel(r)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-            <div className="text-sm">
-              <div className="font-bold">Password</div>
-              <div className="opacity-60">Set a temporary one if they forgot theirs.</div>
-            </div>
-            <button className="btn-ghost" onClick={() => void resetPassword()}>Reset password</button>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-            {member.active ? (
-              <>
-                <div className="text-sm">
-                  <div className="font-bold">Employee left?</div>
-                  <div className="opacity-60">Disabling signs them out and blocks sign-in. History is kept.</div>
-                </div>
-                <button
-                  className="rounded-full bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
-                  onClick={() => void setActive(false)}
-                >
-                  Disable account
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="text-sm">
-                  <div className="font-bold">Disabled{member.disabledAt && ` on ${formatDate(member.disabledAt)}`}</div>
-                  <div className="opacity-60">They can&apos;t sign in.</div>
-                </div>
-                <button className="btn" onClick={() => void setActive(true)}>Re-enable</button>
-              </>
-            )}
-          </div>
-          {user?.roles === 'OWNER' && (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-              <div className="text-sm">
-                <div className="font-bold">Delete permanently</div>
-                <div className="opacity-60">Erases the account and their watch history. Usually disabling is better.</div>
-              </div>
-              <button className="text-sm font-bold text-[var(--danger)] hover:underline" onClick={() => void remove()}>
-                Delete account
-              </button>
-            </div>
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+        <form onSubmit={save} className="card space-y-3 p-5">
+          <h2 className="text-lg font-extrabold">Details</h2>
+          <fieldset disabled={!editable} className="grid gap-3 disabled:opacity-60 sm:grid-cols-2">
+            <Field label="First name" value={form.firstName} onChange={set('firstName')} />
+            <Field label="Last name" value={form.lastName} onChange={set('lastName')} />
+            <Field
+              label="Email (sign-in)"
+              type="email"
+              value={form.email}
+              onChange={(v) => setForm({ ...form, email: v })}
+              required
+            />
+            <Field label="Phone" type="tel" value={form.phone} onChange={(v) => set('phone')(formatPhone(v))} placeholder="555-555-0100" />
+            <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
+            <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
+          </fieldset>
+          {editable && (
+            <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
           )}
-        </section>
-      )}
+        </form>
+
+        {!self && editable && user && (
+          <section className="card p-5">
+            <h2 className="text-lg font-extrabold">Account</h2>
+            <div className="mt-1 divide-y divide-[var(--border)]">
+              <Row title="Role" hint="Managers and up can manage videos and the team.">
+                <select
+                  aria-label="Role"
+                  value={member.role}
+                  onChange={(e) => {
+                    const role = e.target.value as UserRole;
+                    void run(() => api.updateMember(userId, { role }), `Role changed to ${roleLabel(role)}.`);
+                  }}
+                  className="input w-auto cursor-pointer py-1.5 font-semibold"
+                >
+                  {roleOptions(user.roles, member.role).map(({ value: r }) => (
+                    <option key={r} value={r}>{roleLabel(r)}</option>
+                  ))}
+                </select>
+              </Row>
+              {member.active && (member.inactiveSince ? (
+                <Row title={`Inactive since ${formatDate(member.inactiveSince)}`} hint="Off the schedule. Can still sign in.">
+                  <button className="btn" onClick={() => void run(() => api.updateMember(userId, { inactive: false }),
+                    `${employeeName(member)} is back on the schedule.`)}>Mark active</button>
+                </Row>
+              ) : (
+                <Row title="Active" hint="Taking time off? Inactive leaves them off the schedule.">
+                  <button className="btn-ghost" onClick={() => void run(() => api.updateMember(userId, { inactive: true }),
+                    `${employeeName(member)} is off the schedule until you mark them active.`)}>Mark inactive</button>
+                </Row>
+              ))}
+              <Row title="Password" hint="Set a temporary one if they forgot theirs.">
+                <button className="btn-ghost" onClick={() => void resetPassword()}>Reset password</button>
+              </Row>
+              {member.active ? (
+                <Row title="Employee left?" hint="Blocks sign-in. History is kept.">
+                  <button
+                    className="rounded-full bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+                    onClick={() => void setActive(false)}
+                  >
+                    Disable account
+                  </button>
+                </Row>
+              ) : (
+                <Row title={`Disabled${member.disabledAt ? ` on ${formatDate(member.disabledAt)}` : ''}`} hint="They can't sign in.">
+                  <button className="btn" onClick={() => void setActive(true)}>Re-enable</button>
+                </Row>
+              )}
+              {user.roles === 'OWNER' && (
+                <Row title="Delete permanently" hint="Erases the account and watch history.">
+                  <button className="text-sm font-bold text-[var(--danger)] hover:underline" onClick={() => void remove()}>
+                    Delete account
+                  </button>
+                </Row>
+              )}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One setting in the Account card: label and hint on the left, its control on the right. */
+function Row({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 text-sm">
+      <div className="min-w-0">
+        <div className="font-bold">{title}</div>
+        <div className="opacity-60">{hint}</div>
+      </div>
+      <div className="shrink-0">{children}</div>
     </div>
   );
 }

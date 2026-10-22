@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api, type NewEmployee, type TeamMember, type UserRole } from '@/src/lib/api';
-import { employeeName } from '@/src/lib/format';
+import { displayPhone, employeeName, formatPhone } from '@/src/lib/format';
 import { ROLES } from '@/src/lib/roles';
 
 const today = () => new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD" in local time
@@ -48,7 +48,7 @@ function AddEmployee() {
     if (!fromApplication) return;
     api.application(Number(fromApplication)).then((a) => setForm((f) => ({
       ...f,
-      firstName: a.firstName, lastName: a.lastName, email: a.email, phone: a.phone,
+      firstName: a.firstName, lastName: a.lastName, email: a.email, phone: displayPhone(a.phone),
       role: POSITION_ROLE[a.position] ?? 'STYLIST',
     }))).catch(() => {});
   }, [fromApplication]);
@@ -102,7 +102,7 @@ function AddEmployee() {
           <Field label="First name" value={form.firstName} onChange={set('firstName')} required />
           <Field label="Last name" value={form.lastName} onChange={set('lastName')} />
           <Field label="Email" hint="What they'll sign in with" type="email" value={form.email} onChange={set('email')} required />
-          <Field label="Phone" type="tel" value={form.phone} onChange={set('phone')} />
+          <Field label="Phone" type="tel" value={form.phone} onChange={(v) => set('phone')(formatPhone(v))} />
           <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
           <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
           <label className="block text-sm">

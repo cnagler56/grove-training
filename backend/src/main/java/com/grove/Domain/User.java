@@ -70,6 +70,10 @@ public class User {
 	@Column(name = "disabled_at")
 	private LocalDateTime disabledAt;
 
+	/** Set while someone is taking time off (leave, a break): they stay signed in but are left off the schedule. Null = active. */
+	@Column(name = "inactive_since")
+	private LocalDate inactiveSince;
+
 	public Long getUserId() { return userId; }
 	public void setUserId(Long userId) { this.userId = userId; }
 
@@ -106,6 +110,9 @@ public class User {
 
 	public LocalDateTime getDisabledAt() { return disabledAt; }
 	public void setDisabledAt(LocalDateTime disabledAt) { this.disabledAt = disabledAt; }
+
+	public LocalDate getInactiveSince() { return inactiveSince; }
+	public void setInactiveSince(LocalDate inactiveSince) { this.inactiveSince = inactiveSince; }
 
 	@JsonIgnore
 	public boolean isAdmin() { return roles.canManageSite(); }
