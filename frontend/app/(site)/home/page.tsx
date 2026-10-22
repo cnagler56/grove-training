@@ -26,7 +26,6 @@ export default function StaffHomePage() {
   const seesSchedule = perms.viewSchedule || perms.editSchedule || perms.approveSchedule;
 
   const [videos, setVideos] = useState<VideoSummary[] | null>(null);
-  const [newApplicants, setNewApplicants] = useState<number | null>(null);
   const [myShifts, setMyShifts] = useState<ShiftView[] | null>(null);
   const [toApprove, setToApprove] = useState<PendingWeek[]>([]);
   const [celebrations, setCelebrations] = useState<Celebrations | null>(null);
@@ -34,7 +33,6 @@ export default function StaffHomePage() {
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
     if (isStaff && !isOwner) api.mySchedule().then(setMyShifts).catch(() => setMyShifts([]));
-    if (isOwner) api.newApplicationCount().then(setNewApplicants).catch(() => {});
   }, [isStaff, isOwner]);
 
   useEffect(() => {
@@ -180,29 +178,6 @@ export default function StaffHomePage() {
       </div>
 
       {isManager && celebrations && <UpcomingCelebrations items={celebrations.upcoming} />}
-
-      {isManager && (
-        <section className="card p-5">
-          <h2 className="text-lg font-extrabold">Manager shortcuts</h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Link href="/admin" className="btn">Upload a video</Link>
-            <Link href="/admin/team" className="btn-ghost">Team</Link>
-            {isOwner && (
-              <>
-                <Link href="/admin/team/new" className="btn-ghost">Add employee</Link>
-                <Link href="/admin/applicants" className="btn-ghost">
-                  Applicants
-                  {!!newApplicants && (
-                    <span className="ml-1.5 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-white">
-                      {newApplicants} new
-                    </span>
-                  )}
-                </Link>
-              </>
-            )}
-          </div>
-        </section>
-      )}
 
       {isStaff && newest.length > 0 && (
         <section>
