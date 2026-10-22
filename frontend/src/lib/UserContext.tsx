@@ -54,9 +54,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setUser(await api.register(c));
   }, []);
 
+  // Sign out, then land on the public home page. User state is deliberately not
+  // cleared first: in the staff area that would trigger the redirect to /signin.
   const logout = useCallback(async () => {
     await api.logout();
-    setUser(null);
+    window.location.assign('/');
   }, []);
 
   return (
