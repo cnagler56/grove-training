@@ -33,7 +33,7 @@ export default function StaffHomePage() {
 
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
-    if (isStaff) api.mySchedule().then(setMyShifts).catch(() => setMyShifts([]));
+    if (isStaff && !isOwner) api.mySchedule().then(setMyShifts).catch(() => setMyShifts([]));
     if (isOwner) api.newApplicationCount().then(setNewApplicants).catch(() => {});
   }, [isStaff, isOwner]);
 
@@ -87,7 +87,7 @@ export default function StaffHomePage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {isStaff && (
-          <section className="card p-5 md:col-span-2">
+          <section className={`card p-5 ${isOwner ? 'md:col-span-3' : 'md:col-span-2'}`}>
             <h2 className="text-lg font-extrabold">Your training</h2>
             {videos === null ? (
               <p className="mt-3 text-sm opacity-60">Loading…</p>
@@ -124,7 +124,8 @@ export default function StaffHomePage() {
           </section>
         )}
 
-        {isStaff ? (
+        {/* Owners don't work shifts, so they have no schedule card. */}
+        {isOwner ? null : isStaff ? (
           <section className="card p-5">
             <div className="flex items-end justify-between gap-2">
               <h2 className="text-lg font-extrabold">Your schedule</h2>
