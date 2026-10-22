@@ -35,6 +35,7 @@ import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoStatus;
+import com.grove.Repository.AppSettingRepository;
 import com.grove.Repository.JobApplicationRepository;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
@@ -57,10 +58,12 @@ class GroveServerApplicationTests {
 	@Autowired JobApplicationRepository applications;
 	@Autowired ShiftRepository shifts;
 	@Autowired ScheduleWeekRepository scheduleWeeks;
+	@Autowired AppSettingRepository appSettings;
 	@MockBean JavaMailSender mailSender;
 
 	@BeforeEach
 	void clean() {
+		appSettings.deleteAll();
 		shifts.deleteAll();
 		scheduleWeeks.deleteAll();
 		applications.deleteAll();
@@ -496,6 +499,194 @@ class GroveServerApplicationTests {
 				.andExpect(status().isBadRequest());
 		}
 		assertThat(shifts.count()).isZero();
+	}
+
+	@Test
+	void ownerDecidesWhoSeesBuildsAndApprovesTheSchedule() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		signUp("manager@grove.test");
+		signUp("desk@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		setRole("manager@grove.test", Role.MANAGER);
+		setRole("desk@grove.test", Role.RECEPTIONIST);
+		Cookie gm = login("gm@grove.test");
+		Cookie manager = login("manager@grove.test");
+		Cookie desk = login("desk@grove.test");
+
+		// Only the owner sees or changes the settings. Defaults: GM builds and approves.
+		mvc.perform(get("/api/owner/permissions").cookie(gm)).andExpect(status().isForbidden());
+		mvc.perform(get("/api/owner/permissions").cookie(owner))
+			.andExpect(jsonPath("$.length()").value(3))
+			.andExpect(jsonPath("$[1].permission").value("EDIT_SCHEDULE"))
+			.andExpect(jsonPath("$[1].roles").value(org.hamcrest.Matchers.containsInAnyOrder("OWNER", "GENERAL_MANAGER")));
+		mvc.perform(get("/api/me/permissions").cookie(manager))
+			.andExpect(jsonPath("$.viewSchedule").value(true))
+			.andExpect(jsonPath("$.editSchedule").value(false));
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[]}"))
+			.andExpect(status().isForbidden());
+
+		// Let managers build; hide the schedule tab from receptionists.
+		mvc.perform(put("/api/owner/permissions").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"roles\":{\"EDIT_SCHEDULE\":[\"GENERAL_MANAGER\",\"MANAGER\"],"
+					+ "\"VIEW_SCHEDULE\":[\"GENERAL_MANAGER\",\"MANAGER\",\"LEAD\",\"STYLIST\"]}}"))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/me/permissions").cookie(manager)).andExpect(jsonPath("$.editSchedule").value(true));
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[]}"))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/schedule").cookie(desk)).andExpect(status().isForbidden());
+
+		// The owner can't be removed, and customers can't be given access.
+		mvc.perform(put("/api/owner/permissions").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"roles\":{\"APPROVE_SCHEDULE\":[]}}"))
+			.andExpect(jsonPath("$[2].roles").value(org.hamcrest.Matchers.contains("OWNER")));
+		mvc.perform(put("/api/owner/permissions").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"roles\":{\"VIEW_SCHEDULE\":[\"CUSTOMER\"]}}"))
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void buildersSendWeeksForApprovalAndApproversPostThem() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		signUp("gm@grove.test");
+		signUp("manager@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		setRole("manager@grove.test", Role.MANAGER);
+		Cookie gm = login("gm@grove.test");
+		Cookie manager = login("manager@grove.test");
+		mvc.perform(put("/api/owner/permissions").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"roles\":{\"EDIT_SCHEDULE\":[\"MANAGER\"],\"APPROVE_SCHEDULE\":[\"GENERAL_MANAGER\"]}}"))
+			.andExpect(status().isOk());
+		Long gmId = idOf("gm@grove.test");
+		String week = "{\"shifts\":[" + shiftJson(idOf("stylist@grove.test"), "2026-10-17", "10:00", "18:00") + "]}";
+
+		// The manager builds the week but can't post it.
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(jsonPath("$.canApprove").value(false))
+			.andExpect(jsonPath("$.approvers[*].userId").value(org.hamcrest.Matchers.hasItem(gmId.intValue())));
+		mvc.perform(put("/api/schedule/2026-10-17/published").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"published\":true}"))
+			.andExpect(status().isForbidden());
+		// Only someone who can approve can receive it.
+		mvc.perform(post("/api/schedule/2026-10-17/submit").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"approverId\":" + idOf("stylist@grove.test") + "}"))
+			.andExpect(status().isBadRequest());
+
+		org.mockito.Mockito.clearInvocations(mailSender);
+		mvc.perform(post("/api/schedule/2026-10-17/submit").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"approverId\":" + gmId + "}"))
+			.andExpect(jsonPath("$.state").value("PENDING"))
+			.andExpect(jsonPath("$.submittedToName").value("gm@grove.test"));
+		ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		verify(mailSender, timeout(3000)).send(sent.capture());
+		assertThat(sent.getValue().getTo()).containsExactly("gm@grove.test");
+
+		mvc.perform(get("/api/schedule/waiting").cookie(gm))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].weekStart").value("2026-10-17"));
+		mvc.perform(get("/api/schedule?date=2026-10-17").cookie(stylist)).andExpect(jsonPath("$.shifts.length()").value(0));
+
+		// Sent back needs a note; the builder then sees it.
+		mvc.perform(post("/api/schedule/2026-10-17/send-back").cookie(gm).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"  \"}"))
+			.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/schedule/2026-10-17/send-back").cookie(gm).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"Need a closer Monday\"}"))
+			.andExpect(jsonPath("$.state").value("DRAFT"));
+		mvc.perform(get("/api/schedule?date=2026-10-17").cookie(manager))
+			.andExpect(jsonPath("$.returnNote").value("Need a closer Monday"))
+			.andExpect(jsonPath("$.returnedByName").value("gm@grove.test"));
+
+		// Resent and approved: posted for staff, approval cleared.
+		mvc.perform(post("/api/schedule/2026-10-17/submit").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"approverId\":" + gmId + "}"))
+			.andExpect(jsonPath("$.returnNote").isEmpty());
+		mvc.perform(put("/api/schedule/2026-10-17/published").cookie(gm).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"published\":true}"))
+			.andExpect(jsonPath("$.state").value("POSTED"))
+			.andExpect(jsonPath("$.submittedToId").isEmpty());
+		mvc.perform(get("/api/schedule?date=2026-10-17").cookie(stylist)).andExpect(jsonPath("$.shifts.length()").value(1));
+		mvc.perform(get("/api/schedule/waiting").cookie(gm)).andExpect(jsonPath("$.length()").value(0));
+
+		// Posted weeks are locked to approvers.
+		mvc.perform(get("/api/schedule?date=2026-10-17").cookie(manager)).andExpect(jsonPath("$.canEdit").value(false));
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isForbidden());
+		mvc.perform(put("/api/schedule/2026-10-17").cookie(gm).contentType(MediaType.APPLICATION_JSON).content(week))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	void requestedOffDaysHaveNoTimesAndShowForTheTeam() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+		Long id = idOf("stylist@grove.test");
+		LocalDate today = LocalDate.now();
+		LocalDate start = com.grove.Service.ScheduleService.weekStart(today);
+		String ro = "{\"userId\":" + id + ",\"date\":\"" + today + "\",\"type\":\"REQUESTED_OFF\"}";
+
+		// RO plus a shift on the same day isn't allowed.
+		mvc.perform(put("/api/schedule/" + start).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[" + ro + "," + shiftJson(id, today.toString(), "10:00", "18:00") + "]}"))
+			.andExpect(status().isBadRequest());
+
+		// An RO day saves with no times (any sent are dropped).
+		mvc.perform(put("/api/schedule/" + start).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[" + ro.replace("}", ",\"start\":\"10:00\",\"end\":\"18:00\"}") + "]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.shifts[0].type").value("REQUESTED_OFF"))
+			.andExpect(jsonPath("$.shifts[0].start").isEmpty());
+		mvc.perform(put("/api/schedule/" + start + "/published").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"published\":true}"))
+			.andExpect(status().isOk());
+
+		mvc.perform(get("/api/schedule").cookie(stylist)).andExpect(jsonPath("$.shifts[0].type").value("REQUESTED_OFF"));
+		mvc.perform(get("/api/schedule/mine").cookie(stylist)).andExpect(jsonPath("$[0].type").value("REQUESTED_OFF"));
+	}
+
+	@Test
+	void birthdaysAndAnniversariesShowTodayForEveryoneAndUpcomingForManagers() throws Exception {
+		signUp("manager@grove.test", "Mia");
+		Cookie stylist = signUp("stylist@grove.test", "Sam");
+		signUp("bday@grove.test", "Bea");
+		signUp("anniv@grove.test", "Ana");
+		signUp("soon@grove.test", "Sol");
+		signUp("gone@grove.test", "Gus");
+		setRole("manager@grove.test", Role.MANAGER);
+		Cookie manager = login("manager@grove.test");
+		LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Chicago"));
+
+		setDates("bday@grove.test", today.minusYears(30), null);            // birthday today
+		setDates("anniv@grove.test", null, today.minusYears(3));            // 3-year anniversary today
+		setDates("soon@grove.test", today.plusDays(3).minusYears(25), null); // birthday in 3 days
+		setDates("gone@grove.test", today.minusYears(40), null);             // birthday today, but inactive
+		User gone = users.findByEmail("gone@grove.test").orElseThrow();
+		gone.setActive(false);
+		users.save(gone);
+		setDates("stylist@grove.test", null, today);                         // hired today: no anniversary yet
+
+		// Everyone on staff sees today's; only managers and up see the coming week.
+		mvc.perform(get("/api/celebrations").cookie(stylist))
+			.andExpect(jsonPath("$.todays.length()").value(2))
+			.andExpect(jsonPath("$.todays[?(@.kind=='BIRTHDAY')].name").value(org.hamcrest.Matchers.contains("Bea")))
+			.andExpect(jsonPath("$.todays[?(@.kind=='ANNIVERSARY')].years").value(org.hamcrest.Matchers.contains(3)))
+			.andExpect(jsonPath("$.todays[?(@.kind=='BIRTHDAY')].years").value(org.hamcrest.Matchers.contains((Object) null)))
+			.andExpect(jsonPath("$.upcoming.length()").value(0));
+		mvc.perform(get("/api/celebrations").cookie(manager))
+			.andExpect(jsonPath("$.todays.length()").value(2))
+			.andExpect(jsonPath("$.upcoming.length()").value(1))
+			.andExpect(jsonPath("$.upcoming[0].name").value("Sol"))
+			.andExpect(jsonPath("$.upcoming[0].date").value(today.plusDays(3).toString()));
+	}
+
+	private void setDates(String email, LocalDate birthday, LocalDate hireDate) {
+		User u = users.findByEmail(email).orElseThrow();
+		u.setBirthday(birthday);
+		u.setHireDate(hireDate);
+		users.save(u);
 	}
 
 	@Test

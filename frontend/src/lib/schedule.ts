@@ -115,3 +115,11 @@ export function timeOptions(from: string, to: string): string[] {
 
 /** Shift a "HH:MM" time by some minutes. */
 export const addMinutes = (t: string, n: number) => fromMinutes(toMinutes(t) + n);
+
+type Entry = { type?: string; start: string | null; end: string | null };
+
+/** An RO day: the person requested it off. */
+export const isRequestedOff = (s: Entry) => s.type === 'REQUESTED_OFF' || !s.start || !s.end;
+
+/** Hours worked for an entry; RO days count as 0. */
+export const entryHours = (s: Entry) => (isRequestedOff(s) ? 0 : shiftHours(s.start!, s.end!));

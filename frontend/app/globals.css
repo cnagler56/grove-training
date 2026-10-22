@@ -35,59 +35,63 @@ body {
   }
 }
 
-/* A white, rounded card with a soft blue-gray edge. */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 1.25rem;
-  box-shadow: 0 1px 2px rgba(44, 70, 96, 0.05), 0 4px 16px rgba(44, 70, 96, 0.06);
-}
+/* Shared building blocks. In the components layer so per-element Tailwind
+   utilities (w-auto, px-2, ...) can still override them. */
+@layer components {
+  /* A white, rounded card with a soft blue-gray edge. */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    box-shadow: 0 1px 2px rgba(44, 70, 96, 0.05), 0 4px 16px rgba(44, 70, 96, 0.06);
+  }
 
-a.card {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-a.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 4px rgba(44, 70, 96, 0.08), 0 10px 24px rgba(44, 70, 96, 0.12);
-}
+  a.card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  a.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(44, 70, 96, 0.08), 0 10px 24px rgba(44, 70, 96, 0.12);
+  }
 
-.btn {
-  border-radius: 999px;
-  padding: 0.55rem 1.25rem;
-  font-size: 0.9rem;
-  font-weight: 700;
-  background: var(--accent);
-  color: var(--accent-ink);
-  transition: background 0.15s ease;
-}
-.btn:hover:not(:disabled) {
-  background: var(--accent-strong);
-}
-.btn:disabled {
-  opacity: 0.5;
-}
+  .btn {
+    border-radius: 999px;
+    padding: 0.55rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    background: var(--accent);
+    color: var(--accent-ink);
+    transition: background 0.15s ease;
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--accent-strong);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+  }
 
-.btn-ghost {
-  border-radius: 999px;
-  padding: 0.4rem 0.9rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
-.btn-ghost:hover {
-  background: var(--surface-2);
-}
+  .btn-ghost {
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .btn-ghost:hover {
+    background: var(--surface-2);
+  }
 
-.input {
-  width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  padding: 0.55rem 0.85rem;
-  outline: none;
-}
-.input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  .input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0.55rem 0.85rem;
+    outline: none;
+  }
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
 }

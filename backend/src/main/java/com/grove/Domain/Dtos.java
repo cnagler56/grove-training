@@ -113,6 +113,8 @@ public final class Dtos {
 		String name,
 		Role role,
 		LocalDate date,
+		/** WORK, or REQUESTED_OFF ("RO", no times). */
+		ShiftType type,
 		LocalTime start,
 		LocalTime end,
 		String note) {}
@@ -126,20 +128,62 @@ public final class Dtos {
 		LocalDate weekEnd,
 		boolean published,
 		LocalDateTime publishedAt,
+		/** DRAFT, PENDING (sent for approval), or POSTED. */
+		String state,
+		/** Viewer can build/save this week (always false for a posted week unless they can approve). */
 		boolean canEdit,
+		/** Viewer can approve, post, take down, or send back. */
+		boolean canApprove,
+		String submittedByName,
+		Long submittedToId,
+		String submittedToName,
+		LocalDateTime submittedAt,
+		/** Note from an approver who sent the week back, shown to builders. */
+		String returnNote,
+		String returnedByName,
+		/** Who this week can be sent to for approval (for builders; excludes the viewer). */
+		List<Person> approvers,
 		List<RosterEntry> roster,
 		List<ShiftView> shifts) {}
 
 	/** One row of the schedule. {@code active=false} only for a former employee with shifts that week. */
 	public record RosterEntry(Long userId, String name, Role role, boolean active) {}
 
-	/** One cell from the schedule editor. */
-	public record ShiftInput(Long userId, LocalDate date, LocalTime start, LocalTime end, String note) {}
+	/** One cell from the schedule editor. {@code type} null means WORK; REQUESTED_OFF ignores the times. */
+	public record ShiftInput(Long userId, LocalDate date, ShiftType type, LocalTime start, LocalTime end, String note) {}
 
 	/** The whole week from the editor; replaces whatever was saved before. */
 	public record WeekSave(List<ShiftInput> shifts) {}
 
 	public record WeekPublish(boolean published) {}
+
+	/** What the signed-in person can do with the schedule (drives tabs and buttons). */
+	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule) {}
+
+	/** One permission on the owner's Settings page and the roles that have it. */
+	public record PermissionRule(Permission permission, String label, String description, List<Role> roles) {}
+
+	/** Owner's changes: permission name → roles. */
+	public record PermissionUpdate(java.util.Map<Permission, List<Role>> roles) {}
+
+	/** Someone the schedule can be sent to for approval. */
+	public record Person(Long userId, String name, Role role) {}
+
+	/** A week waiting for the viewer's approval (Home page card). */
+	public record PendingWeek(LocalDate weekStart, String submittedByName, LocalDateTime submittedAt) {}
+
+	public record WeekSubmit(Long approverId) {}
+
+	public record WeekSendBack(String note) {}
+
+	/**
+	 * A birthday or work anniversary. {@code years} is set for anniversaries only;
+	 * ages are never shared.
+	 */
+	public record Celebration(Long userId, String name, String kind, LocalDate date, Integer years) {}
+
+	/** Today's celebrations (everyone on staff) and the next week's (managers and up). */
+	public record Celebrations(LocalDate today, List<Celebration> todays, List<Celebration> upcoming) {}
 
 	/** Whether uploads are wired up — the admin page shows setup help when false. */
 	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}

@@ -51,6 +51,8 @@ app:
   admin-emails: ${ADMIN_EMAILS:}
   # Where links in emails point (the Next.js site).
   frontend-url: ${APP_FRONTEND_URL:http://localhost:3001}
+  # The salon's time zone, for "today" (birthdays, anniversaries). Railway servers run on UTC.
+  time-zone: ${SALON_TIME_ZONE:America/Chicago}
   mail:
     # "From" address on emails. Defaults to MAIL_USERNAME (Gmail requires that anyway).
     from: ${MAIL_FROM:${MAIL_USERNAME:}}

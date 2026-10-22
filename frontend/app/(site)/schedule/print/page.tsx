@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { api, type WeekSchedule } from '@/src/lib/api';
 import { SALON } from '@/src/lib/salon';
 import {
-  hoursLabel, shiftHours, shortShift, startsReceptionists, todayIso, weekRangeLabel, weekStartOf, weekDates,
+  entryHours, hoursLabel, isRequestedOff, shortShift, startsReceptionists, todayIso, weekRangeLabel, weekStartOf, weekDates,
 } from '@/src/lib/schedule';
 
 const DAY_NAMES = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -112,7 +112,7 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
         <tbody>
           {week.roster.map((person, i) => {
             const shifts = days.map((d) => cell.get(`${person.userId}|${d}`));
-            const total = shifts.reduce((h, s) => h + (s ? shiftHours(s.start, s.end) : 0), 0);
+            const total = shifts.reduce((h, s) => h + (s ? entryHours(s) : 0), 0);
             return (
               <tr
                 key={person.userId}
@@ -123,7 +123,7 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
                 <td className="h-[0.42in] truncate border-b border-[#d8dfe6] px-2.5 font-bold">{person.name}</td>
                 {shifts.map((s, j) => (
                   <td key={days[j]} className="border-b border-l border-[#d8dfe6] px-1 text-center font-semibold">
-                    {s ? shortShift(s.start, s.end) : ''}
+                    {s ? (isRequestedOff(s) ? <span className="font-bold">RO</span> : shortShift(s.start!, s.end!)) : ''}
                   </td>
                 ))}
                 <td className="border-b border-l border-[#d8dfe6] px-1 text-center text-[11px] text-gray-500">

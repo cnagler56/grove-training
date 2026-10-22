@@ -34,9 +34,6 @@ public enum Role {
 		return this == GENERAL_MANAGER || this == MANAGER || this == LEAD || this == STYLIST || this == RECEPTIONIST;
 	}
 
-	/** Owners and general managers build and post the weekly schedule. */
-	public boolean canEditSchedule() { return this == OWNER || this == GENERAL_MANAGER; }
-
 	/** Training videos are for staff only. */
 	public boolean isStaff() { return this != CUSTOMER; }
 }

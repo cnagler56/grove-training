@@ -112,10 +112,14 @@ export interface ShiftView {
   name: string;
   role: UserRole | null;
   date: string;
-  start: string;
-  end: string;
+  /** WORK, or REQUESTED_OFF ("RO": the person asked for the day off; no times). */
+  type: ShiftType;
+  start: string | null;
+  end: string | null;
   note: string | null;
 }
+
+export type ShiftType = 'WORK' | 'REQUESTED_OFF';
 
 /** One row of the schedule's Name column. */
 export interface RosterEntry {
@@ -135,17 +139,79 @@ export interface WeekSchedule {
   weekEnd: string;
   published: boolean;
   publishedAt: string | null;
+  /** DRAFT, PENDING (sent for approval), or POSTED. */
+  state: 'DRAFT' | 'PENDING' | 'POSTED';
+  /** Viewer can change this week (posted weeks: approvers only). */
   canEdit: boolean;
+  /** Viewer can approve/post, take down, or send back. */
+  canApprove: boolean;
+  submittedByName: string | null;
+  submittedToId: number | null;
+  submittedToName: string | null;
+  submittedAt: string | null;
+  /** Why an approver sent it back. */
+  returnNote: string | null;
+  returnedByName: string | null;
+  /** Who the viewer can send this week to for approval. */
+  approvers: Person[];
   roster: RosterEntry[];
   shifts: ShiftView[];
+}
+
+export interface Person {
+  userId: number;
+  name: string;
+  role: UserRole;
+}
+
+/** A week waiting for the viewer's approval. */
+export interface PendingWeek {
+  weekStart: string;
+  submittedByName: string | null;
+  submittedAt: string | null;
+}
+
+/** What the signed-in person can do with the schedule. */
+export interface MyPermissions {
+  viewSchedule: boolean;
+  editSchedule: boolean;
+  approveSchedule: boolean;
+}
+
+export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE';
+
+/** One permission on the owner's Settings page. */
+export interface PermissionRule {
+  permission: PermissionKey;
+  label: string;
+  description: string;
+  roles: UserRole[];
 }
 
 export interface ShiftInput {
   userId: number;
   date: string;
-  start: string;
-  end: string;
+  type: ShiftType;
+  /** Omitted for REQUESTED_OFF. */
+  start?: string;
+  end?: string;
   note?: string | null;
+}
+
+/** A birthday or work anniversary. `years` is for anniversaries only (ages are never shared). */
+export interface Celebration {
+  userId: number;
+  name: string;
+  kind: 'BIRTHDAY' | 'ANNIVERSARY';
+  date: string;
+  years: number | null;
+}
+
+/** Today's (everyone on staff) and the next week's (managers and up). */
+export interface Celebrations {
+  today: string;
+  todays: Celebration[];
+  upcoming: Celebration[];
 }
 
 export type ApplicationStatus = 'NEW' | 'CONTACTED' | 'INTERVIEW' | 'HIRED' | 'NOT_A_FIT';
@@ -238,6 +304,17 @@ export const api = {
     send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts }),
   publishSchedule: (weekStart: string, published: boolean) =>
     send<WeekSchedule>(`/api/schedule/${weekStart}/published`, 'PUT', { published }),
+  submitSchedule: (weekStart: string, approverId: number) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}/submit`, 'POST', { approverId }),
+  sendBackSchedule: (weekStart: string, note: string) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}/send-back`, 'POST', { note }),
+  waitingSchedules: () => send<PendingWeek[]>('/api/schedule/waiting'),
+
+  myPermissions: () => send<MyPermissions>('/api/me/permissions'),
+  celebrations: () => send<Celebrations>('/api/celebrations'),
+  permissionRules: () => send<PermissionRule[]>('/api/owner/permissions'),
+  updatePermissions: (roles: Partial<Record<PermissionKey, UserRole[]>>) =>
+    send<PermissionRule[]>('/api/owner/permissions', 'PUT', { roles }),
 
   positions: () => send<string[]>('/api/apply/positions'),
   apply: (a: ApplicationRequest) => send<void>('/api/apply', 'POST', a),

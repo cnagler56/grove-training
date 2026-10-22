@@ -3,8 +3,13 @@ package com.grove.Domain;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -12,7 +17,10 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
-/** One person working one day. At most one shift per person per day. */
+/**
+ * One person's entry for one day: a working shift, or RO (they requested the
+ * day off, which has no times). At most one entry per person per day.
+ */
 @Entity
 @Table(name = "shifts",
 	uniqueConstraints = @UniqueConstraint(name = "uk_shift_user_date", columnNames = {"user_id", "shift_date"}),
@@ -29,10 +37,17 @@ public class Shift {
 	@Column(name = "shift_date", nullable = false)
 	private LocalDate date;
 
-	@Column(name = "start_time", nullable = false)
+	/** Null on rows from before RO existed, which are all working shifts; see {@link #getType()}. */
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(length = 20)
+	private ShiftType type;
+
+	/** Null for a requested-off day. */
+	@Column(name = "start_time")
 	private LocalTime start;
 
-	@Column(name = "end_time", nullable = false)
+	@Column(name = "end_time")
 	private LocalTime end;
 
 	/** Optional, e.g. "Front desk" or "Training". */
@@ -41,6 +56,11 @@ public class Shift {
 
 	public Long getId() { return id; }
 	public void setId(Long id) { this.id = id; }
+
+	public ShiftType getType() { return type == null ? ShiftType.WORK : type; }
+	public void setType(ShiftType type) { this.type = type; }
+
+	public boolean isRequestedOff() { return getType() == ShiftType.REQUESTED_OFF; }
 
 	public Long getUserId() { return userId; }
 	public void setUserId(Long userId) { this.userId = userId; }

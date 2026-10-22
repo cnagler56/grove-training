@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDuration, type ShiftView, type VideoSummary } from '@/src/lib/api';
-import { longDayLabel, shiftLabel, todayIso } from '@/src/lib/schedule';
+import { api, formatDuration, type Celebrations, type PendingWeek, type ShiftView, type VideoSummary } from '@/src/lib/api';
+import { TodayCelebrations, UpcomingCelebrations } from '@/src/components/Celebrations';
+import { isRequestedOff, longDayLabel, shiftLabel, todayIso, weekRangeLabel } from '@/src/lib/schedule';
 import { canManageSite, roleLabel } from '@/src/lib/roles';
 import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
@@ -18,20 +19,31 @@ function greeting() {
 
 /** Where staff land after signing in. */
 export default function StaffHomePage() {
-  const { user } = useUser();
+  const { user, perms } = useUser();
   const isStaff = user?.roles !== 'CUSTOMER';
   const isManager = canManageSite(user?.roles);
   const isOwner = user?.roles === 'OWNER';
+  const seesSchedule = perms.viewSchedule || perms.editSchedule || perms.approveSchedule;
 
   const [videos, setVideos] = useState<VideoSummary[] | null>(null);
   const [newApplicants, setNewApplicants] = useState<number | null>(null);
   const [myShifts, setMyShifts] = useState<ShiftView[] | null>(null);
+  const [toApprove, setToApprove] = useState<PendingWeek[]>([]);
+  const [celebrations, setCelebrations] = useState<Celebrations | null>(null);
 
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
     if (isStaff) api.mySchedule().then(setMyShifts).catch(() => setMyShifts([]));
     if (isOwner) api.newApplicationCount().then(setNewApplicants).catch(() => {});
   }, [isStaff, isOwner]);
+
+  useEffect(() => {
+    if (perms.approveSchedule) api.waitingSchedules().then(setToApprove).catch(() => {});
+  }, [perms.approveSchedule]);
+
+  useEffect(() => {
+    if (isStaff) api.celebrations().then(setCelebrations).catch(() => {});
+  }, [isStaff]);
 
   if (!user) return null;
   const ready = (videos ?? []).filter((v) => v.status === 'READY');
@@ -53,6 +65,25 @@ export default function StaffHomePage() {
           {roleLabel(user.roles)} at {SALON.name} · {DAYS[today]}, {new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
         </p>
       </div>
+
+      <TodayCelebrations items={celebrations?.todays ?? []} viewerId={user?.userId} />
+
+      {toApprove.length > 0 && (
+        <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+          <h2 className="text-lg font-extrabold">Schedule waiting for your approval</h2>
+          <ul className="mt-3 divide-y divide-[var(--border)] text-sm">
+            {toApprove.map((w) => (
+              <li key={w.weekStart} className="flex flex-wrap items-center justify-between gap-3 py-2">
+                <span>
+                  <b>Week of {weekRangeLabel(w.weekStart)}</b>
+                  {w.submittedByName && <span className="opacity-70"> from {w.submittedByName}</span>}
+                </span>
+                <Link href={`/schedule/edit?week=${w.weekStart}`} className="btn">Review</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         {isStaff && (
@@ -97,9 +128,9 @@ export default function StaffHomePage() {
           <section className="card p-5">
             <div className="flex items-end justify-between gap-2">
               <h2 className="text-lg font-extrabold">Your schedule</h2>
-              <Link href="/schedule" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">
+              {seesSchedule && <Link href="/schedule" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">
                 Full schedule
-              </Link>
+              </Link>}
             </div>
             {myShifts === null ? (
               <p className="mt-3 text-sm opacity-60">Loading…</p>
@@ -112,7 +143,7 @@ export default function StaffHomePage() {
                   return (
                     <li key={s.id} className={`flex flex-wrap justify-between gap-x-2 py-2 ${isToday ? 'font-bold text-[var(--accent-strong)]' : ''}`}>
                       <span>{isToday ? 'Today' : longDayLabel(s.date)}</span>
-                      <span className="whitespace-nowrap">{shiftLabel(s.start, s.end)}</span>
+                      <span className="whitespace-nowrap">{isRequestedOff(s) ? 'Requested off' : shiftLabel(s.start!, s.end!)}</span>
                       {s.note && <span className="w-full text-xs opacity-60">{s.note}</span>}
                     </li>
                   );
@@ -146,6 +177,8 @@ export default function StaffHomePage() {
           </section>
         )}
       </div>
+
+      {isManager && celebrations && <UpcomingCelebrations items={celebrations.upcoming} />}
 
       {isManager && (
         <section className="card p-5">

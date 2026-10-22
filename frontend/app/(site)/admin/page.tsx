@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { api, formatDuration, type AdminStatus, type UploadTicket, type VideoSummary } from '@/src/lib/api';
 import { uploadToBunny } from '@/src/lib/upload';
 import { youTubeId, youTubeThumbnail } from '@/src/lib/youtube';
+import { useDialogs } from '@/src/components/Dialogs';
+import { useUnsavedChangesGuard } from '@/src/lib/leaveGuard';
 
 const STATUS_STYLE: Record<VideoSummary['status'], string> = {
   UPLOADING: 'text-[var(--warn)]',
@@ -299,6 +301,7 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const retryInput = useRef<HTMLInputElement>(null);
+  const dialogs = useDialogs();
 
   useWarnOnLeave(progress !== null);
 
@@ -317,7 +320,7 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
     const where = video.source === 'YOUTUBE'
       ? "It stays on YouTube, but everyone's watch history for it is removed."
       : "This removes it from Bunny too, along with everyone's watch history for it.";
-    if (!confirm(`Delete "${video.title}"? ${where}`)) return;
+    if (!(await dialogs.confirm({ title: `Delete "${video.title}"?`, message: where, confirmLabel: 'Delete video', danger: true }))) return;
     try {
       await api.deleteVideo(video.id);
       onChange();
@@ -401,12 +404,10 @@ function ProgressBar({ fraction }: { fraction: number | null }) {
   );
 }
 
-/** Browser "leave site?" prompt while an upload is running. */
+/** Warn (with our dialog) before leaving while an upload is running. */
 function useWarnOnLeave(active: boolean) {
-  useEffect(() => {
-    if (!active) return;
-    const handler = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [active]);
+  useUnsavedChangesGuard(active, {
+    title: 'Leave while uploading?',
+    message: 'A video is still uploading. Leaving this page stops the upload.',
+  });
 }

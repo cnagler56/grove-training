@@ -5,26 +5,32 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
-import { canEditSchedule, canManageSite } from '@/src/lib/roles';
+import { canManageSite } from '@/src/lib/roles';
 
 const TABS = [{ href: '/home', label: 'Home' }];
-const STAFF_TABS = [
-  { href: '/videos', label: 'Videos' },
-  { href: '/schedule', label: 'Schedule' },
-];
+const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
+const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 const ADMIN_TABS = [
   { href: '/admin', label: 'Manage videos' },
   { href: '/admin/team', label: 'Team' },
 ];
-const OWNER_TABS = [{ href: '/admin/applicants', label: 'Applicants' }];
+const OWNER_TABS = [
+  { href: '/admin/applicants', label: 'Applicants' },
+  { href: '/admin/settings', label: 'Settings' },
+];
+
+/** The Schedule tab: anyone the owner lets see, build, or approve the schedule. */
+const seesSchedule = (p: { viewSchedule: boolean; editSchedule: boolean; approveSchedule: boolean }) =>
+  p.viewSchedule || p.editSchedule || p.approveSchedule;
 
 function Header() {
-  const { user, logout } = useUser();
+  const { user, perms, logout } = useUser();
   const pathname = usePathname();
   const isOwner = user?.roles === 'OWNER';
   const tabs = [
     ...TABS,
-    ...(user?.roles !== 'CUSTOMER' ? STAFF_TABS : []),
+    ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
+    ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -95,21 +101,24 @@ function Header() {
 
 /** Everything but /signin needs a signed-in user; /admin pages need a manager. */
 function Gate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useUser();
+  const { user, perms, loading } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const isSignin = pathname === '/signin';
   const needsAdmin = pathname.startsWith('/admin');
-  // Applicants' personal details, and adding accounts, are for owners only.
-  const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new';
-  // The schedule is for staff; editing it is for owners and general managers.
-  const needsStaff = pathname.startsWith('/schedule') || pathname.startsWith('/videos');
-  const needsScheduler = pathname.startsWith('/schedule/edit');
+  // Applicants, adding accounts, and Settings are for owners only.
+  const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new'
+    || pathname.startsWith('/admin/settings');
+  const needsStaff = pathname.startsWith('/videos');
+  // Schedule access follows the owner's Settings.
+  const needsScheduleView = pathname.startsWith('/schedule');
+  const needsScheduleEdit = pathname.startsWith('/schedule/edit');
   const blocked = !!user && (
     (needsAdmin && !canManageSite(user.roles))
     || (needsOwner && user.roles !== 'OWNER')
     || (needsStaff && user.roles === 'CUSTOMER')
-    || (needsScheduler && !canEditSchedule(user.roles)));
+    || (needsScheduleView && !seesSchedule(perms))
+    || (needsScheduleEdit && !perms.editSchedule && !perms.approveSchedule));
 
   useEffect(() => {
     if (loading) return;

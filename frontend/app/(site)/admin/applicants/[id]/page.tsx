@@ -6,11 +6,13 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, type ApplicationStatus, type JobApplication } from '@/src/lib/api';
 import { APPLICATION_STATUSES, statusBadge, statusLabel } from '@/src/lib/applications';
 import { formatDate } from '@/src/lib/format';
+import { useDialogs } from '@/src/components/Dialogs';
 
 export default function ApplicantPage() {
   const { id } = useParams<{ id: string }>();
   const appId = Number(id);
   const router = useRouter();
+  const dialogs = useDialogs();
   const [app, setApp] = useState<JobApplication | null>(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,12 @@ export default function ApplicantPage() {
   }
 
   async function remove() {
-    if (!app || !confirm(`Delete ${app.firstName} ${app.lastName}'s application? This can't be undone.`)) return;
+    if (!app || !(await dialogs.confirm({
+      title: `Delete ${app.firstName} ${app.lastName}'s application?`,
+      message: "This can't be undone.",
+      confirmLabel: 'Delete application',
+      danger: true,
+    }))) return;
     try {
       await api.deleteApplication(appId);
       router.push('/admin/applicants');

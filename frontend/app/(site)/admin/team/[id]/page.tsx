@@ -7,6 +7,7 @@ import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src
 import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { employeeName, formatDate, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
+import { useDialogs } from '@/src/components/Dialogs';
 
 const today = () => new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD" in local time
 
@@ -15,13 +16,18 @@ export default function EmployeePage() {
   const userId = Number(id);
   const { user } = useUser();
   const router = useRouter();
+  const dialogs = useDialogs();
   const self = user?.userId === userId;
 
   async function remove() {
     if (!member) return;
     const name = employeeName(member);
-    if (!confirm(`Permanently delete ${name}'s account?\n\nThis erases their account and watch history and can't be undone. ` +
-      `To just stop them signing in, use "Disable account" instead.`)) return;
+    if (!(await dialogs.confirm({
+      title: `Permanently delete ${name}'s account?`,
+      message: "This erases their account and watch history and can't be undone. To just stop them signing in, use Disable account instead.",
+      confirmLabel: 'Delete account',
+      danger: true,
+    }))) return;
     try {
       await api.deleteMember(userId);
       router.push('/admin/team');
@@ -68,19 +74,29 @@ export default function EmployeePage() {
     setSaving(false);
   }
 
-  function resetPassword() {
+  async function resetPassword() {
     if (!member) return;
-    const pw = prompt(`New temporary password for ${employeeName(member)} (8+ characters). Tell them in person.`);
+    const pw = await dialogs.prompt({
+      title: `Reset ${employeeName(member)}'s password`,
+      message: 'Set a temporary password and tell them in person.',
+      placeholder: 'New temporary password',
+      hint: 'At least 8 characters.',
+      minLength: 8,
+      confirmLabel: 'Reset password',
+    });
     if (!pw) return;
     void run(() => api.resetPassword(userId, pw), `Password reset for ${employeeName(member)}.`);
   }
 
-  function setActive(active: boolean) {
+  async function setActive(active: boolean) {
     if (!member) return;
-    if (!active && !confirm(
-      `Disable ${employeeName(member)}'s account?\n\n` +
-      `They'll be signed out and can't sign in again. Their details and watch history are kept, ` +
-      `and you can re-enable them later.\n\nRemember to change the team code too.`)) return;
+    if (!active && !(await dialogs.confirm({
+      title: `Disable ${employeeName(member)}'s account?`,
+      message: "They'll be signed out and can't sign in again. Their details and watch history are kept, "
+        + 'and you can re-enable them later.\n\nRemember to change the team code too.',
+      confirmLabel: 'Disable account',
+      danger: true,
+    }))) return;
     void run(() => api.updateMember(userId, { active }),
       active ? `${employeeName(member)} can sign in again.` : `${employeeName(member)}'s account is disabled.`);
   }
@@ -165,7 +181,7 @@ export default function EmployeePage() {
               <div className="font-bold">Password</div>
               <div className="opacity-60">Set a temporary one if they forgot theirs.</div>
             </div>
-            <button className="btn-ghost" onClick={resetPassword}>Reset password</button>
+            <button className="btn-ghost" onClick={() => void resetPassword()}>Reset password</button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
             {member.active ? (
@@ -176,7 +192,7 @@ export default function EmployeePage() {
                 </div>
                 <button
                   className="rounded-full bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
-                  onClick={() => setActive(false)}
+                  onClick={() => void setActive(false)}
                 >
                   Disable account
                 </button>
@@ -187,7 +203,7 @@ export default function EmployeePage() {
                   <div className="font-bold">Disabled{member.disabledAt && ` on ${formatDate(member.disabledAt)}`}</div>
                   <div className="opacity-60">They can&apos;t sign in.</div>
                 </div>
-                <button className="btn" onClick={() => setActive(true)}>Re-enable</button>
+                <button className="btn" onClick={() => void setActive(true)}>Re-enable</button>
               </>
             )}
           </div>

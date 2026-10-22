@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
 import { roleLabel } from '@/src/lib/roles';
 import {
-  addDays, dayLabel, hoursLabel, shiftHours, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
+  addDays, dayLabel, entryHours, hoursLabel, isRequestedOff, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
 } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 
@@ -34,7 +34,14 @@ export default function SalonSchedulePage() {
   const days = weekDates(weekStart);
   const today = todayIso();
   const thisWeek = weekStartOf(today);
-  const visible = current && (current.published || current.canEdit);
+  // Builders and approvers see drafts and can open the editor.
+  const manages = !!current && (current.canEdit || current.canApprove);
+  const visible = current && (current.published || manages);
+  const status = current && ({
+    DRAFT: ['Draft (staff can’t see it yet)', 'bg-amber-100 text-[var(--warn)]'],
+    PENDING: [`Waiting for approval${current.submittedToName ? ` from ${current.submittedToName}` : ''}`, 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'],
+    POSTED: ['Posted', 'bg-[var(--success-soft)] text-[var(--success)]'],
+  } as const)[current.state];
 
   return (
     <div>
@@ -47,8 +54,10 @@ export default function SalonSchedulePage() {
           {visible && (
             <Link href={`/schedule/print?week=${weekStart}`} className="btn">Print schedule</Link>
           )}
-          {current?.canEdit && (
-            <Link href={`/schedule/edit?week=${weekStart}`} className="btn-ghost">Edit this week</Link>
+          {manages && (
+            <Link href={`/schedule/edit?week=${weekStart}`} className="btn-ghost">
+              {current?.state === 'PENDING' && current.canApprove ? 'Review this week' : 'Edit this week'}
+            </Link>
           )}
         </div>
       </div>
@@ -58,12 +67,8 @@ export default function SalonSchedulePage() {
         <button className="btn-ghost" onClick={() => setWeekStart(thisWeek)} disabled={weekStart === thisWeek}>This week</button>
         <button className="btn-ghost" onClick={() => setWeekStart(addDays(weekStart, 7))}>Next week</button>
         <span className="ml-2 text-lg font-extrabold">Week of {weekRangeLabel(weekStart)}</span>
-        {current?.canEdit && (
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${
-            current.published ? 'bg-[var(--success-soft)] text-[var(--success)]' : 'bg-amber-100 text-[var(--warn)]'
-          }`}>
-            {current.published ? 'Posted' : 'Draft (staff can’t see it yet)'}
-          </span>
+        {manages && status && (
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${status[1]}`}>{status[0]}</span>
         )}
       </div>
 
@@ -94,7 +99,7 @@ export default function SalonSchedulePage() {
                 const mine = person.userId === user?.userId;
                 const total = days.reduce((h, d) => {
                   const s = shiftsByCell.get(`${person.userId}|${d}`);
-                  return h + (s ? shiftHours(s.start, s.end) : 0);
+                  return h + (s ? entryHours(s) : 0);
                 }, 0);
                 return (
                   <tr
@@ -113,7 +118,11 @@ export default function SalonSchedulePage() {
                         <td key={d} className={`px-2 py-3 text-center align-top ${d === today ? 'bg-[var(--surface-2)]/60' : ''}`}>
                           {s ? (
                             <>
-                              <div className="whitespace-nowrap font-semibold">{shiftLabel(s.start, s.end)}</div>
+                              {isRequestedOff(s) ? (
+                                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-[var(--warn)]" title="Requested off">RO</span>
+                              ) : (
+                                <div className="whitespace-nowrap font-semibold">{shiftLabel(s.start!, s.end!)}</div>
+                              )}
                               {s.note && <div className="text-xs opacity-60">{s.note}</div>}
                             </>
                           ) : (
