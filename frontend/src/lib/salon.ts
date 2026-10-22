@@ -32,12 +32,83 @@ export const SALON = {
   instagram: '',
   facebook: '',
 
-  services: [
-    { name: 'Haircuts', blurb: 'Classic cuts and fresh styles for women, men, and kids.' },
-    { name: 'Color', blurb: 'All-over color, gray coverage, and glosses.' },
-    { name: 'Highlights & balayage', blurb: 'Sun-kissed dimension, foils or hand-painted.' },
-    { name: 'Blowouts & styling', blurb: 'Smooth, bouncy, or ready for a big night.' },
-    { name: 'Kids’ cuts', blurb: 'Patient stylists and quick, happy cuts.' },
-    { name: 'Treatments', blurb: 'Deep conditioning and scalp care.' },
-  ],
+  /** Shown under the price menu. Update with the price list. */
+  pricesAsOf: 'June 2025',
+
+  /**
+   * The price menu on the public home page, from "MG June 2025-2.pdf"
+   * (Dropbox > Salon Documents > Pricing > Price Lists). Each price has an
+   * optional label ("starting at", "stand alone", ...) shown before it.
+   */
+  priceList: [
+    {
+      section: 'Haircuts',
+      note: 'Cut, shampoo, hot towel, finger tousle blow-dry',
+      items: [
+        { name: 'Adult', prices: [{ amount: 29 }] },
+        { name: 'Senior', detail: '65+', prices: [{ amount: 27 }] },
+        { name: 'Buzz Cut', detail: 'Same size guard all over', prices: [{ amount: 25 }] },
+        { name: 'Kid', detail: '11 & younger', prices: [{ amount: 27 }] },
+        { name: 'Bang or Beard Trim', prices: [{ amount: 15 }] },
+        { name: 'Neck Trim', prices: [{ amount: 8 }] },
+      ],
+    },
+    {
+      section: 'Color',
+      note: 'Starting at chin length; longer hair and additional color extra',
+      items: [
+        { name: 'Root Retouch 1" Gloss or Permanent Color', detail: 'One step all over color', prices: [{ label: 'starting at', amount: 70 }] },
+        { name: 'Gloss or Permanent Color', detail: 'One step all over color', prices: [{ label: 'starting at', amount: 75 }] },
+        { name: 'Area Foil', detail: '10 foils; highlights or lowlights; one color', prices: [{ label: 'starting at', amount: 65 }] },
+        { name: 'Partial Foil', detail: '30 foils or less; highlights or lowlights; one color', prices: [{ label: 'starting at', amount: 80 }] },
+        { name: 'Full Foil', detail: 'Full head of highlights or lowlights; one color', prices: [{ label: 'starting at', amount: 95 }] },
+        { name: 'Fashion Vivid Tips', detail: '3 inches', prices: [{ label: 'starting at', amount: 65 }] },
+        { name: 'Fashion Vivid Color', detail: 'One color foils or one step all over', prices: [{ label: 'starting at', amount: 100 }] },
+        { name: 'Balayage, Ombre, Specialty Color, Corrective Color', prices: [{ label: 'starting at', amount: 160 }] },
+        { name: 'Eyebrow Tint', prices: [{ amount: 22 }] },
+        { name: 'Men’s Color', prices: [{ label: 'grey blending', amount: 40 }, { label: 'full coverage', amount: 70 }] },
+      ],
+    },
+    {
+      section: 'Treatments',
+      note: 'Shampoo, hot towel, and finger tousle blow-dry',
+      items: [
+        { name: 'Ultimate Healing Treatment', detail: 'Adds moisture, protein or volume', prices: [{ label: 'stand alone', amount: 25 }, { label: 'with any service', amount: 20 }] },
+        { name: 'Keratin Healing Oil Emergency Treatment', detail: 'Provides healing to severely damaged hair', prices: [{ label: 'stand alone', amount: 30 }, { label: 'with any service', amount: 25 }] },
+        { name: 'Malibu Makeover', detail: 'Removes hard water, chlorine or mineral build-up', prices: [{ label: 'stand alone', amount: 30 }, { label: 'with any service', amount: 25 }] },
+      ],
+    },
+    {
+      section: 'Waxing',
+      items: [
+        { name: 'Facial Wax', detail: 'Eyebrow, lip or chin', prices: [{ label: 'each area', amount: 17 }] },
+        { name: 'Unibrow, Nose or Ear Hair Removal', prices: [{ label: 'each area', amount: 10 }] },
+      ],
+    },
+    {
+      section: 'Styling',
+      note: 'Starting at chin length; longer hair and hot tools extra',
+      items: [
+        { name: 'Senior Shampoo Style', detail: '60+, with brush or curling iron, no haircut', prices: [{ label: 'chin length', amount: 27 }] },
+        { name: 'Style with Haircut or Color', prices: [{ label: 'starting at', amount: 10 }] },
+        { name: 'Blow Out without Haircut', detail: 'With or without shampoo', prices: [{ label: 'starting at', amount: 43 }] },
+        { name: 'Textured Hair Style', detail: 'With or without shampoo', prices: [{ label: 'starting at', amount: 70 }] },
+        { name: 'Hot Tools', detail: 'Curling or flat iron, with a blow out or textured style', prices: [{ label: 'add on', amount: 10 }] },
+        { name: 'Updo or Special Occasion Styling', detail: 'Formal styling, updos, braids, etc., including irons; no shampoo', prices: [{ label: 'starting at', amount: 75 }] },
+      ],
+    },
+    {
+      section: 'Texture',
+      note: 'Up to shoulder length',
+      items: [
+        { name: 'Perm', detail: 'Basic wrapped perm; includes finger tousle blow-dry', prices: [{ label: 'starting at', amount: 90 }] },
+      ],
+    },
+  ] as PriceSection[],
+};
+
+export type PriceSection = {
+  section: string;
+  note?: string;
+  items: { name: string; detail?: string; prices: { label?: string; amount: number }[] }[];
 };

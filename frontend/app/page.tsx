@@ -33,24 +33,53 @@ export default function HomePage() {
             )}
             <Link href="#services"
               className="rounded-full bg-white/20 px-6 py-3 font-bold ring-1 ring-white/50 hover:bg-white/30">
-              See our services
+              See services &amp; prices
             </Link>
           </div>
         </div>
       </header>
 
       <main>
-        {/* Services */}
+        {/* Services & prices */}
         <section id="services" className="mx-auto max-w-5xl scroll-mt-20 px-4 py-16">
-          <h2 className="text-3xl font-extrabold tracking-tight">What we do</h2>
-          <p className="mt-2 opacity-70">Ask us anything. We&apos;re happy to talk through what you have in mind.</p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {SALON.services.map((s) => (
-              <div key={s.name} className="card p-5">
-                <h3 className="text-lg font-extrabold">{s.name}</h3>
-                <p className="mt-1 text-sm opacity-75">{s.blurb}</p>
+          <h2 className="text-3xl font-extrabold tracking-tight">Services &amp; prices</h2>
+          <p className="mt-2 opacity-70">Not sure what you need? Ask us. We&apos;re happy to talk through what you have in mind.</p>
+
+          {/* Two balanced columns on wider screens; each section card stays in one piece. */}
+          <div className="mt-8 gap-6 md:columns-2">
+            {SALON.priceList.map((sec) => (
+              <div key={sec.section} className="card mb-6 break-inside-avoid p-5">
+                <h3 className="text-lg font-extrabold uppercase tracking-wide text-[var(--accent-strong)]">{sec.section}</h3>
+                {sec.note && <p className="text-xs italic opacity-60">{sec.note}</p>}
+                <ul className="mt-3 divide-y divide-[var(--border)]">
+                  {sec.items.map((item) => (
+                    <li key={item.name} className="flex items-start justify-between gap-4 py-2.5">
+                      <div className="min-w-0">
+                        <div className="font-semibold leading-snug">{item.name}</div>
+                        {item.detail && <div className="text-xs opacity-60">{item.detail}</div>}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        {item.prices.map((p) => (
+                          <div key={`${p.label}${p.amount}`} className="whitespace-nowrap leading-snug">
+                            {p.label && <span className="mr-1.5 text-xs italic opacity-60">{p.label}</span>}
+                            <span className="font-bold">${p.amount}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="max-w-xl text-xs opacity-60">
+              Prices as of {SALON.pricesAsOf}. &ldquo;Starting at&rdquo; prices can be higher for longer hair or additional color.
+            </p>
+            {SALON.bookingUrl && (
+              <a href={SALON.bookingUrl} target="_blank" rel="noopener noreferrer" className="btn">Book an appointment</a>
+            )}
           </div>
         </section>
 
