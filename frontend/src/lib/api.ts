@@ -2,7 +2,9 @@ import type { UserRole } from './roles';
 
 export type { UserRole };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8084';
+// API calls go to this site's own address; next.config.ts forwards them to the
+// backend (BACKEND_URL). Same address = first-party cookie, so sign-in works on iPhones.
+const BASE = '';
 
 export interface User {
   userId: number;
@@ -257,9 +259,9 @@ export interface AdminStatus {
 }
 
 /**
- * Every call sends `credentials: 'include'` so the session cookie rides
- * cross-origin (Next.js on :3001 → GroveServer on :8084). Errors surface the
- * server's message, e.g. "That team code isn't right".
+ * Every call goes to this site's own address (forwarded to the backend by
+ * next.config.ts) and sends the session cookie. Errors surface the server's
+ * message, e.g. "That team code isn't right".
  */
 async function send<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

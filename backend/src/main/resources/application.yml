@@ -1,5 +1,6 @@
 server:
-  port: ${SERVER_PORT:8084}
+  # Railway sets PORT; locally it falls back to SERVER_PORT or 8084.
+  port: ${PORT:${SERVER_PORT:8084}}
   error:
     # Send our friendly ResponseStatusException messages ("That team code isn't right…") to the UI.
     include-message: always
@@ -56,7 +57,7 @@ app:
   mail:
     # "From" address on emails. Defaults to MAIL_USERNAME (Gmail requires that anyway).
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
-  # true in production (HTTPS, frontend on a different domain) → Secure + SameSite=None.
+  # true in production (HTTPS): the sign-in cookie is only ever sent over HTTPS.
   cookie-secure: ${COOKIE_SECURE:false}
   bunny:
     # Bunny Stream → your video library → API. All blank = uploads disabled.

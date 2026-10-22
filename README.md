@@ -61,8 +61,10 @@ docker compose up -d
 .\mvnw.cmd spring-boot:run
 ```
 
-The frontend needs no settings locally: it talks to `http://localhost:8084`
-by default. (In production, set `NEXT_PUBLIC_API_URL` in Vercel.)
+The frontend needs no settings locally. The browser only talks to the site's
+own address; `next.config.ts` forwards `/api/*`, `/me`, `/login`, `/logout`
+and `/register` to the backend at `BACKEND_URL` (default `http://localhost:8084`).
+That keeps the sign-in cookie first-party, which iPhones/Safari require.
 
 ```powershell
 cd frontend
@@ -82,25 +84,36 @@ Tests use in-memory H2, so no Docker is needed: `.\mvnw.cmd test`.
 
 ## Deploy
 
-**Backend (Railway):** deploy `backend/` with its Dockerfile, plus a MySQL service. Env:
+Works on the free addresses (`*.vercel.app`, `*.up.railway.app`); add a
+custom domain in Vercel later without code changes.
+
+**Backend (Railway):** a project with a **MySQL** database and a service
+deployed from this GitHub repo, **Root Directory `backend`** (it builds the
+Dockerfile). Generate a public domain for the service under Settings → Networking.
+Service variables:
 
 | Var | Value |
 |---|---|
-| `DB_URL` / `DB_USER` / `DB_PASSWORD` | from Railway MySQL (`jdbc:mysql://…`) |
-| `CORS_ALLOWED_ORIGINS` | your Vercel URL, e.g. `https://training.grovesalons.com` |
-| `COOKIE_SECURE` | `true` (needed for the cross-site cookie: Secure + SameSite=None) |
+| `DB_URL` | `jdbc:mysql://${{MySQL.MYSQLHOST}}:${{MySQL.MYSQLPORT}}/${{MySQL.MYSQLDATABASE}}` |
+| `DB_USER` | `${{MySQL.MYSQLUSER}}` |
+| `DB_PASSWORD` | `${{MySQL.MYSQLPASSWORD}}` |
+| `COOKIE_SECURE` | `true` |
 | `TEAM_SIGNUP_CODE` | the code you give staff |
 | `ADMIN_EMAILS` | owners' emails, comma-separated |
-| `BUNNY_*` | from the Bunny setup above |
-| `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | for new-application emails to owners |
-| `APP_FRONTEND_URL` | your Vercel URL, so email links point at the live site |
+| `BUNNY_LIBRARY_ID` / `BUNNY_API_KEY` / `BUNNY_TOKEN_KEY` / `BUNNY_CDN_HOSTNAME` | same as `backend/.env` |
+| `APP_FRONTEND_URL` | the Vercel URL, so email links point at the live site |
+| `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | optional, for notification emails |
 
-**Frontend (Vercel):** root directory `frontend`, env `NEXT_PUBLIC_API_URL` = Railway backend URL.
+Railway sets `PORT` itself; the app reads it. Check `https://<railway domain>/api/health`.
 
-Some browsers (Safari especially) block third-party cookies. If sign-in doesn't
-stick on iPhones, put the frontend and backend on subdomains of one domain
-(e.g. `training.grovesalons.com` + `api.grovesalons.com`). The cookie then
-counts as same-site.
+**Frontend (Vercel):** import this repo with **Root Directory `frontend`** and set
+`BACKEND_URL` = the Railway URL (e.g. `https://grove-server-production.up.railway.app`).
+The project name becomes the address, e.g. `grove-salons.vercel.app`.
+
+**Bunny:** add the Vercel address under the library's Security → *Allowed referrers*.
+
+The live database starts empty: sign up again with the team code (owners via
+`ADMIN_EMAILS`), then re-add videos, team details, and schedules.
 
 ## Expected cost
 

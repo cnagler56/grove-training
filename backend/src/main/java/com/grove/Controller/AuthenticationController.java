@@ -22,9 +22,9 @@ import com.grove.Service.UserService;
  * Cookie-session auth. Register / login mint a server-side session and set an
  * HttpOnly cookie; /me resolves the current user from it; /logout clears it.
  *
- * Locally the cookie is SameSite=Lax. In production the frontend (Vercel) and
- * backend (Railway) are different sites, so COOKIE_SECURE=true switches it to
- * Secure + SameSite=None — otherwise the browser won't send it on API calls.
+ * The website forwards API calls to this backend (next.config.ts), so the
+ * browser sees one site and the cookie is first-party: SameSite=Lax always.
+ * In production COOKIE_SECURE=true also marks it Secure (HTTPS only).
  */
 @RestController
 public class AuthenticationController {
@@ -77,7 +77,7 @@ public class AuthenticationController {
 		return ResponseCookie.from(SessionService.COOKIE_NAME, value)
 			.httpOnly(true)
 			.secure(secureCookie)
-			.sameSite(secureCookie ? "None" : "Lax")
+			.sameSite("Lax")
 			.path("/")
 			.maxAge(maxAge)
 			.build();
