@@ -26,10 +26,13 @@ export default function PublicNav() {
           <Link href="/#visit" className="hidden rounded-full px-3 py-1.5 font-semibold opacity-75 hover:bg-[var(--surface-2)] hover:opacity-100 sm:inline">
             Visit
           </Link>
-          <Link href="/apply" className="rounded-full px-3 py-1.5 font-semibold opacity-75 hover:bg-[var(--surface-2)] hover:opacity-100">
+          <Link href="/apply" className="hidden rounded-full px-3 py-1.5 font-semibold opacity-75 hover:bg-[var(--surface-2)] hover:opacity-100 sm:inline">
             Join our team
           </Link>
-          <Link href={signedIn ? '/home' : '/signin'} className="btn">
+          {SALON.bookingUrl && (
+            <a href={SALON.bookingUrl} target="_blank" rel="noopener noreferrer" className="btn">Book now</a>
+          )}
+          <Link href={signedIn ? '/home' : '/signin'} className="btn-ghost">
             {signedIn ? 'My home' : 'Sign in'}
           </Link>
         </div>

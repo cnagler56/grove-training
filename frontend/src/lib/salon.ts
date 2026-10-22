@@ -27,7 +27,7 @@ export const SALON = {
     ['10:00', '20:00'], ['10:00', '18:00'], ['09:00', '17:00'],
   ] as [string, string][],
   /** Online booking link, if you have one. */
-  bookingUrl: '',
+  bookingUrl: 'https://fsnagel.bookedby.com/new-order/select-service?storeUid=fcffab0b-af9c-4c79-b49c-7b84f71777f7',
   /** Full Instagram/Facebook links. */
   instagram: '',
   facebook: '',
