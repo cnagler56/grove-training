@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, type RosterEntry, type ShiftInput, type WeekSchedule } from '@/src/lib/api';
-import { roleLabel } from '@/src/lib/roles';
 import CoverageRows from '@/src/components/CoverageRows';
 import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
@@ -333,10 +332,7 @@ function ScheduleEditor() {
               }, 0);
               return (
                 <tr key={m.userId} className={startsReceptionists(staff, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''}>
-                  <td className="px-4 py-2">
-                    <div className="font-bold">{m.name}</div>
-                    <div className="text-xs opacity-60">{roleLabel(m.role)}</div>
-                  </td>
+                  <td className="whitespace-nowrap px-4 py-2 font-bold">{m.name}</td>
                   {days.map((d) => {
                     const k = key(m.userId, d);
                     const c = cells[k];
