@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { api, type NewEmployee, type TeamMember, type UserRole } from '@/src/lib/api';
 import { displayPhone, employeeName, formatPhone } from '@/src/lib/format';
+import DateField from '@/src/components/DateField';
 import { ROLES } from '@/src/lib/roles';
 
 const today = () => new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD" in local time
@@ -103,8 +104,8 @@ function AddEmployee() {
           <Field label="Last name" value={form.lastName} onChange={set('lastName')} />
           <Field label="Email" hint="What they'll sign in with" type="email" value={form.email} onChange={set('email')} required />
           <Field label="Phone" type="tel" value={form.phone} onChange={(v) => set('phone')(formatPhone(v))} />
-          <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
-          <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
+          <DateField label="Hire date" value={form.hireDate} onChange={(hireDate) => setForm({ ...form, hireDate })} />
+          <DateField label="Birthday" value={form.birthday} onChange={(birthday) => setForm({ ...form, birthday })} max={today()} />
           <label className="block text-sm">
             <span className="mb-1 block font-semibold opacity-80">Role</span>
             <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}>

@@ -7,6 +7,7 @@ import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src
 import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { displayPhone, employeeName, formatDate, formatPhone, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
+import DateField from '@/src/components/DateField';
 import { useDialogs } from '@/src/components/Dialogs';
 
 const today = () => new Date().toLocaleDateString('en-CA'); // "YYYY-MM-DD" in local time
@@ -149,8 +150,8 @@ export default function EmployeePage() {
               required
             />
             <Field label="Phone" type="tel" value={form.phone} onChange={(v) => set('phone')(formatPhone(v))} placeholder="555-555-0100" />
-            <Field label="Hire date" type="date" value={form.hireDate} onChange={set('hireDate')} />
-            <Field label="Birthday" type="date" value={form.birthday} onChange={set('birthday')} max={today()} />
+            <DateField label="Hire date" value={form.hireDate} onChange={(hireDate) => setForm({ ...form, hireDate })} />
+            <DateField label="Birthday" value={form.birthday} onChange={(birthday) => setForm({ ...form, birthday })} max={today()} />
           </fieldset>
           {editable && (
             <button type="submit" className="btn" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
