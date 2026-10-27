@@ -9,6 +9,7 @@ import { canManageSite, roleLabel } from '@/src/lib/roles';
 import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
+import InstallAppCard from '@/src/components/InstallAppCard';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -190,6 +191,8 @@ export default function StaffHomePage() {
           </div>
         </section>
       )}
+
+      {isStaff && <InstallAppCard />}
 
       {!isStaff && (
         <p className="card p-5 text-sm opacity-80">
