@@ -89,6 +89,8 @@ export interface TeamMember {
   disabledAt: string | null;
   /** Off the schedule (time off) since this date, "YYYY-MM-DD"; null = on the schedule. */
   inactiveSince: string | null;
+  /** Their name as Salon Ultimate shows it; links their weekly numbers. Null = not linked. */
+  salonUltimateName: string | null;
   videosCompleted: number;
   createdAt: string | null;
 }
@@ -255,6 +257,59 @@ export interface JobApplication {
   createdAt: string;
 }
 
+/** One week of someone's numbers from Salon Ultimate. Money in dollars. */
+export interface StatLine {
+  weekStart: string;
+  /** Service sales before discounts. */
+  serviceSales: number;
+  netServiceSales: number;
+  retailSales: number;
+  productPerGuest: number;
+  floorHours: number;
+  offFloorHours: number;
+  /** Service sales per floor hour; null with no floor hours. */
+  serviceSalesPerHour: number | null;
+}
+
+export interface StatsImport {
+  weekStart: string;
+  status: 'OK' | 'BLOCKED' | 'FAILED' | 'NOT_CONFIGURED';
+  message: string | null;
+  rowCount: number | null;
+  attemptedAt: string;
+}
+
+/** The signed-in person's weeks, newest first. */
+export interface MyStats {
+  linked: boolean;
+  salonUltimateName: string | null;
+  weeks: StatLine[];
+}
+
+export interface TeamStatRow {
+  suName: string;
+  /** The linked site account, if any. */
+  userId: number | null;
+  name: string;
+  stats: StatLine;
+}
+
+/** Everyone's numbers for one week (managers and up). */
+export interface TeamStats {
+  weekStart: string;
+  latestCompleteWeek: string;
+  weeks: string[];
+  configured: boolean;
+  lastImport: StatsImport | null;
+  rows: TeamStatRow[];
+}
+
+export interface SalonUltimateName {
+  name: string;
+  linkedUserId: number | null;
+  linkedTo: string | null;
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -337,6 +392,14 @@ export const api = {
     send<TeamMember>(`/api/admin/team/${userId}/details`, 'PUT', d),
   updateMember: (userId: number, change: { active?: boolean; role?: UserRole; inactive?: boolean }) =>
     send<TeamMember>(`/api/admin/team/${userId}`, 'PUT', change),
+  linkSalonUltimate: (userId: number, name: string | null) =>
+    send<TeamMember>(`/api/admin/team/${userId}/salon-ultimate`, 'PUT', { name }),
+
+  myStats: () => send<MyStats>('/api/stats/mine'),
+  teamStats: (week?: string) => send<TeamStats>(`/api/stats/team${week ? `?week=${week}` : ''}`),
+  pullStats: (week: string) => send<StatsImport>(`/api/stats/import?week=${week}`, 'POST'),
+  salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),
+
   resetPassword: (userId: number, password: string) =>
     send<void>(`/api/admin/team/${userId}/password`, 'POST', { password }),
 };

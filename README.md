@@ -25,6 +25,14 @@ this app only stores titles, categories, who's watched what, and accounts.
 - **Watching:** employees see READY videos grouped by category, and can mark
   them watched. Player URLs are signed and expire after 4 hours (with
   Bunny's embed token auth on), so a copied link stops working.
+- **Weekly numbers:** every Saturday morning (salon time) the backend signs in to
+  Salon Ultimate and pulls each employee's numbers for the week that just ended
+  (service and retail sales, product per guest, hours) from the "Calculate Gross Pay"
+  report. Staff see only their own on **My week**; managers and up see everyone on
+  **Leaderboards** and can pull any past week. Link each person to their Salon
+  Ultimate name on their Team page (exact name matches link automatically). If a
+  timecard is still open, Salon Ultimate refuses the report and Leaderboards says
+  which one to close.
 - **Tracking:** each video page shows managers who has watched it. The Team
   page shows how many videos each person has watched.
 
@@ -104,6 +112,7 @@ Service variables:
 | `APP_FRONTEND_URL` | the Vercel URL, so email links point at the live site |
 | `CORS_ALLOWED_ORIGINS` | the Vercel URL(s), comma-separated, e.g. `https://grove-salons.vercel.app`. Without it, sign-up, sign-in, and saves get 403. |
 | `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | optional, for notification emails |
+| `SALON_ULTIMATE_USERNAME` / `SALON_ULTIMATE_PASSWORD` | optional, the Salon Ultimate sign-in used to pull weekly numbers |
 
 Railway sets `PORT` itself; the app reads it. Check `https://<railway domain>/api/health`.
 

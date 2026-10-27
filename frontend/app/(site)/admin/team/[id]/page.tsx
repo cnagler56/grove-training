@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { api, type EmployeeDetails, type TeamMember, type UserRole } from '@/src/lib/api';
-import { canManage, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
+import { api, type EmployeeDetails, type SalonUltimateName, type TeamMember, type UserRole } from '@/src/lib/api';
+import { canManage, canManageSite, roleOptions, roleBadgeClass, roleLabel } from '@/src/lib/roles';
 import { displayPhone, employeeName, formatDate, formatPhone, tenure } from '@/src/lib/format';
 import { useUser } from '@/src/lib/UserContext';
 import DateField from '@/src/components/DateField';
@@ -42,6 +42,12 @@ export default function EmployeePage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Names Salon Ultimate has reported, for linking this person to their weekly numbers.
+  const [suNames, setSuNames] = useState<SalonUltimateName[]>([]);
+  const managesSite = canManageSite(user?.roles);
+  useEffect(() => {
+    if (managesSite) api.salonUltimateNames().then(setSuNames).catch(() => {});
+  }, [managesSite]);
 
   const apply = useCallback((m: TeamMember) => {
     setMember(m);
@@ -175,6 +181,36 @@ export default function EmployeePage() {
                   {roleOptions(user.roles, member.role).map(({ value: r }) => (
                     <option key={r} value={r}>{roleLabel(r)}</option>
                   ))}
+                </select>
+              </Row>
+              <Row
+                title="Salon Ultimate"
+                hint={suNames.length === 0 && !member.salonUltimateName
+                  ? 'Names show up here after the first weekly pull.'
+                  : 'Links them to their weekly numbers.'}
+              >
+                <select
+                  aria-label="Salon Ultimate name"
+                  value={member.salonUltimateName ?? ''}
+                  onChange={(e) => {
+                    const name = e.target.value || null;
+                    void run(() => api.linkSalonUltimate(userId, name),
+                      name ? `Linked to ${name} in Salon Ultimate.` : 'No longer linked to Salon Ultimate.');
+                  }}
+                  className="input w-auto max-w-[14rem] cursor-pointer py-1.5"
+                >
+                  <option value="">Not linked</option>
+                  {member.salonUltimateName && !suNames.some((n) => n.name === member.salonUltimateName) && (
+                    <option value={member.salonUltimateName}>{member.salonUltimateName}</option>
+                  )}
+                  {suNames.map((n) => {
+                    const takenBy = n.linkedUserId !== null && n.linkedUserId !== userId ? n.linkedTo : null;
+                    return (
+                      <option key={n.name} value={n.name} disabled={!!takenBy}>
+                        {n.name}{takenBy ? ` (${takenBy})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </Row>
               {member.active && (member.inactiveSince ? (

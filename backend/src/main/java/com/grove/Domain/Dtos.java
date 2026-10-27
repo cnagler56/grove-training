@@ -1,5 +1,6 @@
 package com.grove.Domain;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -63,6 +64,8 @@ public final class Dtos {
 		LocalDateTime disabledAt,
 		/** Off the schedule since this date (time off); null = on the schedule. */
 		LocalDate inactiveSince,
+		/** Name as Salon Ultimate shows it; links their weekly numbers. */
+		String salonUltimateName,
 		long videosCompleted,
 		LocalDateTime createdAt) {}
 
@@ -190,4 +193,39 @@ public final class Dtos {
 
 	/** Whether uploads are wired up — the admin page shows setup help when false. */
 	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}
+	/** One week of someone's numbers. {@code serviceSalesPerHour} is service sales ÷ floor hours (null with no hours). */
+	public record StatLine(
+		LocalDate weekStart,
+		BigDecimal serviceSales,
+		BigDecimal netServiceSales,
+		BigDecimal retailSales,
+		BigDecimal productPerGuest,
+		BigDecimal floorHours,
+		BigDecimal offFloorHours,
+		BigDecimal serviceSalesPerHour) {}
+
+	/** How the last pull of a week went. */
+	public record StatsImportView(LocalDate weekStart, String status, String message, Integer rowCount, LocalDateTime attemptedAt) {}
+
+	/** The signed-in person's own weeks, newest first. {@code linked=false}: no Salon Ultimate name set yet. */
+	public record MyStats(boolean linked, String salonUltimateName, List<StatLine> weeks) {}
+
+	/** One person on the leaderboard. {@code userId} is null if no site account is linked to this name. */
+	public record TeamStatRow(String suName, Long userId, String name, StatLine stats) {}
+
+	/** Everyone's numbers for one week (managers and up). */
+	public record TeamStats(
+		LocalDate weekStart,
+		/** The latest week that has finished (the one pulled automatically on Saturday). */
+		LocalDate latestCompleteWeek,
+		/** Every week with numbers, newest first. */
+		List<LocalDate> weeks,
+		boolean configured,
+		StatsImportView lastImport,
+		List<TeamStatRow> rows) {}
+
+	/** A name from Salon Ultimate and who on the site it's linked to, for the Team page picker. */
+	public record SalonUltimateName(String name, Long linkedUserId, String linkedTo) {}
+
+	public record SalonUltimateLink(String name) {}
 }

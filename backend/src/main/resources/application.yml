@@ -59,6 +59,12 @@ app:
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
   # true in production (HTTPS): the sign-in cookie is only ever sent over HTTPS.
   cookie-secure: ${COOKIE_SECURE:false}
+  # Salon Ultimate sign-in for pulling each employee's weekly numbers (Saturday mornings).
+  # Blank username/password = off.
+  salon-ultimate:
+    url: ${SALON_ULTIMATE_URL:https://fsnagel.salonultimate.com}
+    username: ${SALON_ULTIMATE_USERNAME:}
+    password: ${SALON_ULTIMATE_PASSWORD:}
   bunny:
     # Bunny Stream → your video library → API. All blank = uploads disabled.
     library-id: ${BUNNY_LIBRARY_ID:}

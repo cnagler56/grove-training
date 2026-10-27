@@ -125,6 +125,13 @@ public class UserService {
 		return toTeamMember(find(userId));
 	}
 
+	/** {@code userId}'s account, if {@code actor} may change it (themselves, or someone ranked below them). */
+	public User manageable(User actor, Long userId) {
+		User user = find(userId);
+		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
+		return user;
+	}
+
 	/**
 	 * Disable/re-enable someone or change their role. You can only change people
 	 * ranked below you and only give roles below your own; an owner can do
@@ -274,7 +281,7 @@ public class UserService {
 	private TeamMember toTeamMember(User u) {
 		return new TeamMember(u.getUserId(), u.getFirstName(), u.getLastName(), u.getEmail(),
 			u.getPhone(), u.getHireDate(), u.getBirthday(), u.getRoles(), u.isActive(), u.getDisabledAt(),
-			u.getInactiveSince(), completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
+			u.getInactiveSince(), u.getSalonUltimateName(), completionRepo.countByUserId(u.getUserId()), u.getCreatedAt());
 	}
 
 	private static void validatePassword(String password) {

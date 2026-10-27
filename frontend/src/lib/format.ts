@@ -56,3 +56,12 @@ export function displayPhone(phone: string | null): string {
   const f = formatPhone(phone);
   return f.length === 12 ? f : phone;
 }
+
+/** "$1,403" (whole dollars). */
+export const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+
+/** "$2.58" (with cents, for small amounts like product per guest). */
+export const moneyCents = (n: number) => `$${n.toFixed(2)}`;
+
+/** "33.9" hours. */
+export const hours = (n: number) => (Math.round(n * 10) / 10).toLocaleString('en-US');

@@ -74,6 +74,10 @@ public class User {
 	@Column(name = "inactive_since")
 	private LocalDate inactiveSince;
 
+	/** Their name as Salon Ultimate shows it ("Brittani Brasted"), linking them to their weekly numbers. */
+	@Column(name = "salon_ultimate_name", length = 120)
+	private String salonUltimateName;
+
 	public Long getUserId() { return userId; }
 	public void setUserId(Long userId) { this.userId = userId; }
 
@@ -113,6 +117,9 @@ public class User {
 
 	public LocalDate getInactiveSince() { return inactiveSince; }
 	public void setInactiveSince(LocalDate inactiveSince) { this.inactiveSince = inactiveSince; }
+
+	public String getSalonUltimateName() { return salonUltimateName; }
+	public void setSalonUltimateName(String salonUltimateName) { this.salonUltimateName = salonUltimateName; }
 
 	@JsonIgnore
 	public boolean isAdmin() { return roles.canManageSite(); }
