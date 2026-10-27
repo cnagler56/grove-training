@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { DialogProvider } from "@/src/components/Dialogs";
 
 // Rounded, friendly sans for the whole site.
@@ -20,6 +21,8 @@ export default function RootLayout({
     <html lang="en" className={nunito.variable}>
       <body>
         <DialogProvider>{children}</DialogProvider>
+        {/* Page views for Vercel's Analytics tab. Turned on per project in Vercel; does nothing locally. */}
+        <Analytics />
       </body>
     </html>
   );
