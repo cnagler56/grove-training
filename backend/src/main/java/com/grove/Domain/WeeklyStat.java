@@ -16,7 +16,7 @@ import jakarta.persistence.UniqueConstraint;
 /**
  * One employee's numbers for one Saturday-to-Friday week, pulled from Salon
  * Ultimate's "Calculate Gross Pay" report. Keyed by the name Salon Ultimate
- * shows ("Brittani Brasted"); a site account is linked through
+ * shows ("Ava Stone"); a site account is linked through
  * {@link User#getSalonUltimateName()}. Rows are kept forever so weeks can be compared.
  */
 @Entity

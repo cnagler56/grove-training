@@ -5,6 +5,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** Request/response shapes for the video and team APIs. */
 public final class Dtos {
@@ -202,7 +205,11 @@ public final class Dtos {
 		BigDecimal productPerGuest,
 		BigDecimal floorHours,
 		BigDecimal offFloorHours,
-		BigDecimal serviceSalesPerHour) {}
+		BigDecimal serviceSalesPerHour,
+		/** Production per hour as payroll figures it: (after-discount sales + 20% of discounts) ÷ floor hours. */
+		BigDecimal pph,
+		/** That week's hourly rate from the pay matrix and their code. Only ever sent to the employee themselves. */
+		BigDecimal payRate) {}
 
 	/** How the last pull of a week went. */
 	public record StatsImportView(LocalDate weekStart, String status, String message, Integer rowCount, LocalDateTime attemptedAt) {}
@@ -228,4 +235,19 @@ public final class Dtos {
 	public record SalonUltimateName(String name, Long linkedUserId, String linkedTo) {}
 
 	public record SalonUltimateLink(String name) {}
+
+	/** A matrix step as it appears in the payroll skill's matrix.json. */
+	public record PayMatrixEntry(BigDecimal pph, BigDecimal rate) {}
+
+	/** A pay code as it appears in the payroll skill's employee_codes.json. */
+	public record PayCodeEntry(Integer code, BigDecimal premium, @JsonProperty("flat_rate") BigDecimal flatRate) {}
+
+	/** The owner loading the skill's two files. {@code codes} is keyed "Last, First", like the file. */
+	public record PayRulesUpload(List<PayMatrixEntry> matrix, Map<String, PayCodeEntry> codes) {}
+
+	/** One person's code on the owner's Settings page ("First Last", as Salon Ultimate shows it). */
+	public record PayCodeView(String name, Integer code, BigDecimal premium, BigDecimal flatRate) {}
+
+	/** What's loaded, for the owner's Settings page. */
+	public record PayRules(List<PayMatrixEntry> matrix, List<PayCodeView> codes) {}
 }

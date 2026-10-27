@@ -10,7 +10,7 @@ import { canManageSite } from '@/src/lib/roles';
 const TABS = [{ href: '/home', label: 'Home' }];
 const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
 const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
-/** Their own numbers from Salon Ultimate. Owners aren't in it, so they don't get the tab. */
+/** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
 const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
@@ -21,6 +21,8 @@ const OWNER_TABS = [
   { href: '/admin/applicants', label: 'Applicants' },
   { href: '/admin/settings', label: 'Settings' },
 ];
+
+const hasMyWeek = (r: string | undefined) => !!r && !['CUSTOMER', 'OWNER', 'RECEPTIONIST'].includes(r);
 
 /** The Schedule tab: anyone the owner lets see, build, or approve the schedule. */
 const seesSchedule = (p: { viewSchedule: boolean; editSchedule: boolean; approveSchedule: boolean }) =>
@@ -34,7 +36,7 @@ function Header() {
     ...TABS,
     ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
     ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
-    ...(user && user.roles !== 'CUSTOMER' && !isOwner ? MY_WEEK_TABS : []),
+    ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -113,7 +115,8 @@ function Gate({ children }: { children: React.ReactNode }) {
   // Applicants, adding accounts, and Settings are for owners only.
   const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new'
     || pathname.startsWith('/admin/settings');
-  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/my-week');
+  const needsStaff = pathname.startsWith('/videos');
+  const needsMyWeek = pathname.startsWith('/my-week');
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');
@@ -121,6 +124,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     (needsAdmin && !canManageSite(user.roles))
     || (needsOwner && user.roles !== 'OWNER')
     || (needsStaff && user.roles === 'CUSTOMER')
+    || (needsMyWeek && !hasMyWeek(user.roles))
     || (needsScheduleView && !seesSchedule(perms))
     || (needsScheduleEdit && !perms.editSchedule && !perms.approveSchedule));
 

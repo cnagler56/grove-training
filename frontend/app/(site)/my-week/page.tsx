@@ -16,10 +16,11 @@ type Metric = {
 };
 
 const METRICS: Metric[] = [
+  { label: 'Pay rate', value: (s) => s.payRate, format: (n) => `${moneyCents(n)}/hr`, hint: 'This week, from your PPH' },
+  { label: 'PPH', value: (s) => (s.floorHours > 0 ? s.pph : null), format: moneyCents, hint: 'Production per hour, as payroll figures it' },
   { label: 'Service sales', value: (s) => s.serviceSales, format: money, hint: 'Before discounts' },
   { label: 'Retail sales', value: (s) => s.retailSales, format: money },
   { label: 'Product per guest', value: (s) => s.productPerGuest, format: moneyCents },
-  { label: 'Service sales per hour', value: (s) => s.serviceSalesPerHour, format: moneyCents, hint: 'Per floor hour' },
   { label: 'Floor hours', value: (s) => s.floorHours, format: hours },
 ];
 
@@ -65,7 +66,7 @@ export default function MyWeekPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {METRICS.map((m) => {
+            {METRICS.filter((m) => m.label !== 'Pay rate' || week.payRate !== null).map((m) => {
               const now = m.value(week);
               const prev = before ? m.value(before) : null;
               const pastValues = earlier.map(m.value).filter((n): n is number => n !== null);
@@ -96,7 +97,8 @@ export default function MyWeekPage() {
                   <th className="px-3 py-2 text-right font-semibold">Service</th>
                   <th className="px-3 py-2 text-right font-semibold">Retail</th>
                   <th className="px-3 py-2 text-right font-semibold">Per guest</th>
-                  <th className="px-3 py-2 text-right font-semibold">Per hour</th>
+                  <th className="px-3 py-2 text-right font-semibold">PPH</th>
+                  {weeks.some((w) => w.payRate !== null) && <th className="px-3 py-2 text-right font-semibold">Rate</th>}
                   <th className="px-5 py-2 text-right font-semibold">Hours</th>
                 </tr>
               </thead>
@@ -111,7 +113,10 @@ export default function MyWeekPage() {
                     <td className="px-3 py-2 text-right">{money(w.serviceSales)}</td>
                     <td className="px-3 py-2 text-right">{money(w.retailSales)}</td>
                     <td className="px-3 py-2 text-right">{moneyCents(w.productPerGuest)}</td>
-                    <td className="px-3 py-2 text-right">{w.serviceSalesPerHour === null ? '' : moneyCents(w.serviceSalesPerHour)}</td>
+                    <td className="px-3 py-2 text-right">{w.floorHours > 0 ? moneyCents(w.pph) : ''}</td>
+                    {weeks.some((x) => x.payRate !== null) && (
+                      <td className="px-3 py-2 text-right">{w.payRate === null ? '' : moneyCents(w.payRate)}</td>
+                    )}
                     <td className="px-5 py-2 text-right">{hours(w.floorHours)}</td>
                   </tr>
                 ))}

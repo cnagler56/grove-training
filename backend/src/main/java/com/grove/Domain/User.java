@@ -74,7 +74,7 @@ public class User {
 	@Column(name = "inactive_since")
 	private LocalDate inactiveSince;
 
-	/** Their name as Salon Ultimate shows it ("Brittani Brasted"), linking them to their weekly numbers. */
+	/** Their name as Salon Ultimate shows it ("Ava Stone"), linking them to their weekly numbers. */
 	@Column(name = "salon_ultimate_name", length = 120)
 	private String salonUltimateName;
 

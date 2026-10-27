@@ -24,6 +24,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.grove.Domain.Role;
+import com.grove.Repository.PayCodeRepository;
+import com.grove.Repository.PayMatrixRepository;
 import com.grove.Repository.StatsImportRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
@@ -44,6 +46,8 @@ class StatsTests {
 	@Autowired WeeklyStatRepository stats;
 	@Autowired StatsImportRepository imports;
 	@Autowired StatsService statsService;
+	@Autowired PayMatrixRepository payMatrix;
+	@Autowired PayCodeRepository payCodes;
 	@MockBean SalonUltimateClient salonUltimate;
 	@MockBean JavaMailSender mailSender;
 
@@ -51,6 +55,8 @@ class StatsTests {
 	void clean() throws Exception {
 		stats.deleteAll();
 		imports.deleteAll();
+		payMatrix.deleteAll();
+		payCodes.deleteAll();
 		sessions.deleteAll();
 		users.deleteAll();
 		when(salonUltimate.isConfigured()).thenReturn(true);
@@ -101,6 +107,42 @@ class StatsTests {
 	}
 
 	@Test
+	void eachStylistSeesOnlyTheirOwnPayRate() throws Exception {
+		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
+		Cookie ava = signUp("ava@grove.test", "Ava", "Stone");
+		Cookie manager = signUp("manager@grove.test", "Max", "Lee");
+		Cookie desk = signUp("desk@grove.test", "Dee", "Desk");
+		setRole("manager@grove.test", Role.MANAGER);
+		setRole("desk@grove.test", Role.RECEPTIONIST);
+		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
+			.andExpect(jsonPath("$.status").value("OK"));
+
+		// No pay tables yet: no rate.
+		mvc.perform(get("/api/stats/mine").cookie(ava)).andExpect(jsonPath("$.weeks[0].payRate").doesNotExist());
+
+		String rules = "{\"matrix\":[{\"pph\":0,\"rate\":16},{\"pph\":38,\"rate\":17},{\"pph\":40,\"rate\":18}],"
+			+ "\"codes\":{\"Stone, Ava\":{\"code\":2,\"premium\":0.5},\"Desk, Dee\":{\"code\":15,\"flat_rate\":14}}}";
+		mvc.perform(put("/api/owner/pay-rules").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(rules))
+			.andExpect(status().isForbidden());
+		mvc.perform(put("/api/owner/pay-rules").cookie(owner).contentType(MediaType.APPLICATION_JSON).content(rules))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.matrix.length()").value(3))
+			.andExpect(jsonPath("$.codes[0].name").value("Ava Stone"));
+
+		// (1150.50 + 49.50 × 0.2) ÷ 30.5 = 38.05 PPH → $17 step + $0.50 premium.
+		mvc.perform(get("/api/stats/mine").cookie(ava))
+			.andExpect(jsonPath("$.weeks[0].pph").value(38.05))
+			.andExpect(jsonPath("$.weeks[0].payRate").value(17.50));
+		// Managers see PPH on the leaderboards, never anyone's rate.
+		mvc.perform(get("/api/stats/team").cookie(manager))
+			.andExpect(jsonPath("$.rows[0].stats.pph").exists())
+			.andExpect(jsonPath("$.rows[0].stats.payRate").doesNotExist());
+		mvc.perform(get("/api/owner/pay-rules").cookie(manager)).andExpect(status().isForbidden());
+		// Receptionists don't get My week.
+		mvc.perform(get("/api/stats/mine").cookie(desk)).andExpect(status().isForbidden());
+	}
+
+	@Test
 	void openTimecardsAreReportedInsteadOfSavingNothing() throws Exception {
 		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
 		when(salonUltimate.weekReport(any(), any())).thenReturn(
@@ -115,6 +157,12 @@ class StatsTests {
 		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
 		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().plusWeeks(1).toString()).cookie(owner))
 			.andExpect(status().isBadRequest());
+	}
+
+	private void setRole(String email, Role role) {
+		var u = users.findByEmail(email).orElseThrow();
+		u.setRoles(role);
+		users.save(u);
 	}
 
 	private Cookie signUp(String email, String first, String last) throws Exception {

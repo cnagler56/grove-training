@@ -269,6 +269,22 @@ export interface StatLine {
   offFloorHours: number;
   /** Service sales per floor hour; null with no floor hours. */
   serviceSalesPerHour: number | null;
+  /** Production per hour as payroll figures it: (after-discount sales + 20% of discounts) ÷ floor hours. */
+  pph: number;
+  /** That week's hourly rate. Only on the employee's own My week; null elsewhere or before pay rules are loaded. */
+  payRate: number | null;
+}
+
+/** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */
+export interface PayRules {
+  matrix: { pph: number; rate: number }[];
+  codes: { name: string; code: number | null; premium: number | null; flatRate: number | null }[];
+}
+
+/** The skill's two files, as-is: matrix.json and employee_codes.json. */
+export interface PayRulesUpload {
+  matrix: { pph: number; rate: number }[];
+  codes: Record<string, { code?: number; premium?: number; flat_rate?: number }>;
 }
 
 export interface StatsImport {
@@ -398,6 +414,8 @@ export const api = {
   myStats: () => send<MyStats>('/api/stats/mine'),
   teamStats: (week?: string) => send<TeamStats>(`/api/stats/team${week ? `?week=${week}` : ''}`),
   pullStats: (week: string) => send<StatsImport>(`/api/stats/import?week=${week}`, 'POST'),
+  payRules: () => send<PayRules>('/api/owner/pay-rules'),
+  loadPayRules: (u: PayRulesUpload) => send<PayRules>('/api/owner/pay-rules', 'PUT', u),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),
 
   resetPassword: (userId: number, password: string) =>

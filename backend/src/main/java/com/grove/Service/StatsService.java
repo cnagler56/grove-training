@@ -56,14 +56,16 @@ public class StatsService {
 	private final StatsImportRepository imports;
 	private final UserRepository users;
 	private final SalonUltimateClient salonUltimate;
+	private final PayService pay;
 	private final ZoneId zone;
 
 	public StatsService(WeeklyStatRepository stats, StatsImportRepository imports, UserRepository users,
-			SalonUltimateClient salonUltimate, @Value("${app.time-zone:America/Chicago}") String zone) {
+			SalonUltimateClient salonUltimate, PayService pay, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.stats = stats;
 		this.imports = imports;
 		this.users = users;
 		this.salonUltimate = salonUltimate;
+		this.pay = pay;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -141,12 +143,14 @@ public class StatsService {
 		return record(new StatsImport(weekStart, Status.OK, null, rows.size(), now));
 	}
 
-	/** The viewer's own weeks, newest first. */
+	/** The viewer's own weeks, newest first, with each week's pay rate (only ever shown to them). */
 	public MyStats mine(User viewer) {
 		catchUp();
 		String name = viewer.getSalonUltimateName();
 		if (name == null || name.isBlank()) return new MyStats(false, null, List.of());
-		return new MyStats(true, name, stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(name).stream().map(StatsService::line).toList());
+		var rates = pay.rates(name);
+		return new MyStats(true, name, stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(name).stream()
+			.map(s -> line(s, rates.apply(s))).toList());
 	}
 
 	/** Everyone's numbers for one week (latest finished week by default). */
@@ -158,7 +162,7 @@ public class StatsService {
 		List<TeamStatRow> rows = stats.findByWeekStart(shown).stream()
 			.map(s -> {
 				User u = linked.get(s.getSuName().toLowerCase());
-				return new TeamStatRow(s.getSuName(), u == null ? null : u.getUserId(), u == null ? s.getSuName() : name(u), line(s));
+				return new TeamStatRow(s.getSuName(), u == null ? null : u.getUserId(), u == null ? s.getSuName() : name(u), line(s, null));
 			})
 			.sorted(Comparator.comparing((TeamStatRow r) -> r.stats().serviceSales()).reversed())
 			.toList();
@@ -239,12 +243,13 @@ public class StatsService {
 		return s;
 	}
 
-	static StatLine line(WeeklyStat s) {
+	/** One week's numbers; {@code payRate} is null except on the employee's own page. */
+	static StatLine line(WeeklyStat s, BigDecimal payRate) {
 		BigDecimal hours = zeroIfNull(s.getFloorHours());
 		BigDecimal sales = zeroIfNull(s.getServiceSales());
 		BigDecimal perHour = hours.signum() > 0 ? sales.divide(hours, 2, RoundingMode.HALF_UP) : null;
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
-			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour);
+			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate);
 	}
 
 	private static BigDecimal zeroIfNull(BigDecimal n) {

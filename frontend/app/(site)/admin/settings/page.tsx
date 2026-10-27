@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import PayRulesCard from '@/src/components/PayRulesCard';
 import { api, type PermissionKey, type PermissionRule, type UserRole } from '@/src/lib/api';
 import { ROLES } from '@/src/lib/roles';
 
@@ -104,6 +105,8 @@ export default function SettingsPage() {
       <p className="mt-4 text-xs opacity-60">
         Owners always have every permission. Customers can&apos;t be given schedule access.
       </p>
+
+      <PayRulesCard />
     </div>
   );
 }

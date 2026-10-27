@@ -21,6 +21,7 @@ import com.grove.Domain.Dtos.SalonUltimateName;
 import com.grove.Domain.Dtos.StatsImportView;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamStats;
+import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Service.SessionService;
 import com.grove.Service.StatsService;
@@ -47,7 +48,9 @@ public class StatsController {
 	@GetMapping("/api/stats/mine")
 	public MyStats mine(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		User user = sessions.requireUser(token);
-		if (!user.getRoles().isStaff()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Staff only");
+		if (!user.getRoles().isStaff() || user.getRoles() == Role.RECEPTIONIST) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "My week is for stylists");
+		}
 		return stats.mine(user);
 	}
 
