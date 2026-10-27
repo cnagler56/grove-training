@@ -25,11 +25,14 @@ export default function VideoCard({ video }: { video: VideoSummary }) {
         {duration && (
           <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white">{duration}</span>
         )}
-        {video.completed && (
-          <span className="absolute left-2 top-2 rounded-full bg-[var(--success)] px-2 py-0.5 text-xs font-bold text-white">
-            Watched
-          </span>
-        )}
+        <div className="absolute left-2 top-2 flex flex-wrap gap-1.5">
+          {video.assignedToMe && (
+            <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-xs font-bold text-white">Assigned to you</span>
+          )}
+          {video.completed && (
+            <span className="rounded-full bg-[var(--success)] px-2 py-0.5 text-xs font-bold text-white">Watched</span>
+          )}
+        </div>
       </div>
       <div className="p-3.5">
         <p className="font-bold leading-snug">{video.title}</p>

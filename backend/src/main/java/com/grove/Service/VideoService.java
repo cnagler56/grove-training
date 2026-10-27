@@ -15,21 +15,28 @@ import org.springframework.web.server.ResponseStatusException;
 import com.grove.Domain.Dtos.CompletionReport;
 import com.grove.Domain.Dtos.CompletionRow;
 import com.grove.Domain.Dtos.UploadTicket;
+import com.grove.Domain.Dtos.VideoAudience;
 import com.grove.Domain.Dtos.VideoDetail;
 import com.grove.Domain.Dtos.VideoRequest;
 import com.grove.Domain.Dtos.VideoSummary;
 import com.grove.Domain.Dtos.YouTubeRequest;
 import com.grove.Domain.User;
 import com.grove.Domain.Video;
+import com.grove.Domain.VideoAssignment;
 import com.grove.Domain.VideoCompletion;
 import com.grove.Domain.VideoSource;
 import com.grove.Domain.VideoStatus;
 import com.grove.Repository.UserRepository;
+import com.grove.Repository.VideoAssignmentRepository;
 import com.grove.Repository.VideoCompletionRepository;
 import com.grove.Repository.VideoRepository;
 
 /**
  * The training library: listing, admin create/edit/delete, and watch tracking.
+ *
+ * A video is for everyone on staff, or only for the people it's assigned to.
+ * Anyone else gets the same "not found" as a missing video; managers and up
+ * always see every video so they can manage them.
  *
  * Videos that are still uploading/processing are re-checked against Bunny when
  * someone looks at them, so there's no background polling job to keep the
@@ -42,24 +49,31 @@ public class VideoService {
 	private final VideoCompletionRepository completionRepo;
 	private final UserRepository userRepo;
 	private final BunnyStreamService bunny;
+	private final VideoAssignmentRepository assignmentRepo;
 
 	public VideoService(VideoRepository videoRepo, VideoCompletionRepository completionRepo,
-			UserRepository userRepo, BunnyStreamService bunny) {
+			UserRepository userRepo, BunnyStreamService bunny, VideoAssignmentRepository assignmentRepo) {
 		this.videoRepo = videoRepo;
 		this.completionRepo = completionRepo;
 		this.userRepo = userRepo;
 		this.bunny = bunny;
+		this.assignmentRepo = assignmentRepo;
 	}
 
-	/** Staff see READY videos; managers also see ones still in progress; customers see none. */
+	/**
+	 * Staff see READY videos that are for everyone or assigned to them; managers
+	 * see every video, including ones still in progress; customers see none.
+	 */
 	public List<VideoSummary> list(User viewer) {
 		if (!viewer.getRoles().isStaff()) return List.of();
 		List<Video> videos = videoRepo.findAllByOrderByCreatedAtDesc();
 		if (viewer.isAdmin()) videos.forEach(this::refreshStatus);
 		Set<Long> done = completedIds(viewer);
+		Set<Long> mine = assignedIds(viewer);
 		return videos.stream()
 			.filter(v -> viewer.isAdmin() || v.getStatus() == VideoStatus.READY)
-			.map(v -> toSummary(v, done.contains(v.getId())))
+			.filter(v -> viewer.isAdmin() || !v.isAssignedOnly() || mine.contains(v.getId()))
+			.map(v -> toSummary(v, done.contains(v.getId()), mine.contains(v.getId())))
 			.toList();
 	}
 
@@ -70,7 +84,7 @@ public class VideoService {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
 		}
 		boolean completed = completionRepo.findByUserIdAndVideoId(viewer.getUserId(), id).isPresent();
-		return new VideoDetail(toSummary(v, completed), embedUrl(v));
+		return new VideoDetail(toSummary(v, completed, isAssigned(v, viewer)), embedUrl(v));
 	}
 
 	@Transactional
@@ -124,7 +138,7 @@ public class VideoService {
 		v.setStatus(VideoStatus.READY);
 		v.setCreatedBy(admin.getUserId());
 		v.setCreatedAt(LocalDateTime.now());
-		return toSummary(videoRepo.save(v), false);
+		return toSummary(videoRepo.save(v), false, false);
 	}
 
 	/** A fresh ticket to retry or resume an upload. */
@@ -144,7 +158,39 @@ public class VideoService {
 		v.setTitle(requireTitle(req));
 		v.setDescription(blankToNull(req.description()));
 		v.setCategory(blankToNull(req.category()));
-		return toSummary(videoRepo.save(v), false);
+		return toSummary(videoRepo.save(v), false, false);
+	}
+
+	/** Who can see a video now. */
+	public VideoAudience audience(Long id) {
+		Video v = find(id);
+		return new VideoAudience(!v.isAssignedOnly(),
+			assignmentRepo.findByVideoId(v.getId()).stream().map(VideoAssignment::getUserId).sorted().toList());
+	}
+
+	/** Show a video to everyone, or only to the people listed (at least one, all current staff). */
+	@Transactional
+	public VideoAudience setAudience(Long id, VideoAudience audience) {
+		Video v = find(id);
+		boolean everyone = audience == null || audience.everyone();
+		List<Long> ids = everyone || audience.userIds() == null ? List.of() : audience.userIds().stream().distinct().toList();
+		if (!everyone) {
+			if (ids.isEmpty()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick at least one person, or show it to everyone");
+			}
+			Map<Long, User> found = userRepo.findAllById(ids).stream().collect(Collectors.toMap(User::getUserId, Function.identity()));
+			for (Long uid : ids) {
+				User u = found.get(uid);
+				if (u == null || !u.isActive() || !u.getRoles().isStaff()) {
+					throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Videos can only be assigned to current staff");
+				}
+			}
+		}
+		assignmentRepo.deleteByVideoId(v.getId());
+		assignmentRepo.saveAll(ids.stream().map(uid -> new VideoAssignment(v.getId(), uid)).toList());
+		v.setAssignedOnly(!everyone);
+		videoRepo.save(v);
+		return audience(id);
 	}
 
 	@Transactional
@@ -152,16 +198,21 @@ public class VideoService {
 		Video v = find(id);
 		bunny.deleteVideo(v.getBunnyVideoId());
 		completionRepo.deleteByVideoId(v.getId());
+		assignmentRepo.deleteByVideoId(v.getId());
 		videoRepo.delete(v);
 	}
 
-	/** Every active employee, with when (or whether) they watched this video. */
+	/** Everyone who should watch it (all active staff, or just the people it's assigned to), with when they did. */
 	public CompletionReport completions(Long id) {
 		Video v = find(id);
+		Set<Long> assigned = v.isAssignedOnly()
+			? assignmentRepo.findByVideoId(v.getId()).stream().map(VideoAssignment::getUserId).collect(Collectors.toSet())
+			: null;
 		Map<Long, LocalDateTime> watched = completionRepo.findByVideoId(v.getId()).stream()
 			.collect(Collectors.toMap(VideoCompletion::getUserId, VideoCompletion::getCompletedAt, (a, b) -> a));
 		List<CompletionRow> rows = userRepo.findAll().stream()
 			.filter(u -> u.isActive() && u.getRoles().isStaff())
+			.filter(u -> assigned == null || assigned.contains(u.getUserId()))
 			.map(u -> new CompletionRow(u.getUserId(), displayName(u), u.getEmail(), watched.get(u.getUserId())))
 			.sorted((a, b) -> a.name().compareToIgnoreCase(b.name()))
 			.toList();
@@ -195,6 +246,15 @@ public class VideoService {
 		}
 	}
 
+	private Set<Long> assignedIds(User viewer) {
+		return assignmentRepo.findByUserId(viewer.getUserId()).stream()
+			.map(VideoAssignment::getVideoId).collect(Collectors.toSet());
+	}
+
+	private boolean isAssigned(Video v, User viewer) {
+		return v.isAssignedOnly() && assignmentRepo.existsByVideoIdAndUserId(v.getId(), viewer.getUserId());
+	}
+
 	private Set<Long> completedIds(User viewer) {
 		return completionRepo.findByUserId(viewer.getUserId()).stream()
 			.map(VideoCompletion::getVideoId).collect(Collectors.toSet());
@@ -206,18 +266,25 @@ public class VideoService {
 		return v.getStatus() == VideoStatus.READY ? bunny.embedUrl(v.getBunnyVideoId()) : null;
 	}
 
-	private VideoSummary toSummary(Video v, boolean completed) {
+	private VideoSummary toSummary(Video v, boolean completed, boolean assignedToMe) {
 		String thumb = v.getSource() == VideoSource.YOUTUBE
 			? YouTube.thumbnailUrl(v.getYoutubeId())
 			: v.getStatus() == VideoStatus.READY ? bunny.thumbnailUrl(v.getBunnyVideoId()) : null;
 		return new VideoSummary(v.getId(), v.getTitle(), v.getDescription(), v.getCategory(), v.getSource(), v.getStatus(),
-			v.getDurationSeconds(), thumb, completed, v.getCreatedAt());
+			v.getDurationSeconds(), thumb, completed, v.getCreatedAt(), v.isAssignedOnly(), v.isAssignedOnly() && assignedToMe);
 	}
 
-	/** Training videos are staff-only: a customer gets the same 404 as a missing video. */
+	/**
+	 * Training videos are staff-only, and an assigned-only video is just for its
+	 * people: anyone else gets the same 404 as a missing video.
+	 */
 	private Video find(User viewer, Long id) {
 		if (!viewer.getRoles().isStaff()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
-		return find(id);
+		Video v = find(id);
+		if (!viewer.isAdmin() && v.isAssignedOnly() && !assignmentRepo.existsByVideoIdAndUserId(v.getId(), viewer.getUserId())) {
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Video not found");
+		}
+		return v;
 	}
 
 	private Video find(Long id) {

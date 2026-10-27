@@ -23,6 +23,7 @@ import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.Dtos.UploadTicket;
 import com.grove.Domain.Dtos.VideoRequest;
+import com.grove.Domain.Dtos.VideoAudience;
 import com.grove.Domain.Dtos.VideoSummary;
 import com.grove.Domain.Dtos.YouTubeRequest;
 import com.grove.Service.BunnyStreamService;
@@ -94,6 +95,21 @@ public class AdminController {
 		sessions.requireAdmin(token);
 		videos.delete(id);
 		return ResponseEntity.noContent().build();
+	}
+
+	/** Who can see a video: everyone, or only certain people. */
+	@GetMapping("/videos/{id}/audience")
+	public VideoAudience audience(@PathVariable Long id,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireAdmin(token);
+		return videos.audience(id);
+	}
+
+	@PutMapping("/videos/{id}/audience")
+	public VideoAudience setAudience(@PathVariable Long id, @RequestBody VideoAudience audience,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireAdmin(token);
+		return videos.setAudience(id, audience);
 	}
 
 	@GetMapping("/videos/{id}/completions")

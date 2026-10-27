@@ -25,7 +25,14 @@ public final class Dtos {
 		Integer durationSeconds,
 		String thumbnailUrl,
 		boolean completed,
-		LocalDateTime createdAt) {}
+		LocalDateTime createdAt,
+		/** Shown only to assigned people (managers always see it). */
+		boolean assignedOnly,
+		/** The viewer is one of the people it's assigned to. */
+		boolean assignedToMe) {}
+
+	/** Who can see a video: everyone on staff, or only {@code userIds}. */
+	public record VideoAudience(boolean everyone, List<Long> userIds) {}
 
 	/** One video plus a short-lived signed player URL (null until READY). */
 	public record VideoDetail(VideoSummary video, String embedUrl) {}

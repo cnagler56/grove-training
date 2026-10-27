@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDuration, type AdminStatus, type UploadTicket, type VideoSummary } from '@/src/lib/api';
+import { api, formatDuration, type AdminStatus, type TeamMember, type UploadTicket, type VideoSummary } from '@/src/lib/api';
 import { uploadToBunny } from '@/src/lib/upload';
 import { youTubeId, youTubeThumbnail } from '@/src/lib/youtube';
 import { useDialogs } from '@/src/components/Dialogs';
 import { useUnsavedChangesGuard } from '@/src/lib/leaveGuard';
+import VideoAudienceEditor from '@/src/components/VideoAudienceEditor';
 
 const STATUS_STYLE: Record<VideoSummary['status'], string> = {
   UPLOADING: 'text-[var(--warn)]',
@@ -25,6 +26,7 @@ export default function AdminVideosPage() {
   const [status, setStatus] = useState<AdminStatus | null>(null);
   const [videos, setVideos] = useState<VideoSummary[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'upload' | 'youtube'>('upload');
 
@@ -32,6 +34,7 @@ export default function AdminVideosPage() {
     api.adminStatus().then(setStatus).catch((e) => setError(e.message));
     api.listVideos().then(setVideos).catch((e) => setError(e.message));
     api.categories().then(setCategories).catch(() => {});
+    api.team().then(setTeam).catch(() => {});
   }, []);
   useEffect(load, [load]);
 
@@ -80,7 +83,7 @@ export default function AdminVideosPage() {
         ) : (
           <ul className="space-y-3">
             {videos.map((v) => (
-              <VideoRow key={v.id} video={v} categories={categories} onChange={load} />
+              <VideoRow key={v.id} video={v} categories={categories} team={team} onChange={load} />
             ))}
           </ul>
         )}
@@ -293,8 +296,14 @@ function UploadForm({ categories, onDone }: { categories: string[]; onDone: () =
   );
 }
 
-function VideoRow({ video, categories, onChange }: { video: VideoSummary; categories: string[]; onChange: () => void }) {
+function VideoRow({ video, categories, team, onChange }: {
+  video: VideoSummary;
+  categories: string[];
+  team: TeamMember[];
+  onChange: () => void;
+}) {
   const [editing, setEditing] = useState(false);
+  const [audience, setAudience] = useState(false);
   const [title, setTitle] = useState(video.title);
   const [category, setCategory] = useState(video.category ?? '');
   const [description, setDescription] = useState(video.description ?? '');
@@ -368,6 +377,7 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
               <span className={STATUS_STYLE[video.status]}>{STATUS_LABEL[video.status]}</span>
               {video.source === 'YOUTUBE' && ' · YouTube'}
               {video.category && ` · ${video.category}`}
+              {video.assignedOnly && <span className="font-semibold text-[var(--accent-strong)]"> · Only assigned people</span>}
               {video.durationSeconds ? ` · ${formatDuration(video.durationSeconds)}` : ''}
               {` · added ${new Date(video.createdAt).toLocaleDateString()}`}
             </p>
@@ -385,9 +395,16 @@ function VideoRow({ video, categories, onChange }: { video: VideoSummary; catego
                 <button className="btn-ghost" onClick={() => retryInput.current?.click()}>Upload file</button>
               </>
             )}
+            <button className="btn-ghost" onClick={() => setAudience(!audience)}>Who can see it</button>
             <button className="btn-ghost" onClick={() => setEditing(true)}>Edit</button>
             <button className="btn-ghost text-[var(--danger)]" onClick={() => void remove()}>Delete</button>
           </div>
+        </div>
+      )}
+      {audience && !editing && (
+        <div className="mt-3">
+          <VideoAudienceEditor videoId={video.id} team={team}
+            onSaved={() => { setAudience(false); onChange(); }} onCancel={() => setAudience(false)} />
         </div>
       )}
       {progress !== null && <div className="mt-3"><ProgressBar fraction={progress} /></div>}

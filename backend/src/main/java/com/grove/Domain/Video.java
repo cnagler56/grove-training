@@ -66,6 +66,10 @@ public class Video {
 	@Column(name = "created_at")
 	private LocalDateTime createdAt;
 
+	/** True: only the people in video_assignments (and managers) see it. Null/false: everyone on staff. */
+	@Column(name = "assigned_only")
+	private Boolean assignedOnly;
+
 	public Long getId() { return id; }
 	public void setId(Long id) { this.id = id; }
 
@@ -98,4 +102,7 @@ public class Video {
 
 	public LocalDateTime getCreatedAt() { return createdAt; }
 	public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+	public boolean isAssignedOnly() { return Boolean.TRUE.equals(assignedOnly); }
+	public void setAssignedOnly(boolean assignedOnly) { this.assignedOnly = assignedOnly; }
 }

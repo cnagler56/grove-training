@@ -37,6 +37,16 @@ export interface VideoSummary {
   thumbnailUrl: string | null;
   completed: boolean;
   createdAt: string;
+  /** Shown only to the people it's assigned to (managers always see it). */
+  assignedOnly: boolean;
+  /** The viewer is one of the people it's assigned to. */
+  assignedToMe: boolean;
+}
+
+/** Who can see a video: everyone on staff, or only these people. */
+export interface VideoAudience {
+  everyone: boolean;
+  userIds: number[];
 }
 
 export interface VideoDetail {
@@ -397,6 +407,8 @@ export const api = {
   uploadTicket: (id: number) => send<UploadTicket>(`/api/admin/videos/${id}/upload-ticket`, 'POST'),
   updateVideo: (id: number, r: VideoRequest) => send<VideoSummary>(`/api/admin/videos/${id}`, 'PUT', r),
   deleteVideo: (id: number) => send<void>(`/api/admin/videos/${id}`, 'DELETE'),
+  videoAudience: (id: number) => send<VideoAudience>(`/api/admin/videos/${id}/audience`),
+  setVideoAudience: (id: number, a: VideoAudience) => send<VideoAudience>(`/api/admin/videos/${id}/audience`, 'PUT', a),
   completions: (id: number) => send<CompletionReport>(`/api/admin/videos/${id}/completions`),
 
   schedule: (date?: string) => send<WeekSchedule>(`/api/schedule${date ? `?date=${date}` : ''}`),

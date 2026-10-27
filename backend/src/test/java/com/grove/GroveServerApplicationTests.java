@@ -42,6 +42,7 @@ import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
+import com.grove.Repository.VideoAssignmentRepository;
 import com.grove.Repository.VideoCompletionRepository;
 import com.grove.Repository.VideoRepository;
 import com.grove.Service.SessionService;
@@ -61,12 +62,14 @@ class GroveServerApplicationTests {
 	@Autowired ScheduleWeekRepository scheduleWeeks;
 	@Autowired AppSettingRepository appSettings;
 	@Autowired HaircutModelRepository haircutModels;
+	@Autowired VideoAssignmentRepository videoAssignments;
 	@MockBean JavaMailSender mailSender;
 
 	@BeforeEach
 	void clean() {
 		appSettings.deleteAll();
 		haircutModels.deleteAll();
+		videoAssignments.deleteAll();
 		shifts.deleteAll();
 		scheduleWeeks.deleteAll();
 		applications.deleteAll();
@@ -713,6 +716,55 @@ class GroveServerApplicationTests {
 			.andExpect(jsonPath("$.roster[2].name").value("Zoe"))
 			.andExpect(jsonPath("$.roster[3].name").value("Ava"))
 			.andExpect(jsonPath("$.roster[3].role").value("RECEPTIONIST"));
+	}
+
+	@Test
+	void assignedVideosAreOnlyForTheirPeople() throws Exception {
+		Cookie manager = signUp("manager@grove.test");
+		Cookie ava = signUp("ava@grove.test");
+		Cookie ben = signUp("ben@grove.test");
+		setRole("manager@grove.test", Role.MANAGER);
+		Long avaId = users.findByEmail("ava@grove.test").orElseThrow().getUserId();
+		String created = mvc.perform(post("/api/admin/videos/youtube").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"url\":\"https://youtu.be/dQw4w9WgXcQ\",\"title\":\"Color correction\"}"))
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString();
+		long id = Long.parseLong(created.replaceAll(".*\"id\":(\\d+).*", "$1"));
+		String audience = "/api/admin/videos/" + id + "/audience";
+
+		// New videos are for everyone.
+		mvc.perform(get(audience).cookie(manager)).andExpect(jsonPath("$.everyone").value(true));
+		mvc.perform(get("/api/videos").cookie(ben)).andExpect(jsonPath("$.length()").value(1));
+
+		mvc.perform(put(audience).cookie(ava).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"everyone\":false,\"userIds\":[" + avaId + "]}"))
+			.andExpect(status().isForbidden());
+		mvc.perform(put(audience).cookie(manager).contentType(MediaType.APPLICATION_JSON).content("{\"everyone\":false,\"userIds\":[]}"))
+			.andExpect(status().isBadRequest());
+		mvc.perform(put(audience).cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"everyone\":false,\"userIds\":[" + avaId + "]}"))
+			.andExpect(jsonPath("$.everyone").value(false))
+			.andExpect(jsonPath("$.userIds[0]").value(avaId));
+
+		// Ava sees it, marked as hers; Ben can't list, open, or mark it.
+		mvc.perform(get("/api/videos").cookie(ava))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].assignedToMe").value(true));
+		mvc.perform(get("/api/videos").cookie(ben)).andExpect(jsonPath("$.length()").value(0));
+		mvc.perform(get("/api/videos/" + id).cookie(ben)).andExpect(status().isNotFound());
+		mvc.perform(put("/api/videos/" + id + "/completed").cookie(ben)).andExpect(status().isNotFound());
+		// Managers still see it, and who's-watched only counts Ava.
+		mvc.perform(get("/api/videos").cookie(manager)).andExpect(jsonPath("$[0].assignedOnly").value(true));
+		mvc.perform(get("/api/admin/videos/" + id + "/completions").cookie(manager))
+			.andExpect(jsonPath("$.employees.length()").value(1))
+			.andExpect(jsonPath("$.employees[0].email").value("ava@grove.test"));
+
+		// Back to everyone.
+		mvc.perform(put(audience).cookie(manager).contentType(MediaType.APPLICATION_JSON).content("{\"everyone\":true}"))
+			.andExpect(jsonPath("$.userIds.length()").value(0));
+		mvc.perform(get("/api/videos").cookie(ben))
+			.andExpect(jsonPath("$.length()").value(1))
+			.andExpect(jsonPath("$[0].assignedToMe").value(false));
 	}
 
 	@Test
