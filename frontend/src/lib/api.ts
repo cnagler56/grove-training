@@ -332,6 +332,26 @@ export interface SalonUltimateName {
   linkedTo: string | null;
 }
 
+/** Someone who'll sit for a haircut (the Models page, managers and up). Dates are "YYYY-MM-DD". */
+export interface HaircutModel {
+  id: number;
+  name: string;
+  source: string | null;
+  phone: string | null;
+  notes: string | null;
+  lastVisit: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ModelInput {
+  name: string;
+  source: string | null;
+  phone: string | null;
+  notes: string | null;
+  lastVisit: string | null;
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -405,6 +425,11 @@ export const api = {
   updateApplication: (id: number, u: { status?: ApplicationStatus; ownerNotes?: string }) =>
     send<JobApplication>(`/api/owner/applications/${id}`, 'PUT', u),
   deleteApplication: (id: number) => send<void>(`/api/owner/applications/${id}`, 'DELETE'),
+
+  models: () => send<HaircutModel[]>('/api/admin/models'),
+  createModel: (m: ModelInput) => send<HaircutModel>('/api/admin/models', 'POST', m),
+  updateModel: (id: number, m: ModelInput) => send<HaircutModel>(`/api/admin/models/${id}`, 'PUT', m),
+  deleteModel: (id: number) => send<void>(`/api/admin/models/${id}`, 'DELETE'),
 
   team: () => send<TeamMember[]>('/api/admin/team'),
   member: (userId: number) => send<TeamMember>(`/api/admin/team/${userId}`),

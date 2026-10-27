@@ -36,6 +36,7 @@ import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoStatus;
 import com.grove.Repository.AppSettingRepository;
+import com.grove.Repository.HaircutModelRepository;
 import com.grove.Repository.JobApplicationRepository;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
@@ -59,11 +60,13 @@ class GroveServerApplicationTests {
 	@Autowired ShiftRepository shifts;
 	@Autowired ScheduleWeekRepository scheduleWeeks;
 	@Autowired AppSettingRepository appSettings;
+	@Autowired HaircutModelRepository haircutModels;
 	@MockBean JavaMailSender mailSender;
 
 	@BeforeEach
 	void clean() {
 		appSettings.deleteAll();
+		haircutModels.deleteAll();
 		shifts.deleteAll();
 		scheduleWeeks.deleteAll();
 		applications.deleteAll();
@@ -710,6 +713,43 @@ class GroveServerApplicationTests {
 			.andExpect(jsonPath("$.roster[2].name").value("Zoe"))
 			.andExpect(jsonPath("$.roster[3].name").value("Ava"))
 			.andExpect(jsonPath("$.roster[3].role").value("RECEPTIONIST"));
+	}
+
+	@Test
+	void managersKeepTheModelsList() throws Exception {
+		Cookie manager = signUp("manager@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+		setRole("manager@grove.test", Role.MANAGER);
+		String zoe = "{\"name\":\"  Zoe Lane \",\"source\":\"Instagram\",\"phone\":\"555-555-0100\",\"notes\":\"Long hair, wants layers\",\"lastVisit\":\"2026-09-15\"}";
+
+		mvc.perform(get("/api/admin/models").cookie(stylist)).andExpect(status().isForbidden());
+		mvc.perform(post("/api/admin/models").cookie(stylist).contentType(MediaType.APPLICATION_JSON).content(zoe))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/admin/models").cookie(manager).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" \"}"))
+			.andExpect(status().isBadRequest());
+
+		String created = mvc.perform(post("/api/admin/models").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(zoe))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.name").value("Zoe Lane"))
+			.andExpect(jsonPath("$.lastVisit").value("2026-09-15"))
+			.andReturn().getResponse().getContentAsString();
+		long id = Long.parseLong(created.replaceAll(".*\"id\":(\\d+).*", "$1"));
+		mvc.perform(post("/api/admin/models").cookie(manager).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Ava Stone\"}"))
+			.andExpect(status().isCreated());
+
+		mvc.perform(get("/api/admin/models").cookie(manager))
+			.andExpect(jsonPath("$.length()").value(2))
+			.andExpect(jsonPath("$[0].name").value("Ava Stone"));
+
+		mvc.perform(put("/api/admin/models/" + id).cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"name\":\"Zoe Lane\",\"source\":\"Walk-in\",\"lastVisit\":\"2026-10-20\"}"))
+			.andExpect(jsonPath("$.source").value("Walk-in"))
+			.andExpect(jsonPath("$.phone").doesNotExist())
+			.andExpect(jsonPath("$.lastVisit").value("2026-10-20"));
+
+		mvc.perform(delete("/api/admin/models/" + id).cookie(manager)).andExpect(status().isNoContent());
+		mvc.perform(delete("/api/admin/models/" + id).cookie(manager)).andExpect(status().isNotFound());
+		mvc.perform(get("/api/admin/models").cookie(manager)).andExpect(jsonPath("$.length()").value(1));
 	}
 
 	@Test

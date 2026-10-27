@@ -16,6 +16,7 @@ const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
   { href: '/admin', label: 'Manage videos' },
   { href: '/admin/team', label: 'Team' },
+  { href: '/admin/models', label: 'Models' },
 ];
 const OWNER_TABS = [
   { href: '/admin/applicants', label: 'Applicants' },
