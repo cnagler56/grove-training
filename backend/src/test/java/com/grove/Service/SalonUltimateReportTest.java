@@ -36,6 +36,7 @@ public class SalonUltimateReportTest {
 		assertThat(ava.payrollId()).isEqualTo("7");
 		assertThat(ava.floorHours()).isEqualByComparingTo("30.50");
 		assertThat(ava.offFloorHours()).isEqualByComparingTo("1.25");
+		assertThat(ava.tips()).isEqualByComparingTo("99.00");
 		assertThat(ava.productPerGuest()).isEqualByComparingTo("2.50");
 		assertThat(ava.retailSales()).isEqualByComparingTo("80.00");
 		assertThat(ava.serviceSales()).isEqualByComparingTo("1200.00");

@@ -22,6 +22,10 @@ const OWNER_TABS = [
   { href: '/admin/settings', label: 'Settings' },
 ];
 
+/** Pages with wide tables and card grids get a wider layout (header included, so it lines up). */
+const WIDE_PAGES = ['/my-week', '/admin/stats'];
+const pageWidth = (pathname: string) => (WIDE_PAGES.some((p) => pathname.startsWith(p)) ? 'max-w-7xl' : 'max-w-5xl');
+
 const hasMyWeek = (r: string | undefined) => !!r && !['CUSTOMER', 'OWNER', 'RECEPTIONIST'].includes(r);
 
 /** The Schedule tab: anyone the owner lets see, build, or approve the schedule. */
@@ -51,7 +55,7 @@ function Header() {
   return (
     <header className="print:hidden">
       <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+        <div className={`mx-auto flex ${pageWidth(pathname)} items-center justify-between px-4 py-4`}>
           <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight">
             Grove Salons
           </Link>
@@ -71,7 +75,7 @@ function Header() {
 
       {user && (
         <nav className="border-b border-[var(--border)] bg-[var(--surface)]">
-          <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm">
+          <div className={`mx-auto flex ${pageWidth(pathname)} items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm`}>
             {tabs.map((tab) => {
               const active = tab.href === '/admin'
                   ? pathname === '/admin'
@@ -141,13 +145,20 @@ function Gate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function Main({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return (
+    <main className={`mx-auto ${pageWidth(pathname)} px-4 py-8 print:max-w-none print:p-0`}>
+      <Gate>{children}</Gate>
+    </main>
+  );
+}
+
 export default function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <UserProvider>
       <Header />
-      <main className="mx-auto max-w-5xl px-4 py-8 print:max-w-none print:p-0">
-        <Gate>{children}</Gate>
-      </main>
+      <Main>{children}</Main>
     </UserProvider>
   );
 }

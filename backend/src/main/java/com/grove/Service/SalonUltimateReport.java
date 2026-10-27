@@ -13,8 +13,8 @@ import java.util.regex.Pattern;
  * report the payroll skill uses). Columns after the "Method" header:
  * Floor Hours, Off Floor Hours, Unpaid Tips, PPG, Retail Sales, Retail Comm.
  * Unpaid, Pre-Discount Service Sales, Discounted Service Sales. Each employee
- * row's first cell is "{payroll id} {First} {Last...}". Tips and commission are
- * pay details, so they're left out.
+ * row's first cell is "{payroll id} {First} {Last...}". Tips are kept (shown only
+ * to the employee themselves); retail commission isn't.
  */
 public final class SalonUltimateReport {
 
@@ -23,6 +23,7 @@ public final class SalonUltimateReport {
 		String name,
 		BigDecimal floorHours,
 		BigDecimal offFloorHours,
+		BigDecimal tips,
 		BigDecimal productPerGuest,
 		BigDecimal retailSales,
 		BigDecimal serviceSales,
@@ -56,7 +57,7 @@ public final class SalonUltimateReport {
 			String name = parts[1].trim();
 			if (name.startsWith("_") || name.contains(" _") || name.endsWith("_")) continue;
 
-			Row row = new Row(parts[0], name, number(cells.get(1)), number(cells.get(2)), number(cells.get(4)),
+			Row row = new Row(parts[0], name, number(cells.get(1)), number(cells.get(2)), number(cells.get(3)), number(cells.get(4)),
 				number(cells.get(5)), number(cells.get(7)), number(cells.get(8)));
 			boolean worked = row.floorHours().add(row.offFloorHours()).signum() > 0;
 			if (worked) byName.putIfAbsent(name.toLowerCase(), row);

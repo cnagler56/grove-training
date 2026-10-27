@@ -209,7 +209,13 @@ public final class Dtos {
 		/** Production per hour as payroll figures it: (after-discount sales + 20% of discounts) ÷ floor hours. */
 		BigDecimal pph,
 		/** That week's hourly rate from the pay matrix and their code. Only ever sent to the employee themselves. */
-		BigDecimal payRate) {}
+		BigDecimal payRate,
+		/** The rest are also only for the employee themselves (null elsewhere, or for weeks pulled before tips were saved). */
+		BigDecimal tips,
+		/** Tips ÷ floor hours. */
+		BigDecimal tipsPerHour,
+		/** Pay rate + tips per hour. */
+		BigDecimal totalPerHour) {}
 
 	/** How the last pull of a week went. */
 	public record StatsImportView(LocalDate weekStart, String status, String message, Integer rowCount, LocalDateTime attemptedAt) {}

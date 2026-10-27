@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { api, type PayRules, type PayRulesUpload } from '@/src/lib/api';
 import { moneyCents } from '@/src/lib/format';
 
+/** Where the payroll skill keeps its two files on the owner's computer. */
+const SKILL_DATA_FOLDER = String.raw`C:\Users\chris\.claude\skills\payroll\data`;
+
 /**
  * Owner Settings: load the payroll skill's matrix.json and employee_codes.json
  * so each stylist's My week can show that week's rate, figured the same way as
@@ -17,6 +20,17 @@ export default function PayRulesCard() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showCodes, setShowCodes] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function copyFolder() {
+    try {
+      await navigator.clipboard.writeText(SKILL_DATA_FOLDER);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   useEffect(() => {
     api.payRules().then(setRules).catch((e) => setError(e.message));
@@ -56,9 +70,22 @@ export default function PayRulesCard() {
       <h2 className="text-lg font-extrabold">Pay rates</h2>
       <p className="mt-1 text-sm opacity-70">
         Each stylist sees their own weekly rate on My week, figured the same way as payroll. Load the payroll
-        skill&apos;s <code>matrix.json</code> and <code>employee_codes.json</code> (in
-        <code> .claude\skills\payroll\data</code>) whenever they change. Managers never see anyone&apos;s rate.
+        skill&apos;s <code>matrix.json</code> and <code>employee_codes.json</code> whenever they change. Managers
+        never see anyone&apos;s rate.
       </p>
+
+      <div className="mt-3 rounded-xl bg-[var(--surface-2)] p-3 text-sm">
+        <div className="font-semibold">Where the files are</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <code className="break-all">{SKILL_DATA_FOLDER}</code>
+          <button type="button" className="btn-ghost py-1" onClick={() => void copyFolder()}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <div className="mt-1 text-xs opacity-70">
+          Click Choose File, paste this into the File name box, and press Enter to jump to the folder.
+        </div>
+      </div>
 
       <p className="mt-3 text-sm">
         {!rules ? 'Loading…' : loaded

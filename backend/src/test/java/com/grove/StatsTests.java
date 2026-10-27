@@ -132,11 +132,16 @@ class StatsTests {
 		// (1150.50 + 49.50 × 0.2) ÷ 30.5 = 38.05 PPH → $17 step + $0.50 premium.
 		mvc.perform(get("/api/stats/mine").cookie(ava))
 			.andExpect(jsonPath("$.weeks[0].pph").value(38.05))
-			.andExpect(jsonPath("$.weeks[0].payRate").value(17.50));
+			.andExpect(jsonPath("$.weeks[0].payRate").value(17.50))
+			// $99 tips ÷ 30.5 floor hours = $3.25 an hour, on top of $17.50.
+			.andExpect(jsonPath("$.weeks[0].tips").value(99.00))
+			.andExpect(jsonPath("$.weeks[0].tipsPerHour").value(3.25))
+			.andExpect(jsonPath("$.weeks[0].totalPerHour").value(20.75));
 		// Managers see PPH on the leaderboards, never anyone's rate.
 		mvc.perform(get("/api/stats/team").cookie(manager))
 			.andExpect(jsonPath("$.rows[0].stats.pph").exists())
-			.andExpect(jsonPath("$.rows[0].stats.payRate").doesNotExist());
+			.andExpect(jsonPath("$.rows[0].stats.payRate").doesNotExist())
+			.andExpect(jsonPath("$.rows[0].stats.tips").doesNotExist());
 		mvc.perform(get("/api/owner/pay-rules").cookie(manager)).andExpect(status().isForbidden());
 		// Receptionists don't get My week.
 		mvc.perform(get("/api/stats/mine").cookie(desk)).andExpect(status().isForbidden());

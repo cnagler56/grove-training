@@ -150,7 +150,7 @@ public class StatsService {
 		if (name == null || name.isBlank()) return new MyStats(false, null, List.of());
 		var rates = pay.rates(name);
 		return new MyStats(true, name, stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(name).stream()
-			.map(s -> line(s, rates.apply(s))).toList());
+			.map(s -> ownLine(s, rates.apply(s))).toList());
 	}
 
 	/** Everyone's numbers for one week (latest finished week by default). */
@@ -235,6 +235,7 @@ public class StatsService {
 		s.setSuPayrollId(r.payrollId());
 		s.setFloorHours(r.floorHours());
 		s.setOffFloorHours(r.offFloorHours());
+		s.setTips(r.tips());
 		s.setServiceSales(r.serviceSales());
 		s.setNetServiceSales(r.netServiceSales());
 		s.setRetailSales(r.retailSales());
@@ -243,13 +244,26 @@ public class StatsService {
 		return s;
 	}
 
-	/** One week's numbers; {@code payRate} is null except on the employee's own page. */
+	/** One week on the employee's own page: adds their pay rate, tips, and per-hour pay. */
+	static StatLine ownLine(WeeklyStat s, BigDecimal payRate) {
+		StatLine base = line(s, null);
+		BigDecimal hours = base.floorHours();
+		BigDecimal tips = s.getTips();
+		BigDecimal tipsPerHour = tips != null && hours.signum() > 0 ? tips.divide(hours, 2, RoundingMode.HALF_UP) : null;
+		BigDecimal total = payRate != null && tipsPerHour != null ? payRate.add(tipsPerHour) : null;
+		return new StatLine(base.weekStart(), base.serviceSales(), base.netServiceSales(), base.retailSales(),
+			base.productPerGuest(), hours, base.offFloorHours(), base.serviceSalesPerHour(), base.pph(),
+			payRate, tips, tipsPerHour, total);
+	}
+
+	/** One week's numbers as managers see them: no pay or tips. */
 	static StatLine line(WeeklyStat s, BigDecimal payRate) {
 		BigDecimal hours = zeroIfNull(s.getFloorHours());
 		BigDecimal sales = zeroIfNull(s.getServiceSales());
 		BigDecimal perHour = hours.signum() > 0 ? sales.divide(hours, 2, RoundingMode.HALF_UP) : null;
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
-			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate);
+			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate,
+			null, null, null);
 	}
 
 	private static BigDecimal zeroIfNull(BigDecimal n) {

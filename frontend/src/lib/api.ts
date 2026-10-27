@@ -273,6 +273,12 @@ export interface StatLine {
   pph: number;
   /** That week's hourly rate. Only on the employee's own My week; null elsewhere or before pay rules are loaded. */
   payRate: number | null;
+  /** Also only on the employee's own My week (null elsewhere, or for weeks pulled before tips were saved). */
+  tips: number | null;
+  /** Tips ÷ floor hours. */
+  tipsPerHour: number | null;
+  /** Pay rate + tips per hour. */
+  totalPerHour: number | null;
 }
 
 /** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */

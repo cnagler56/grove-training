@@ -15,8 +15,16 @@ type Metric = {
   hint?: string;
 };
 
-const METRICS: Metric[] = [
-  { label: 'Pay rate', value: (s) => s.payRate, format: (n) => `${moneyCents(n)}/hr`, hint: 'This week, from your PPH' },
+const perHour = (n: number) => `${moneyCents(n)}/hr`;
+
+const PAY: Metric[] = [
+  { label: 'Total per hour', value: (s) => s.totalPerHour, format: perHour, hint: 'Pay rate plus tips per hour' },
+  { label: 'Pay rate', value: (s) => s.payRate, format: perHour, hint: 'This week, from your PPH' },
+  { label: 'Tips per hour', value: (s) => s.tipsPerHour, format: perHour, hint: 'Tips ÷ floor hours' },
+  { label: 'Tips', value: (s) => s.tips, format: money, hint: 'This week' },
+];
+
+const PRODUCTION: Metric[] = [
   { label: 'PPH', value: (s) => (s.floorHours > 0 ? s.pph : null), format: moneyCents, hint: 'Production per hour, as payroll figures it' },
   { label: 'Service sales', value: (s) => s.serviceSales, format: money, hint: 'Before discounts' },
   { label: 'Retail sales', value: (s) => s.retailSales, format: money },
@@ -45,6 +53,8 @@ export default function MyWeekPage() {
   const week = weeks[picked];
   const before = weeks[picked + 1];
   const earlier = weeks.slice(picked + 1, picked + 1 + AVERAGE_WEEKS);
+  const showPay = weeks.some((w) => w.payRate !== null);
+  const showTips = weeks.some((w) => w.tips !== null);
 
   return (
     <div className="space-y-6">
@@ -65,27 +75,10 @@ export default function MyWeekPage() {
         </p>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {METRICS.filter((m) => m.label !== 'Pay rate' || week.payRate !== null).map((m) => {
-              const now = m.value(week);
-              const prev = before ? m.value(before) : null;
-              const pastValues = earlier.map(m.value).filter((n): n is number => n !== null);
-              const avg = pastValues.length ? pastValues.reduce((a, b) => a + b, 0) / pastValues.length : null;
-              return (
-                <section key={m.label} className="card p-5">
-                  <div className="text-xs font-bold uppercase tracking-wide opacity-60">{m.label}</div>
-                  <div className="mt-1 text-3xl font-extrabold">{now === null ? 'n/a' : m.format(now)}</div>
-                  {m.hint && <div className="text-xs opacity-60">{m.hint}</div>}
-                  <div className="mt-3 space-y-0.5 text-sm">
-                    {now !== null && prev !== null && <Change now={now} then={prev} format={m.format} label="vs. the week before" />}
-                    {now !== null && avg !== null && pastValues.length > 1 && (
-                      <Change now={now} then={avg} format={m.format} label={`vs. your ${pastValues.length}-week average`} />
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+          {PAY.some((m) => m.value(week) !== null) && (
+            <Group title="Pay" metrics={PAY} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-4" />
+          )}
+          <Group title="Production" metrics={PRODUCTION} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-5" />
 
           <section className="card overflow-x-auto">
             <h2 className="px-5 pt-5 text-lg font-extrabold">Every week</h2>
@@ -98,7 +91,10 @@ export default function MyWeekPage() {
                   <th className="px-3 py-2 text-right font-semibold">Retail</th>
                   <th className="px-3 py-2 text-right font-semibold">Per guest</th>
                   <th className="px-3 py-2 text-right font-semibold">PPH</th>
-                  {weeks.some((w) => w.payRate !== null) && <th className="px-3 py-2 text-right font-semibold">Rate</th>}
+                  {showPay && <th className="px-3 py-2 text-right font-semibold">Rate</th>}
+                  {showTips && <th className="px-3 py-2 text-right font-semibold">Tips</th>}
+                  {showTips && <th className="px-3 py-2 text-right font-semibold">Tips/hr</th>}
+                  {showPay && showTips && <th className="px-3 py-2 text-right font-semibold">Total/hr</th>}
                   <th className="px-5 py-2 text-right font-semibold">Hours</th>
                 </tr>
               </thead>
@@ -114,8 +110,11 @@ export default function MyWeekPage() {
                     <td className="px-3 py-2 text-right">{money(w.retailSales)}</td>
                     <td className="px-3 py-2 text-right">{moneyCents(w.productPerGuest)}</td>
                     <td className="px-3 py-2 text-right">{w.floorHours > 0 ? moneyCents(w.pph) : ''}</td>
-                    {weeks.some((x) => x.payRate !== null) && (
-                      <td className="px-3 py-2 text-right">{w.payRate === null ? '' : moneyCents(w.payRate)}</td>
+                    {showPay && <td className="px-3 py-2 text-right">{w.payRate === null ? '' : moneyCents(w.payRate)}</td>}
+                    {showTips && <td className="px-3 py-2 text-right">{w.tips === null ? '' : money(w.tips)}</td>}
+                    {showTips && <td className="px-3 py-2 text-right">{w.tipsPerHour === null ? '' : moneyCents(w.tipsPerHour)}</td>}
+                    {showPay && showTips && (
+                      <td className="px-3 py-2 text-right font-semibold">{w.totalPerHour === null ? '' : moneyCents(w.totalPerHour)}</td>
                     )}
                     <td className="px-5 py-2 text-right">{hours(w.floorHours)}</td>
                   </tr>
@@ -126,6 +125,43 @@ export default function MyWeekPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** A titled row of metric cards for the picked week, each compared with the week before and their average. */
+function Group({ title, metrics, week, before, earlier, columns }: {
+  title: string;
+  metrics: Metric[];
+  week: StatLine;
+  before: StatLine | undefined;
+  earlier: StatLine[];
+  columns: string;
+}) {
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wide opacity-60">{title}</h2>
+      <div className={`grid gap-4 ${columns}`}>
+        {metrics.map((m) => {
+          const now = m.value(week);
+          const prev = before ? m.value(before) : null;
+          const pastValues = earlier.map(m.value).filter((n): n is number => n !== null);
+          const avg = pastValues.length ? pastValues.reduce((a, b) => a + b, 0) / pastValues.length : null;
+          return (
+            <div key={m.label} className="card p-5">
+              <div className="text-xs font-bold uppercase tracking-wide opacity-60">{m.label}</div>
+              <div className="mt-1 text-3xl font-extrabold">{now === null ? 'n/a' : m.format(now)}</div>
+              {m.hint && <div className="text-xs opacity-60">{m.hint}</div>}
+              <div className="mt-3 space-y-0.5 text-sm">
+                {now !== null && prev !== null && <Change now={now} then={prev} format={m.format} label="vs. the week before" />}
+                {now !== null && avg !== null && pastValues.length > 1 && (
+                  <Change now={now} then={avg} format={m.format} label={`vs. your ${pastValues.length}-week average`} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

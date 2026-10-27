@@ -46,6 +46,10 @@ public class WeeklyStat {
 	@Column(name = "off_floor_hours", precision = 8, scale = 2)
 	private BigDecimal offFloorHours;
 
+	/** Tips for the week ("Unpaid Tips"). Only ever shown to the employee themselves. */
+	@Column(precision = 10, scale = 2)
+	private BigDecimal tips;
+
 	/** Service sales before discounts. */
 	@Column(name = "service_sales", precision = 10, scale = 2)
 	private BigDecimal serviceSales;
@@ -79,6 +83,9 @@ public class WeeklyStat {
 
 	public BigDecimal getOffFloorHours() { return offFloorHours; }
 	public void setOffFloorHours(BigDecimal offFloorHours) { this.offFloorHours = offFloorHours; }
+
+	public BigDecimal getTips() { return tips; }
+	public void setTips(BigDecimal tips) { this.tips = tips; }
 
 	public BigDecimal getServiceSales() { return serviceSales; }
 	public void setServiceSales(BigDecimal serviceSales) { this.serviceSales = serviceSales; }
