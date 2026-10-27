@@ -10,6 +10,7 @@ import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
 import InstallAppCard from '@/src/components/InstallAppCard';
+import CelebrationMoment from '@/src/components/CelebrationMoment';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -66,6 +67,10 @@ export default function StaffHomePage() {
       </div>
 
       <TodayCelebrations items={celebrations?.todays ?? []} viewerId={user?.userId} />
+      {/* Their own birthday or anniversary: fireworks and a toast, once that day. */}
+      {celebrations && (
+        <CelebrationMoment items={celebrations.todays} userId={user.userId} firstName={user.firstName || 'friend'} today={celebrations.today} />
+      )}
 
       {/* Everything below "Celebrating today" is half width, two to a row. */}
       <div className="grid items-start gap-4 md:grid-cols-2">
