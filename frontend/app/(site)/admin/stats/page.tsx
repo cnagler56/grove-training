@@ -8,7 +8,7 @@ import { addDays, weekRangeLabel } from '@/src/lib/schedule';
 
 /** Below this many floor hours, "per hour" is too noisy to rank. */
 const MIN_HOURS_FOR_RATE = 5;
-/** How many people each leaderboard card shows. */
+/** How many people each leaderboard card shows until it's clicked open. */
 const BOARD_SIZE = 5;
 
 type Column = {
@@ -18,7 +18,11 @@ type Column = {
   format: (n: number) => string;
 };
 
+const count = (n: number) => n.toLocaleString('en-US');
+
 const COLUMNS: Column[] = [
+  { key: 'services', label: 'Services', value: (s) => s.services, format: count },
+  { key: 'clients', label: 'Clients', value: (s) => s.clients, format: count },
   { key: 'service', label: 'Service', value: (s) => s.serviceSales, format: money },
   { key: 'net', label: 'After discounts', value: (s) => s.netServiceSales, format: money },
   { key: 'retail', label: 'Retail', value: (s) => s.retailSales, format: money },
@@ -29,6 +33,8 @@ const COLUMNS: Column[] = [
 ];
 
 const BOARDS: { title: string; column: string; note?: string }[] = [
+  { title: 'Services', column: 'services' },
+  { title: 'Clients', column: 'clients' },
   { title: 'Service sales', column: 'service' },
   { title: 'Retail sales', column: 'retail' },
   { title: 'Product per guest', column: 'ppg' },
@@ -47,6 +53,13 @@ export default function LeaderboardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [pulling, setPulling] = useState(false);
   const [sort, setSort] = useState('service');
+  // Leaderboard cards clicked open to show everyone instead of the top five.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggleBoard = (title: string) => {
+    const next = new Set(open);
+    if (next.has(title)) next.delete(title); else next.add(title);
+    setOpen(next);
+  };
 
   const load = useCallback((w?: string) => {
     api.teamStats(w).then((d) => { setData(d); setError(null); }).catch((e) => setError(e.message));
@@ -127,13 +140,23 @@ export default function LeaderboardsPage() {
               const c = column(b.column);
               const eligible = rows.filter((r) => c.value(r.stats) !== null
                 && (b.column !== 'rate' || r.stats.floorHours >= MIN_HOURS_FOR_RATE));
-              const top = eligible.sort((x, y) => c.value(y.stats)! - c.value(x.stats)!).slice(0, BOARD_SIZE);
+              if (eligible.length === 0) return null;
+              const ranked = eligible.sort((x, y) => c.value(y.stats)! - c.value(x.stats)!);
+              const expanded = open.has(b.title);
+              const top = expanded ? ranked : ranked.slice(0, BOARD_SIZE);
+              const more = ranked.length > BOARD_SIZE;
               return (
                 <section key={b.title} className="card p-5">
-                  <div className="flex items-baseline justify-between gap-2">
+                  <button
+                    type="button"
+                    className="flex w-full items-baseline justify-between gap-2 text-left"
+                    onClick={() => more && toggleBoard(b.title)}
+                    aria-expanded={more ? expanded : undefined}
+                    disabled={!more}
+                  >
                     <h3 className="text-lg font-extrabold">{b.title}</h3>
                     {b.note && <span className="text-xs opacity-60">{b.note}</span>}
-                  </div>
+                  </button>
                   <ol className="mt-2 divide-y divide-[var(--border)] text-sm">
                     {top.map((r, i) => (
                       <li key={r.suName} className="flex items-center justify-between gap-3 py-1.5">
@@ -145,6 +168,12 @@ export default function LeaderboardsPage() {
                       </li>
                     ))}
                   </ol>
+                  {more && (
+                    <button type="button" className="mt-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline"
+                      onClick={() => toggleBoard(b.title)}>
+                      {expanded ? 'Show top 5' : `Show all ${ranked.length}`}
+                    </button>
+                  )}
                 </section>
               );
             })}
@@ -189,6 +218,8 @@ export default function LeaderboardsPage() {
               <tfoot className="border-t-2 border-[var(--border)] font-bold">
                 <tr>
                   <td className="px-5 py-2">Salon total</td>
+                  <td className="px-3 py-2 text-right">{rows.some((r) => r.stats.services !== null) ? count(total('services')) : ''}</td>
+                  <td className="px-3 py-2 text-right">{rows.some((r) => r.stats.clients !== null) ? count(total('clients')) : ''}</td>
                   <td className="px-3 py-2 text-right">{money(total('service'))}</td>
                   <td className="px-3 py-2 text-right">{money(total('net'))}</td>
                   <td className="px-3 py-2 text-right">{money(total('retail'))}</td>

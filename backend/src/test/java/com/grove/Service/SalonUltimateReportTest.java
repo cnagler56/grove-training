@@ -53,6 +53,29 @@ public class SalonUltimateReportTest {
 		assertThat(SalonUltimateReport.blockedBy(REPORT)).isNull();
 	}
 
+	/** Made-up rows laid out like Salon Ultimate's "Stylist Comparison" table. */
+	public static final String COMPARISON = """
+		<table>
+		<tr><td></td><td>Report period:</td><td>10/17/2026 - 10/23/2026</td></tr>
+		<tr><td>StylistName</td><td>Ser. Sales</td><td>Ret Sales.</td><td>Retail %</td><td>Total Sales</td><td>GC. Sales</td>
+		    <td>Serv Units</td><td>Tot. Cli.</td><td>Avg Tick.</td><td>Floor Hrs.</td></tr>
+		<tr><td>Ava Stone</td><td>1,200.00</td><td>80.00</td><td>6.25</td><td>1,280.00</td><td>0.00</td><td>44</td><td>31</td><td>38.71</td><td>30.50</td></tr>
+		<tr><td>Booked Online</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>0</td><td>0</td><td>0.00</td><td>0.00</td></tr>
+		<tr><td>House _</td><td>0.00</td><td>124.20</td><td>100.00</td><td>124.20</td><td>0.00</td><td>0</td><td>0</td><td>0.00</td><td>0.00</td></tr>
+		<tr><td>Mia De La Cruz</td><td>400.00</td><td>0.00</td><td>0.00</td><td>400.00</td><td>0.00</td><td>12</td><td>9</td><td>44.44</td><td>10.00</td></tr>
+		<tr><td>Totals:</td><td>1,600.00</td><td>204.20</td><td></td><td></td><td></td><td>56</td><td>40</td><td></td><td></td></tr>
+		</table>
+		""";
+
+	@Test
+	void readsServicesAndClientsFromStylistComparison() {
+		var counts = SalonUltimateReport.parseStylistComparison(COMPARISON);
+		assertThat(counts.get("ava stone")).isEqualTo(new SalonUltimateReport.Counts(44, 31));
+		assertThat(counts.get("mia de la cruz")).isEqualTo(new SalonUltimateReport.Counts(12, 9));
+		assertThat(counts).doesNotContainKeys("house _", "totals:");
+		assertThat(SalonUltimateReport.parseStylistComparison("<p>nothing</p>")).isEmpty();
+	}
+
 	@Test
 	void readsMoneyFormats() {
 		assertThat(SalonUltimateReport.number("(29.00)")).isEqualByComparingTo(new BigDecimal("-29.00"));

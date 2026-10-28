@@ -65,6 +65,41 @@ public final class SalonUltimateReport {
 		return List.copyOf(byName.values());
 	}
 
+	/** One stylist's service and client counts from the "Stylist Comparison" report. */
+	public record Counts(int services, int clients) {}
+
+	/**
+	 * Reads the "Stylist Comparison" report: each stylist's "Serv Units" (services
+	 * done) and "Tot. Cli." (clients), keyed by lowercase name ("ava stone").
+	 * Columns are found by their headings. Empty when the table isn't there.
+	 */
+	public static Map<String, Counts> parseStylistComparison(String html) {
+		Map<String, Counts> out = new LinkedHashMap<>();
+		int nameCol = -1, servicesCol = -1, clientsCol = -1;
+		Matcher tr = TR.matcher(html);
+		while (tr.find()) {
+			List<String> cells = new ArrayList<>();
+			Matcher td = Pattern.compile("<t[dh][^>]*>(.*?)</t[dh]>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(tr.group(1));
+			while (td.find()) cells.add(clean(td.group(1)));
+			if (servicesCol < 0) {
+				for (int i = 0; i < cells.size(); i++) {
+					String c = cells.get(i).toLowerCase().replace(" ", "");
+					if (c.startsWith("stylist")) nameCol = i;
+					else if (c.startsWith("servunits")) servicesCol = i;
+					else if (c.startsWith("tot.cli") || c.startsWith("totalcli")) clientsCol = i;
+				}
+				if (nameCol < 0 || clientsCol < 0) servicesCol = -1;
+				continue;
+			}
+			if (cells.size() <= Math.max(servicesCol, clientsCol)) continue;
+			String name = cells.get(nameCol).trim();
+			if (name.isEmpty() || name.contains(":") || name.startsWith("_") || name.contains(" _")) continue;
+			out.putIfAbsent(name.toLowerCase(),
+				new Counts(number(cells.get(servicesCol)).intValue(), number(cells.get(clientsCol)).intValue()));
+		}
+		return out;
+	}
+
 	/**
 	 * Salon Ultimate won't run the report while a timecard in the week is still
 	 * open. Returns who/when it lists ("Jane Doe on 10/24/2026"), or null if not blocked.

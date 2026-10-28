@@ -222,7 +222,10 @@ public final class Dtos {
 		/** Tips ÷ floor hours. */
 		BigDecimal tipsPerHour,
 		/** Pay rate + tips per hour. */
-		BigDecimal totalPerHour) {}
+		BigDecimal totalPerHour,
+		/** Services done and clients seen that week (null for weeks pulled before these were saved). */
+		Integer services,
+		Integer clients) {}
 
 	/** How the last pull of a week went. */
 	public record StatsImportView(LocalDate weekStart, String status, String message, Integer rowCount, LocalDateTime attemptedAt) {}

@@ -289,6 +289,9 @@ export interface StatLine {
   tipsPerHour: number | null;
   /** Pay rate + tips per hour. */
   totalPerHour: number | null;
+  /** Services done and clients seen (null for weeks pulled before these were saved). */
+  services: number | null;
+  clients: number | null;
 }
 
 /** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */

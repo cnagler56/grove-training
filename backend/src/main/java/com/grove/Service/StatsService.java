@@ -137,10 +137,28 @@ public class StatsService {
 					"Salon Ultimate's report had no one in it. Its layout may have changed.", null, now));
 		}
 
+		Map<String, SalonUltimateReport.Counts> counts = serviceCounts(weekStart);
 		stats.deleteWeek(weekStart);
-		stats.saveAll(rows.stream().map(r -> toEntity(weekStart, r, now)).toList());
+		stats.saveAll(rows.stream().map(r -> toEntity(weekStart, r, counts.get(r.name().toLowerCase()), now)).toList());
 		linkByName(rows);
 		return record(new StatsImport(weekStart, Status.OK, null, rows.size(), now));
+	}
+
+	/**
+	 * Each stylist's services and clients from the Stylist Comparison report. A
+	 * problem here doesn't stop the week saving; those two numbers are just left out.
+	 */
+	private Map<String, SalonUltimateReport.Counts> serviceCounts(LocalDate weekStart) {
+		try {
+			String html = salonUltimate.stylistComparison(weekStart, weekStart.plusDays(6));
+			return html == null ? Map.of() : SalonUltimateReport.parseStylistComparison(html);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Map.of();
+		} catch (Exception e) {
+			log.warn("Stylist Comparison for {} failed; saving the week without services and clients", weekStart, e);
+			return Map.of();
+		}
 	}
 
 	/** The viewer's own weeks, newest first, with each week's pay rate (only ever shown to them). */
@@ -228,7 +246,7 @@ public class StatsService {
 		return new StatsImportView(i.getWeekStart(), i.getStatus().name(), i.getMessage(), i.getRowCount(), i.getAttemptedAt());
 	}
 
-	private static WeeklyStat toEntity(LocalDate week, SalonUltimateReport.Row r, LocalDateTime now) {
+	private static WeeklyStat toEntity(LocalDate week, SalonUltimateReport.Row r, SalonUltimateReport.Counts counts, LocalDateTime now) {
 		WeeklyStat s = new WeeklyStat();
 		s.setWeekStart(week);
 		s.setSuName(r.name());
@@ -240,6 +258,10 @@ public class StatsService {
 		s.setNetServiceSales(r.netServiceSales());
 		s.setRetailSales(r.retailSales());
 		s.setProductPerGuest(r.productPerGuest());
+		if (counts != null) {
+			s.setServices(counts.services());
+			s.setClients(counts.clients());
+		}
 		s.setImportedAt(now);
 		return s;
 	}
@@ -253,7 +275,7 @@ public class StatsService {
 		BigDecimal total = payRate != null && tipsPerHour != null ? payRate.add(tipsPerHour) : null;
 		return new StatLine(base.weekStart(), base.serviceSales(), base.netServiceSales(), base.retailSales(),
 			base.productPerGuest(), hours, base.offFloorHours(), base.serviceSalesPerHour(), base.pph(),
-			payRate, tips, tipsPerHour, total);
+			payRate, tips, tipsPerHour, total, base.services(), base.clients());
 	}
 
 	/** One week's numbers as managers see them: no pay or tips. */
@@ -263,7 +285,7 @@ public class StatsService {
 		BigDecimal perHour = hours.signum() > 0 ? sales.divide(hours, 2, RoundingMode.HALF_UP) : null;
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
 			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate,
-			null, null, null);
+			null, null, null, s.getServices(), s.getClients());
 	}
 
 	private static BigDecimal zeroIfNull(BigDecimal n) {

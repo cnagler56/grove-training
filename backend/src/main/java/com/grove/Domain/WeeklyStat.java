@@ -64,6 +64,12 @@ public class WeeklyStat {
 	@Column(name = "product_per_guest", precision = 8, scale = 2)
 	private BigDecimal productPerGuest;
 
+	/** Services done ("Serv Units" on Stylist Comparison); null if that report couldn't be read. */
+	private Integer services;
+
+	/** Clients seen ("Tot. Cli." on Stylist Comparison); null if that report couldn't be read. */
+	private Integer clients;
+
 	@Column(name = "imported_at")
 	private LocalDateTime importedAt;
 
@@ -98,6 +104,12 @@ public class WeeklyStat {
 
 	public BigDecimal getProductPerGuest() { return productPerGuest; }
 	public void setProductPerGuest(BigDecimal productPerGuest) { this.productPerGuest = productPerGuest; }
+
+	public Integer getServices() { return services; }
+	public void setServices(Integer services) { this.services = services; }
+
+	public Integer getClients() { return clients; }
+	public void setClients(Integer clients) { this.clients = clients; }
 
 	public LocalDateTime getImportedAt() { return importedAt; }
 	public void setImportedAt(LocalDateTime importedAt) { this.importedAt = importedAt; }

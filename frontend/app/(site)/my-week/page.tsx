@@ -24,7 +24,11 @@ const PAY: Metric[] = [
   { label: 'Tips', value: (s) => s.tips, format: money, hint: 'This week' },
 ];
 
+const count = (n: number) => n.toLocaleString('en-US');
+
 const PRODUCTION: Metric[] = [
+  { label: 'Services', value: (s) => s.services, format: count, hint: 'Services you did' },
+  { label: 'Clients', value: (s) => s.clients, format: count, hint: 'Clients you saw' },
   { label: 'PPH', value: (s) => (s.floorHours > 0 ? s.pph : null), format: moneyCents, hint: 'Production per hour, as payroll figures it' },
   { label: 'Service sales', value: (s) => s.serviceSales, format: money, hint: 'Before discounts' },
   { label: 'Retail sales', value: (s) => s.retailSales, format: money },
@@ -55,6 +59,7 @@ export default function MyWeekPage() {
   const earlier = weeks.slice(picked + 1, picked + 1 + AVERAGE_WEEKS);
   const showPay = weeks.some((w) => w.payRate !== null);
   const showTips = weeks.some((w) => w.tips !== null);
+  const showCounts = weeks.some((w) => w.services !== null);
 
   return (
     <div className="space-y-6">
@@ -78,7 +83,7 @@ export default function MyWeekPage() {
           {PAY.some((m) => m.value(week) !== null) && (
             <Group title="Pay" metrics={PAY} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-4" />
           )}
-          <Group title="Production" metrics={PRODUCTION} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-5" />
+          <Group title="Production" metrics={PRODUCTION} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-4" />
 
           <section className="card overflow-x-auto">
             <h2 className="px-5 pt-5 text-lg font-extrabold">Every week</h2>
@@ -87,6 +92,8 @@ export default function MyWeekPage() {
               <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
                 <tr>
                   <th className="px-5 py-2 font-semibold">Week of</th>
+                  {showCounts && <th className="px-3 py-2 text-right font-semibold">Services</th>}
+                  {showCounts && <th className="px-3 py-2 text-right font-semibold">Clients</th>}
                   <th className="px-3 py-2 text-right font-semibold">Service</th>
                   <th className="px-3 py-2 text-right font-semibold">Retail</th>
                   <th className="px-3 py-2 text-right font-semibold">Per guest</th>
@@ -106,6 +113,8 @@ export default function MyWeekPage() {
                     className={`cursor-pointer ${i === picked ? 'bg-[var(--accent-soft)] font-semibold' : 'hover:bg-[var(--surface-2)]'}`}
                   >
                     <td className="whitespace-nowrap px-5 py-2">{weekRangeLabel(w.weekStart)}</td>
+                    {showCounts && <td className="px-3 py-2 text-right">{w.services ?? ''}</td>}
+                    {showCounts && <td className="px-3 py-2 text-right">{w.clients ?? ''}</td>}
                     <td className="px-3 py-2 text-right">{money(w.serviceSales)}</td>
                     <td className="px-3 py-2 text-right">{money(w.retailSales)}</td>
                     <td className="px-3 py-2 text-right">{moneyCents(w.productPerGuest)}</td>

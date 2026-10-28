@@ -32,6 +32,7 @@ public class SalonUltimateClient {
 		"retailSales", "retailCommUnpaid", "preDiscountServiceSales", "discountedServiceSales",
 	};
 	private static final DateTimeFormatter US = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+	private static final String STYLIST_COMPARISON = "Stylist Comparison - Corp.";
 	private static final String USER_AGENT =
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
@@ -57,20 +58,9 @@ public class SalonUltimateClient {
 		return !username.isBlank() && !password.isBlank();
 	}
 
-	/** The report's HTML for {@code start} through {@code end}. */
+	/** The "Calculate Gross Pay" report's HTML for {@code start} through {@code end}. */
 	public String weekReport(LocalDate start, LocalDate end) throws IOException, InterruptedException {
-		HttpClient http = HttpClient.newBuilder()
-			.cookieHandler(new CookieManager())
-			.followRedirects(HttpClient.Redirect.NORMAL)
-			.connectTimeout(Duration.ofSeconds(15))
-			.build();
-
-		Map<String, String> login = new LinkedHashMap<>();
-		login.put("_username", username);
-		login.put("_password", password);
-		HttpResponse<String> signedIn = http.send(post("/login_check", login, 15), HttpResponse.BodyHandlers.ofString());
-		if (signedIn.uri().getPath().contains("login")) throw new LoginFailed();
-
+		HttpClient http = signIn();
 		Map<String, String> report = new LinkedHashMap<>();
 		report.put("payrollGroupId", "");
 		report.put("reportName", "Calculate Gross Pay");
@@ -91,6 +81,39 @@ public class SalonUltimateClient {
 		HttpResponse<String> res = http.send(post("/report/displayPayroll", report, 60), HttpResponse.BodyHandlers.ofString());
 		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
 		return res.body();
+	}
+
+	/**
+	 * The "Stylist Comparison" report's HTML: each stylist's number of services
+	 * ("Serv Units") and clients for {@code start} through {@code end}.
+	 */
+	public String stylistComparison(LocalDate start, LocalDate end) throws IOException, InterruptedException {
+		HttpClient http = signIn();
+		Map<String, String> report = new LinkedHashMap<>();
+		report.put("reportName", STYLIST_COMPARISON);
+		report.put("reportSelect", STYLIST_COMPARISON);
+		report.put("reportTask", "Report_Emp_StyCmp");
+		report.put("renderedStoreId", "");
+		report.put("report[startDate]", start.format(US));
+		report.put("report[endDate]", end.format(US));
+		HttpResponse<String> res = http.send(post("/report", report, 90), HttpResponse.BodyHandlers.ofString());
+		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
+		return res.body();
+	}
+
+	/** A fresh signed-in session. */
+	private HttpClient signIn() throws IOException, InterruptedException {
+		HttpClient http = HttpClient.newBuilder()
+			.cookieHandler(new CookieManager())
+			.followRedirects(HttpClient.Redirect.NORMAL)
+			.connectTimeout(Duration.ofSeconds(15))
+			.build();
+		Map<String, String> login = new LinkedHashMap<>();
+		login.put("_username", username);
+		login.put("_password", password);
+		HttpResponse<String> signedIn = http.send(post("/login_check", login, 15), HttpResponse.BodyHandlers.ofString());
+		if (signedIn.uri().getPath().contains("login")) throw new LoginFailed();
+		return http;
 	}
 
 	private HttpRequest post(String path, Map<String, String> form, int timeoutSeconds) {

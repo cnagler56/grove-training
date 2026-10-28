@@ -61,6 +61,7 @@ class StatsTests {
 		users.deleteAll();
 		when(salonUltimate.isConfigured()).thenReturn(true);
 		when(salonUltimate.weekReport(any(), any())).thenReturn(SalonUltimateReportTest.REPORT);
+		when(salonUltimate.stylistComparison(any(), any())).thenReturn(SalonUltimateReportTest.COMPARISON);
 	}
 
 	@Test
@@ -82,7 +83,9 @@ class StatsTests {
 			.andExpect(jsonPath("$.linked").value(true))
 			.andExpect(jsonPath("$.weeks.length()").value(1))
 			.andExpect(jsonPath("$.weeks[0].serviceSales").value(1200.00))
-			.andExpect(jsonPath("$.weeks[0].serviceSalesPerHour").value(39.34));
+			.andExpect(jsonPath("$.weeks[0].serviceSalesPerHour").value(39.34))
+			.andExpect(jsonPath("$.weeks[0].services").value(44))
+			.andExpect(jsonPath("$.weeks[0].clients").value(31));
 		// Mia's isn't ("Mia Cruz" vs "Mia De La Cruz"), so she sees nothing until a manager links her.
 		mvc.perform(get("/api/stats/mine").cookie(mia))
 			.andExpect(jsonPath("$.linked").value(false))
@@ -103,6 +106,8 @@ class StatsTests {
 			.andExpect(jsonPath("$.weekStart").value(week.toString()))
 			.andExpect(jsonPath("$.rows.length()").value(2))
 			.andExpect(jsonPath("$.rows[0].name").value("Ava Stone"))
+			.andExpect(jsonPath("$.rows[0].stats.services").value(44))
+			.andExpect(jsonPath("$.rows[1].stats.clients").value(9))
 			.andExpect(jsonPath("$.lastImport.status").value("OK"));
 	}
 
@@ -155,6 +160,18 @@ class StatsTests {
 		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
 			.andExpect(jsonPath("$.status").value("BLOCKED"))
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Ava Stone on 10/22/2026")));
+	}
+
+	@Test
+	void aFailedStylistComparisonStillSavesTheWeek() throws Exception {
+		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
+		Cookie ava = signUp("ava@grove.test", "Ava", "Stone");
+		when(salonUltimate.stylistComparison(any(), any())).thenThrow(new java.io.IOException("timed out"));
+		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
+			.andExpect(jsonPath("$.status").value("OK"));
+		mvc.perform(get("/api/stats/mine").cookie(ava))
+			.andExpect(jsonPath("$.weeks[0].serviceSales").value(1200.00))
+			.andExpect(jsonPath("$.weeks[0].services").doesNotExist());
 	}
 
 	@Test
