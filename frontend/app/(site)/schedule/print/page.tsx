@@ -7,6 +7,7 @@ import { api, type WeekSchedule } from '@/src/lib/api';
 import { SALON } from '@/src/lib/salon';
 import {
   entryHours, hoursLabel, isRequestedOff, shortShift, startsReceptionists, todayIso, weekRangeLabel, weekStartOf, weekDates,
+  workingThisWeek,
 } from '@/src/lib/schedule';
 
 const DAY_NAMES = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -76,6 +77,8 @@ function PrintSchedule() {
 function PrintWeek({ week }: { week: WeekSchedule }) {
   const days = weekDates(week.weekStart);
   const cell = new Map(week.shifts.map((s) => [`${s.userId}|${s.date}`, s]));
+  // Only people with hours this week; the editor still lists everyone.
+  const people = workingThisWeek(week.roster, week.shifts);
   const status = week.published ? null : week.canEdit ? 'Draft' : 'Not posted yet';
 
   return (
@@ -110,14 +113,14 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
           </tr>
         </thead>
         <tbody>
-          {week.roster.map((person, i) => {
+          {people.map((person, i) => {
             const shifts = days.map((d) => cell.get(`${person.userId}|${d}`));
             const total = shifts.reduce((h, s) => h + (s ? entryHours(s) : 0), 0);
             return (
               <tr
                 key={person.userId}
                 className={`${i % 2 ? 'bg-[#f3f6f9]' : 'bg-white'} ${
-                  startsReceptionists(week.roster, i) ? 'border-t-2 border-t-[#4682b4]' : ''
+                  startsReceptionists(people, i) ? 'border-t-2 border-t-[#4682b4]' : ''
                 }`}
               >
                 <td className="h-[0.42in] truncate border-b border-[#d8dfe6] px-2.5 font-bold">{person.name}</td>
@@ -134,7 +137,7 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
           })}
         </tbody>
       </table>
-      {week.roster.length === 0 && <p className="mt-2 text-sm text-gray-500">Nobody on staff to schedule yet.</p>}
+      {people.length === 0 && <p className="mt-2 text-sm text-gray-500">No one has hours this week yet.</p>}
     </section>
   );
 }

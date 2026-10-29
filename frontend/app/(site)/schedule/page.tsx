@@ -6,6 +6,7 @@ import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
 import { roleLabel } from '@/src/lib/roles';
 import {
   addDays, dayLabel, entryHours, hoursLabel, isRequestedOff, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
+  workingThisWeek,
 } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 
@@ -30,6 +31,9 @@ export default function SalonSchedulePage() {
     for (const s of current?.shifts ?? []) m.set(`${s.userId}|${s.date}`, s);
     return m;
   }, [current]);
+
+  // Only people with hours this week; the editor still lists everyone.
+  const people = useMemo(() => (current ? workingThisWeek(current.roster, current.shifts) : []), [current]);
 
   const days = weekDates(weekStart);
   const today = todayIso();
@@ -78,8 +82,8 @@ export default function SalonSchedulePage() {
         <p className="mt-6 opacity-60">Loading…</p>
       ) : !visible ? (
         <div className="card mt-6 p-6 text-center opacity-80">This week’s schedule hasn’t been posted yet.</div>
-      ) : current.roster.length === 0 ? (
-        <div className="card mt-6 p-6 text-center opacity-80">Nobody is on staff to schedule yet.</div>
+      ) : people.length === 0 ? (
+        <div className="card mt-6 p-6 text-center opacity-80">No one has hours this week yet.</div>
       ) : (
         <div className="card mt-6 overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
@@ -95,7 +99,7 @@ export default function SalonSchedulePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {current.roster.map((person, i) => {
+              {people.map((person, i) => {
                 const mine = person.userId === user?.userId;
                 const total = days.reduce((h, d) => {
                   const s = shiftsByCell.get(`${person.userId}|${d}`);
@@ -105,7 +109,7 @@ export default function SalonSchedulePage() {
                   <tr
                     key={person.userId}
                     className={`${mine ? 'bg-[var(--accent-soft)]' : ''} ${
-                      startsReceptionists(current.roster, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''
+                      startsReceptionists(people, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''
                     }`}
                   >
                     <td className="px-4 py-3">
