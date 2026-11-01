@@ -197,6 +197,34 @@ export interface MyPermissions {
   editSchedule: boolean;
   approveSchedule: boolean;
   approveTimeOff: boolean;
+  postUpdates: boolean;
+}
+
+export interface TeamComment {
+  id: number;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  canDelete: boolean;
+}
+
+/** A post on the Team board (staff Home page). */
+export interface TeamPost {
+  id: number;
+  authorName: string;
+  body: string | null;
+  pinned: boolean;
+  createdAt: string;
+  imageIds: number[];
+  likes: number;
+  likedByMe: boolean;
+  comments: TeamComment[];
+  canDelete: boolean;
+}
+
+export interface TeamFeed {
+  posts: TeamPost[];
+  hasMore: boolean;
 }
 
 /** A request for days off. Dates are "YYYY-MM-DD"; endDate is the last day off. */
@@ -222,7 +250,7 @@ export interface TimeOffQueue {
   approved: TimeOffRequest[];
 }
 
-export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF';
+export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES';
 
 /** One permission on the owner's Settings page. */
 export interface PermissionRule {
@@ -453,6 +481,27 @@ export const api = {
   sendBackSchedule: (weekStart: string, note: string) =>
     send<WeekSchedule>(`/api/schedule/${weekStart}/send-back`, 'POST', { note }),
   waitingSchedules: () => send<PendingWeek[]>('/api/schedule/waiting'),
+
+  teamBoard: (page: number) => send<TeamFeed>(`/api/team-board?page=${page}`),
+  createTeamPost: (p: { body: string; withPhotos: boolean }) => send<{ id: number }>('/api/team-board', 'POST', p),
+  /** One shrunk JPEG at a time, so a post with many photos never hits a size limit. */
+  uploadTeamPhoto: async (id: number, photo: Blob) => {
+    const res = await fetch(`${BASE}/api/team-board/${id}/images`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: photo,
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => null);
+      throw new Error(j?.message || 'A photo could not be uploaded');
+    }
+  },
+  deleteTeamPost: (id: number) => send<void>(`/api/team-board/${id}`, 'DELETE'),
+  pinTeamPost: (id: number, pinned: boolean) => send<void>(`/api/team-board/${id}/pinned`, 'PUT', { pinned }),
+  likeTeamPost: (id: number, liked: boolean) => send<void>(`/api/team-board/${id}/like`, liked ? 'PUT' : 'DELETE'),
+  commentOnTeamPost: (id: number, body: string) => send<void>(`/api/team-board/${id}/comments`, 'POST', { body }),
+  deleteTeamComment: (id: number) => send<void>(`/api/team-board/comments/${id}`, 'DELETE'),
 
   myTimeOff: () => send<TimeOffRequest[]>('/api/time-off/mine'),
   requestTimeOff: (r: { startDate: string; endDate: string; note: string | null }) =>

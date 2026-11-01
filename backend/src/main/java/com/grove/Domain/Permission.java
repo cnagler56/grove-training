@@ -19,7 +19,10 @@ public enum Permission {
 		EnumSet.of(Role.GENERAL_MANAGER)),
 	APPROVE_TIME_OFF("Get and approve time off requests",
 		"Get time off requests, then approve them or send them back with a message.",
-		EnumSet.of(Role.GENERAL_MANAGER));
+		EnumSet.of(Role.GENERAL_MANAGER)),
+	POST_UPDATES("Post on the team board",
+		"Write posts and share photos on the staff Home page. Everyone on staff can comment and like.",
+		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER));
 
 	private final String label;
 	private final String description;

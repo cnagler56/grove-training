@@ -10,6 +10,7 @@ import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
 import InstallAppCard from '@/src/components/InstallAppCard';
+import TeamBoard from '@/src/components/TeamBoard';
 import CelebrationMoment from '@/src/components/CelebrationMoment';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -138,6 +139,8 @@ export default function StaffHomePage() {
           </ul>
         </section>
       )}
+
+      {isStaff && <TeamBoard />}
 
       {/* Owners don't work shifts or take the training, so they skip both cards. */}
         {isStaff && !isOwner && (

@@ -523,7 +523,7 @@ class GroveServerApplicationTests {
 		// Only the owner sees or changes the settings. Defaults: GM builds and approves.
 		mvc.perform(get("/api/owner/permissions").cookie(gm)).andExpect(status().isForbidden());
 		mvc.perform(get("/api/owner/permissions").cookie(owner))
-			.andExpect(jsonPath("$.length()").value(4))
+			.andExpect(jsonPath("$.length()").value(5))
 			.andExpect(jsonPath("$[1].permission").value("EDIT_SCHEDULE"))
 			.andExpect(jsonPath("$[1].roles").value(org.hamcrest.Matchers.containsInAnyOrder("OWNER", "GENERAL_MANAGER")));
 		mvc.perform(get("/api/me/permissions").cookie(manager))

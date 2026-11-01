@@ -179,7 +179,30 @@ public final class Dtos {
 	public record WeekPublish(boolean published) {}
 
 	/** What the signed-in person can do with the schedule (drives tabs and buttons). */
-	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff) {}
+	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff, boolean postUpdates) {}
+
+	/** Starting a Team board post. {@code withPhotos}: photos follow, so the text may be blank. */
+	public record TeamPostInput(String body, boolean withPhotos) {}
+
+	public record TeamCommentInput(String body) {}
+
+	public record TeamPinInput(boolean pinned) {}
+
+	public record TeamCommentView(Long id, String authorName, String body, LocalDateTime createdAt, boolean canDelete) {}
+
+	public record TeamPostView(
+		Long id,
+		String authorName,
+		String body,
+		boolean pinned,
+		LocalDateTime createdAt,
+		List<Long> imageIds,
+		int likes,
+		boolean likedByMe,
+		List<TeamCommentView> comments,
+		boolean canDelete) {}
+
+	public record TeamFeed(List<TeamPostView> posts, boolean hasMore) {}
 
 	/** What an employee sends to ask for days off. {@code endDate} is the last day off. */
 	public record TimeOffInput(LocalDate startDate, LocalDate endDate, String note) {}
