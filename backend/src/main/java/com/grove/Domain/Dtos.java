@@ -160,7 +160,9 @@ public final class Dtos {
 		/** Who this week can be sent to for approval (for builders; excludes the viewer). */
 		List<Person> approvers,
 		List<RosterEntry> roster,
-		List<ShiftView> shifts) {}
+		List<ShiftView> shifts,
+		/** Every day this week someone is approved off (also merged into shifts as RO where the day is empty). */
+		List<TimeOffDay> timeOff) {}
 
 	/** One row of the schedule. {@code active=false} only for a former employee with shifts that week. */
 	public record RosterEntry(Long userId, String name, Role role, boolean active) {}
@@ -174,7 +176,33 @@ public final class Dtos {
 	public record WeekPublish(boolean published) {}
 
 	/** What the signed-in person can do with the schedule (drives tabs and buttons). */
-	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule) {}
+	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff) {}
+
+	/** What an employee sends to ask for days off. {@code endDate} is the last day off. */
+	public record TimeOffInput(LocalDate startDate, LocalDate endDate, String note) {}
+
+	/** An approver's answer. Required when sending a request back. */
+	public record TimeOffDecision(String message) {}
+
+	/** A time off request. {@code status} is PENDING, APPROVED, or SENT_BACK. */
+	public record TimeOffView(
+		Long id,
+		Long userId,
+		String name,
+		LocalDate startDate,
+		LocalDate endDate,
+		String note,
+		String status,
+		String responseNote,
+		String decidedByName,
+		LocalDateTime decidedAt,
+		LocalDateTime createdAt) {}
+
+	/** What an approver sees: requests waiting on them, and approved time off still to come. */
+	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}
+
+	/** A day someone is approved off, on the week it falls in. */
+	public record TimeOffDay(Long userId, String name, LocalDate date) {}
 
 	/** One permission on the owner's Settings page and the roles that have it. */
 	public record PermissionRule(Permission permission, String label, String description, List<Role> roles) {}

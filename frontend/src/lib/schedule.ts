@@ -35,6 +35,10 @@ export const weekDates = (start: string) => Array.from({ length: 7 }, (_, i) => 
 export const dayLabel = (iso: string) => `${DAY_SHORT[weekday(iso)]} ${Number(iso.slice(8, 10))}`;
 
 /** "Sat, Oct 17". */
+/** "Mon, Nov 2" or "Mon, Nov 2 – Wed, Nov 4". */
+export const timeOffRange = (start: string, end: string) =>
+  (start === end ? longDayLabel(start) : `${longDayLabel(start)} – ${longDayLabel(end)}`);
+
 export const longDayLabel = (iso: string) => `${DAY_SHORT[weekday(iso)]}, ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 
 /** "Oct 17 – 23" or "Oct 31 – Nov 6". */

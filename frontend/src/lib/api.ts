@@ -172,6 +172,8 @@ export interface WeekSchedule {
   approvers: Person[];
   roster: RosterEntry[];
   shifts: ShiftView[];
+  /** Every day this week someone is approved off (already in shifts as RO unless the day has a shift). */
+  timeOff: { userId: number; name: string; date: string }[];
 }
 
 export interface Person {
@@ -192,9 +194,33 @@ export interface MyPermissions {
   viewSchedule: boolean;
   editSchedule: boolean;
   approveSchedule: boolean;
+  approveTimeOff: boolean;
 }
 
-export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE';
+/** A request for days off. Dates are "YYYY-MM-DD"; endDate is the last day off. */
+export interface TimeOffRequest {
+  id: number;
+  userId: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  note: string | null;
+  status: 'PENDING' | 'APPROVED' | 'SENT_BACK';
+  /** The approver's message back. */
+  responseNote: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  createdAt: string | null;
+}
+
+/** What an approver sees. */
+export interface TimeOffQueue {
+  waiting: TimeOffRequest[];
+  /** Approved time off that's still to come. */
+  approved: TimeOffRequest[];
+}
+
+export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF';
 
 /** One permission on the owner's Settings page. */
 export interface PermissionRule {
@@ -425,6 +451,15 @@ export const api = {
   sendBackSchedule: (weekStart: string, note: string) =>
     send<WeekSchedule>(`/api/schedule/${weekStart}/send-back`, 'POST', { note }),
   waitingSchedules: () => send<PendingWeek[]>('/api/schedule/waiting'),
+
+  myTimeOff: () => send<TimeOffRequest[]>('/api/time-off/mine'),
+  requestTimeOff: (r: { startDate: string; endDate: string; note: string | null }) =>
+    send<TimeOffRequest>('/api/time-off', 'POST', r),
+  cancelTimeOff: (id: number) => send<void>(`/api/time-off/${id}`, 'DELETE'),
+  timeOffQueue: () => send<TimeOffQueue>('/api/time-off/queue'),
+  approveTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/approve`, 'PUT', {}),
+  sendBackTimeOff: (id: number, message: string) =>
+    send<TimeOffRequest>(`/api/time-off/${id}/send-back`, 'PUT', { message }),
 
   myPermissions: () => send<MyPermissions>('/api/me/permissions'),
   celebrations: () => send<Celebrations>('/api/celebrations'),

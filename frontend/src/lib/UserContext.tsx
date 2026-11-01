@@ -11,7 +11,7 @@ import {
 import { api, type Credentials, type MyPermissions, type User } from './api';
 import { confirmLeave, leavingNow } from './leaveGuard';
 
-const NO_PERMISSIONS: MyPermissions = { viewSchedule: false, editSchedule: false, approveSchedule: false };
+const NO_PERMISSIONS: MyPermissions = { viewSchedule: false, editSchedule: false, approveSchedule: false, approveTimeOff: false };
 
 interface UserContextValue {
   user: User | null;

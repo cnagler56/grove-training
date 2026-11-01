@@ -16,9 +16,9 @@ import {
 
 /** A day for one person: a shift, or RO (requested off: no times). */
 type Cell = { start: string; end: string; note: string; off?: boolean };
-/** Start-dropdown value meaning "requested off". */
-const RO = "__RO__";
 const key = (userId: number, date: string) => `${userId}|${date}`;
+/** The note on a day that's RO because its time off was approved. */
+const APPROVED_NOTE = 'Approved time off';
 /** Room left under the grid for the hint line and page margin. */
 const GRID_BOTTOM_SPACE = 72;
 /** On a very short screen, keep the grid usable and let the page scroll instead. */
@@ -122,6 +122,16 @@ function ScheduleEditor() {
     setEditing(k);
   }
 
+  /** Days this week with approved time off, which stay RO through Copy last week and Clear week. */
+  function approvedDays() {
+    const ids = new Set((staff ?? []).map((m) => m.userId));
+    const days: Record<string, Cell> = {};
+    for (const d of week?.timeOff ?? []) {
+      if (ids.has(d.userId)) days[key(d.userId, d.date)] = { start: '', end: '', note: APPROVED_NOTE, off: true };
+    }
+    return days;
+  }
+
   async function copyLastWeek() {
     if (Object.keys(cells).length && !(await dialogs.confirm({
       title: 'Copy last week?',
@@ -138,7 +148,7 @@ function ScheduleEditor() {
           next[key(s.userId, addDays(s.date, 7))] = { start: hhmm(s.start), end: hhmm(s.end), note: s.note ?? '' };
         }
       }
-      setCells(next);
+      setCells({ ...next, ...approvedDays() });
       setDirty(true);
       setEditing(null);
       setNotice(prev.shifts.length ? 'Copied last week. Review it, then save.' : 'Last week had no shifts to copy.');
@@ -235,6 +245,10 @@ function ScheduleEditor() {
     POSTED: ['Posted', 'bg-[var(--success-soft)] text-[var(--success)]'],
   } as const;
   const [badgeText, badgeClass] = STATE_BADGE[week.state];
+  const conflicts = (week.timeOff ?? []).filter((d) => {
+    const c = cells[key(d.userId, d.date)];
+    return c && !c.off;
+  });
 
   return (
     <div className="-mt-4">
@@ -268,6 +282,13 @@ function ScheduleEditor() {
         <Banner tone="muted">This week is posted. Only someone who can approve the schedule can change it now.</Banner>
       ) : null}
 
+      {conflicts.length > 0 && (
+        <Banner tone="warn">
+          <b>Approved time off with a shift:</b>{' '}
+          {conflicts.map((d) => `${d.name} on ${longDayLabel(d.date)}`).join(', ')}. Change these days to RO or Off.
+        </Banner>
+      )}
+
       {!readOnly && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button className="btn-ghost" onClick={() => void copyLastWeek()} disabled={busy}>Copy last week</button>
@@ -275,10 +296,10 @@ function ScheduleEditor() {
             className="btn-ghost"
             onClick={() => void dialogs.confirm({
               title: 'Clear this week?',
-              message: 'This removes every shift and RO on this week. Nothing is saved until you click Save.',
+              message: 'This removes every shift and RO on this week, except approved time off. Nothing is saved until you click Save.',
               confirmLabel: 'Clear week',
               danger: true,
-            }).then((ok) => { if (ok) { setCells({}); setDirty(true); setEditing(null); } })}
+            }).then((ok) => { if (ok) { setCells(approvedDays()); setDirty(true); setEditing(null); } })}
             disabled={busy}
           >
             Clear week
@@ -364,19 +385,28 @@ function ScheduleEditor() {
                       return (
                         <td key={d} ref={(el) => el?.scrollIntoView({ block: 'nearest' })} className="bg-[var(--surface-2)] px-2 py-2 align-top">
                           <div className="flex flex-col gap-1">
-                            <TimeSelect label="Start" value={c.off ? RO : c.start} choices={startChoices} withRO
-                              onChange={(v) => update(k, v === RO
-                                ? { ...c, off: true }
-                                : { ...c, off: false, start: v, end: !c.off && c.end > v ? c.end : close })} />
-                            {!c.off && (
-                              <TimeSelect label="End" value={c.end} choices={endChoices}
-                                onChange={(end) => update(k, { ...c, end })} />
+                            {c.off ? (
+                              <div className="rounded-lg bg-amber-100 px-2 py-1.5 text-center text-xs font-bold text-[var(--warn)]">RO: requested off</div>
+                            ) : (
+                              <>
+                                <TimeSelect label="Start" value={c.start} choices={startChoices}
+                                  onChange={(v) => update(k, { ...c, start: v, end: c.end > v ? c.end : close })} />
+                                <TimeSelect label="End" value={c.end} choices={endChoices}
+                                  onChange={(end) => update(k, { ...c, end })} />
+                              </>
                             )}
                             <input className="input px-2 py-1 text-xs" value={c.note} placeholder="Note" maxLength={100}
                               aria-label="Note" onChange={(e) => update(k, { ...c, note: e.target.value })} />
+                            <button className="rounded-full bg-[var(--accent)] px-2 py-1 text-xs font-bold text-white"
+                              onClick={() => setEditing(null)}>Done</button>
                             <div className="flex gap-1">
-                              <button className="flex-1 rounded-full bg-[var(--accent)] px-2 py-1 text-xs font-bold text-white"
-                                onClick={() => setEditing(null)}>Done</button>
+                              {c.off ? (
+                                <button className="flex-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-bold"
+                                  onClick={() => update(k, { ...c, off: false, start: open, end: close })}>Times</button>
+                              ) : (
+                                <button className="flex-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-[var(--warn)]"
+                                  onClick={() => { update(k, { ...c, off: true }); setEditing(null); }}>RO</button>
+                              )}
                               <button className="flex-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-bold"
                                 onClick={() => { update(k, null); setEditing(null); }}>Off</button>
                             </div>
@@ -421,7 +451,7 @@ function ScheduleEditor() {
         </table>
       </div>
       <p className="mt-2 text-xs opacity-60">
-        Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Choose RO for a day someone requested off.
+        Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Click RO for a day someone requested off. Approved time off shows as RO on its own.
       </p>
     </div>
   );
@@ -431,18 +461,15 @@ function ScheduleEditor() {
  * A time dropdown limited to the salon's open hours. A value outside them (say
  * a shift saved before the hours changed) stays listed so it isn't silently lost.
  */
-function TimeSelect({ label, value, choices, onChange, withRO = false }: {
+function TimeSelect({ label, value, choices, onChange }: {
   label: string;
   value: string;
   choices: string[];
   onChange: (v: string) => void;
-  /** Offer "RO" (requested off) above the times. */
-  withRO?: boolean;
 }) {
-  const options = value === RO || choices.includes(value) ? choices : [value, ...choices];
+  const options = choices.includes(value) ? choices : [value, ...choices];
   return (
     <select className="input px-2 py-1 text-xs" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-      {withRO && <option value={RO}>RO (requested off)</option>}
       {options.map((t) => <option key={t} value={t}>{timeLabel(t)}</option>)}
     </select>
   );

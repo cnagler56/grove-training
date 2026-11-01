@@ -52,7 +52,7 @@ public class PermissionService {
 
 	public MyPermissions forUser(User user) {
 		return new MyPermissions(has(user, Permission.VIEW_SCHEDULE), has(user, Permission.EDIT_SCHEDULE),
-			has(user, Permission.APPROVE_SCHEDULE));
+			has(user, Permission.APPROVE_SCHEDULE), has(user, Permission.APPROVE_TIME_OFF));
 	}
 
 	/** Every permission with its current roles, for the owner's Settings page. */

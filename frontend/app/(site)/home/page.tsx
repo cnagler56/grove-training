@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDuration, type Celebrations, type PendingWeek, type ShiftView, type VideoSummary } from '@/src/lib/api';
+import { api, formatDuration, type Celebrations, type PendingWeek, type ShiftView, type TimeOffRequest, type VideoSummary } from '@/src/lib/api';
 import { TodayCelebrations, UpcomingCelebrations } from '@/src/components/Celebrations';
-import { isRequestedOff, longDayLabel, shiftLabel, todayIso, weekRangeLabel } from '@/src/lib/schedule';
-import { canManageSite, roleLabel } from '@/src/lib/roles';
+import { addDays, isRequestedOff, longDayLabel, shiftLabel, timeOffRange, todayIso, weekRangeLabel } from '@/src/lib/schedule';
+import { canManageSite, onSchedule, roleLabel } from '@/src/lib/roles';
 import { SALON } from '@/src/lib/salon';
 import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
@@ -31,6 +31,8 @@ export default function StaffHomePage() {
   const [myShifts, setMyShifts] = useState<ShiftView[] | null>(null);
   const [toApprove, setToApprove] = useState<PendingWeek[]>([]);
   const [celebrations, setCelebrations] = useState<Celebrations | null>(null);
+  const [timeOffToAnswer, setTimeOffToAnswer] = useState<TimeOffRequest[]>([]);
+  const [myTimeOff, setMyTimeOff] = useState<TimeOffRequest[]>([]);
 
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
@@ -42,10 +44,22 @@ export default function StaffHomePage() {
   }, [perms.approveSchedule]);
 
   useEffect(() => {
+    if (perms.approveTimeOff) api.timeOffQueue().then((q) => setTimeOffToAnswer(q.waiting)).catch(() => {});
+  }, [perms.approveTimeOff]);
+
+  const asksForTimeOff = onSchedule(user?.roles);
+  useEffect(() => {
+    if (asksForTimeOff) api.myTimeOff().then(setMyTimeOff).catch(() => {});
+  }, [asksForTimeOff]);
+
+  useEffect(() => {
     if (isStaff) api.celebrations().then(setCelebrations).catch(() => {});
   }, [isStaff]);
 
   if (!user) return null;
+  // Answers to their requests stay on Home for two weeks.
+  const twoWeeksAgo = addDays(todayIso(), -14);
+  const timeOffAnswers = myTimeOff.filter((r) => r.status !== 'PENDING' && r.decidedAt && r.decidedAt >= twoWeeksAgo);
   const ready = (videos ?? []).filter((v) => v.status === 'READY');
   const watched = ready.filter((v) => v.completed).length;
   const pct = ready.length ? Math.round((watched / ready.length) * 100) : 0;
@@ -91,7 +105,41 @@ export default function StaffHomePage() {
         </section>
       )}
 
-        {/* Owners don't work shifts or take the training, so they skip both cards. */}
+        {timeOffToAnswer.length > 0 && (
+        <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-extrabold">Time off waiting for your answer</h2>
+            <Link href="/time-off" className="btn shrink-0">Review</Link>
+          </div>
+          <ul className="mt-2 space-y-1 text-sm">
+            {timeOffToAnswer.map((r) => (
+              <li key={r.id}><b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {timeOffAnswers.length > 0 && (
+        <section className="card p-5">
+          <div className="flex items-end justify-between gap-2">
+            <h2 className="text-lg font-extrabold">Your time off</h2>
+            <Link href="/time-off" className="text-sm font-semibold text-[var(--accent-strong)] hover:underline">See all</Link>
+          </div>
+          <ul className="mt-2 divide-y divide-[var(--border)] text-sm">
+            {timeOffAnswers.map((r) => (
+              <li key={r.id} className="py-2">
+                <b>{timeOffRange(r.startDate, r.endDate)}</b>:{' '}
+                <span className={`font-semibold ${r.status === 'APPROVED' ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                  {r.status === 'APPROVED' ? 'Approved' : 'Sent back'}
+                </span>
+                {r.responseNote && <div className="mt-0.5 whitespace-pre-line opacity-80">{r.responseNote}</div>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Owners don't work shifts or take the training, so they skip both cards. */}
         {isStaff && !isOwner && (
           <section className="card p-5">
             <h2 className="text-lg font-extrabold">Your training</h2>

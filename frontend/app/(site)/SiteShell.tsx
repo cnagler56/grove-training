@@ -5,13 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
-import { canManageSite } from '@/src/lib/roles';
+import { canManageSite, onSchedule } from '@/src/lib/roles';
 
 const TABS = [{ href: '/home', label: 'Home' }];
 const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
 const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 /** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
+const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
 const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
   { href: '/admin', label: 'Manage videos' },
@@ -42,6 +43,7 @@ function Header() {
     ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
     ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
     ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
+    ...(onSchedule(user?.roles) || perms.approveTimeOff ? TIME_OFF_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -122,6 +124,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || pathname.startsWith('/admin/settings');
   const needsStaff = pathname.startsWith('/videos');
   const needsMyWeek = pathname.startsWith('/my-week');
+  const needsTimeOff = pathname.startsWith('/time-off');
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');
@@ -130,6 +133,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || (needsOwner && user.roles !== 'OWNER')
     || (needsStaff && user.roles === 'CUSTOMER')
     || (needsMyWeek && !hasMyWeek(user.roles))
+    || (needsTimeOff && !onSchedule(user.roles) && !perms.approveTimeOff)
     || (needsScheduleView && !seesSchedule(perms))
     || (needsScheduleEdit && !perms.editSchedule && !perms.approveSchedule));
 

@@ -23,15 +23,18 @@ import com.grove.Domain.Dtos.Person;
 import com.grove.Domain.Dtos.RosterEntry;
 import com.grove.Domain.Dtos.ShiftInput;
 import com.grove.Domain.Dtos.ShiftView;
+import com.grove.Domain.Dtos.TimeOffDay;
 import com.grove.Domain.Dtos.WeekSchedule;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
 import com.grove.Domain.ScheduleWeek;
 import com.grove.Domain.Shift;
 import com.grove.Domain.ShiftType;
+import com.grove.Domain.TimeOffRequest;
 import com.grove.Domain.User;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
+import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserRepository;
 
 /**
@@ -54,14 +57,16 @@ public class ScheduleService {
 	private final UserRepository users;
 	private final PermissionService perms;
 	private final Mailer mailer;
+	private final TimeOffRequestRepository timeOff;
 
 	public ScheduleService(ShiftRepository shifts, ScheduleWeekRepository weeks, UserRepository users,
-			PermissionService perms, Mailer mailer) {
+			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff) {
 		this.shifts = shifts;
 		this.weeks = weeks;
 		this.users = users;
 		this.perms = perms;
 		this.mailer = mailer;
+		this.timeOff = timeOff;
 	}
 
 	/** The Saturday on or before {@code day}. */
@@ -80,7 +85,10 @@ public class ScheduleService {
 		boolean canEdit = canApprove || (canBuild && !published);
 		boolean seesDrafts = canApprove || canBuild;
 		List<Shift> weekShifts = shifts.findByDateBetweenOrderByDateAscStartAsc(start, end);
-		List<ShiftView> list = (published || seesDrafts) ? toViews(weekShifts) : List.of();
+		boolean visible = published || seesDrafts;
+		List<RosterEntry> roster = roster(weekShifts);
+		List<TimeOffDay> daysOff = visible ? approvedDaysOff(start, end, roster) : List.of();
+		List<ShiftView> list = visible ? withApprovedDays(toViews(weekShifts), daysOff, roster) : List.of();
 		String state = published ? "POSTED" : (w != null && w.isPending()) ? "PENDING" : "DRAFT";
 		return new WeekSchedule(start, end, published, w == null ? null : w.getPublishedAt(), state,
 			canEdit, canApprove,
@@ -91,7 +99,38 @@ public class ScheduleService {
 			w == null ? null : w.getReturnNote(),
 			w == null ? null : nameOf(w.getReturnedBy()),
 			seesDrafts ? approvers(viewer) : List.of(),
-			roster(weekShifts), list);
+			roster, list, daysOff);
+	}
+
+	/** Every day this week that someone on the roster has approved time off. */
+	private List<TimeOffDay> approvedDaysOff(LocalDate start, LocalDate end, List<RosterEntry> roster) {
+		Map<Long, RosterEntry> people = roster.stream().collect(Collectors.toMap(RosterEntry::userId, Function.identity()));
+		List<TimeOffDay> days = new java.util.ArrayList<>();
+		for (TimeOffRequest r : timeOff.overlapping(List.of(TimeOffRequest.Status.APPROVED), start, end)) {
+			RosterEntry person = people.get(r.getUserId());
+			if (person == null) continue;
+			for (LocalDate d = r.getStartDate().isBefore(start) ? start : r.getStartDate();
+					!d.isAfter(end) && !d.isAfter(r.getEndDate()); d = d.plusDays(1)) {
+				days.add(new TimeOffDay(person.userId(), person.name(), d));
+			}
+		}
+		return days;
+	}
+
+	/**
+	 * Approved days show as RO without anyone adding them. A day that already has
+	 * an entry keeps it; the editor warns if that's a working shift.
+	 */
+	private List<ShiftView> withApprovedDays(List<ShiftView> list, List<TimeOffDay> daysOff, List<RosterEntry> roster) {
+		Set<String> taken = list.stream().map(s -> s.userId() + "@" + s.date()).collect(Collectors.toSet());
+		Map<Long, Role> roles = roster.stream().collect(Collectors.toMap(RosterEntry::userId, RosterEntry::role));
+		List<ShiftView> merged = new java.util.ArrayList<>(list);
+		for (TimeOffDay d : daysOff) {
+			if (taken.contains(d.userId() + "@" + d.date())) continue;
+			merged.add(new ShiftView(null, d.userId(), d.name(), roles.get(d.userId()), d.date(),
+				ShiftType.REQUESTED_OFF, null, null, TimeOffService.APPROVED_NOTE));
+		}
+		return merged;
 	}
 
 	/**

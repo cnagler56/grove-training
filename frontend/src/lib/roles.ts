@@ -20,6 +20,9 @@ const rank = (r: UserRole) => byValue[r]?.rank ?? 0;
 export const roleLabel = (r: UserRole) => byValue[r]?.label ?? r;
 
 /** Managers and up get the manager pages (upload videos, manage the team). */
+/** Works shifts: everyone on staff except owners. They can ask for time off. */
+export const onSchedule = (r: UserRole | undefined) => !!r && r !== 'OWNER' && r !== 'CUSTOMER';
+
 export const canManageSite = (r: UserRole | undefined) => !!r && rank(r) >= rank('MANAGER');
 
 /** You can change people ranked below you; an owner can change anyone. */

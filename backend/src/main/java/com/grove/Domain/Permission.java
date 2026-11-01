@@ -16,6 +16,9 @@ public enum Permission {
 		EnumSet.of(Role.GENERAL_MANAGER)),
 	APPROVE_SCHEDULE("Approve and post the schedule",
 		"Approve weeks sent to them, post weeks to staff, and change posted weeks.",
+		EnumSet.of(Role.GENERAL_MANAGER)),
+	APPROVE_TIME_OFF("Get and approve time off requests",
+		"Get time off requests, then approve them or send them back with a message.",
 		EnumSet.of(Role.GENERAL_MANAGER));
 
 	private final String label;
