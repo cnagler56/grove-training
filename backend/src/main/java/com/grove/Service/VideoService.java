@@ -50,14 +50,16 @@ public class VideoService {
 	private final UserRepository userRepo;
 	private final BunnyStreamService bunny;
 	private final VideoAssignmentRepository assignmentRepo;
+	private final PushService push;
 
 	public VideoService(VideoRepository videoRepo, VideoCompletionRepository completionRepo,
-			UserRepository userRepo, BunnyStreamService bunny, VideoAssignmentRepository assignmentRepo) {
+			UserRepository userRepo, BunnyStreamService bunny, VideoAssignmentRepository assignmentRepo, PushService push) {
 		this.videoRepo = videoRepo;
 		this.completionRepo = completionRepo;
 		this.userRepo = userRepo;
 		this.bunny = bunny;
 		this.assignmentRepo = assignmentRepo;
+		this.push = push;
 	}
 
 	/**
@@ -186,10 +188,14 @@ public class VideoService {
 				}
 			}
 		}
+		Set<Long> alreadyAssigned = assignmentRepo.findByVideoId(v.getId()).stream()
+			.map(VideoAssignment::getUserId).collect(Collectors.toSet());
 		assignmentRepo.deleteByVideoId(v.getId());
 		assignmentRepo.saveAll(ids.stream().map(uid -> new VideoAssignment(v.getId(), uid)).toList());
 		v.setAssignedOnly(!everyone);
 		videoRepo.save(v);
+		List<Long> newlyAssigned = ids.stream().filter(uid -> !alreadyAssigned.contains(uid)).toList();
+		push.notify(newlyAssigned, "New video assigned to you", v.getTitle(), "/videos/" + v.getId());
 		return audience(id);
 	}
 

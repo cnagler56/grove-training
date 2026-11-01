@@ -62,9 +62,11 @@ public class ScheduleService {
 	private final Mailer mailer;
 	private final TimeOffRequestRepository timeOff;
 	private final ScheduleNoteRepository notes;
+	private final PushService push;
 
 	public ScheduleService(ShiftRepository shifts, ScheduleWeekRepository weeks, UserRepository users,
-			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff, ScheduleNoteRepository notes) {
+			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff, ScheduleNoteRepository notes,
+			PushService push) {
 		this.shifts = shifts;
 		this.weeks = weeks;
 		this.users = users;
@@ -72,6 +74,7 @@ public class ScheduleService {
 		this.mailer = mailer;
 		this.timeOff = timeOff;
 		this.notes = notes;
+		this.push = push;
 	}
 
 	/** The Saturday on or before {@code day}. */
@@ -267,6 +270,8 @@ public class ScheduleService {
 		weeks.save(w);
 
 		String range = range(start);
+		push.notify(List.of(approver.getUserId()), "Schedule to approve",
+			name(builder) + " sent you the week of " + range + ".", "/schedule/edit?week=" + start);
 		mailer.send(List.of(approver.getEmail()), "Schedule to approve: week of " + range, String.join("\n",
 			name(builder) + " sent you the schedule for the week of " + range + " to approve.",
 			"",
@@ -281,6 +286,7 @@ public class ScheduleService {
 		perms.require(approver, Permission.APPROVE_SCHEDULE, "Only people who can approve the schedule can post it");
 		ScheduleWeek w = weeks.findById(start).orElseGet(() -> newWeek(start));
 		Long builderId = w.getSubmittedBy();
+		boolean newlyPosted = published && !w.isPublished();
 		w.setPublished(published);
 		w.setPublishedAt(published ? LocalDateTime.now() : null);
 		if (published) {
@@ -289,6 +295,13 @@ public class ScheduleService {
 			w.setReturnedBy(null);
 		}
 		weeks.save(w);
+
+		if (newlyPosted) {
+			Set<Long> viewers = users.findAll().stream()
+				.filter(u -> !u.getUserId().equals(approver.getUserId()) && perms.has(u, Permission.VIEW_SCHEDULE))
+				.map(User::getUserId).collect(Collectors.toSet());
+			push.notify(viewers, "New schedule posted", "The week of " + range(start) + " is up.", "/schedule");
+		}
 
 		// Let the builder know their week went up.
 		if (published && builderId != null && !builderId.equals(approver.getUserId())) {
@@ -315,6 +328,8 @@ public class ScheduleService {
 		weeks.save(w);
 
 		if (builderId != null) {
+			push.notify(List.of(builderId), "Schedule sent back",
+				name(approver) + ": " + trimmed, "/schedule/edit?week=" + start);
 			users.findById(builderId).ifPresent(b -> mailer.send(List.of(b.getEmail()),
 				"Schedule sent back: week of " + range(start), String.join("\n",
 					name(approver) + " sent back the schedule for the week of " + range(start) + ":",

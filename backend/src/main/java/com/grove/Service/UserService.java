@@ -26,6 +26,7 @@ import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
+import com.grove.Repository.PushSubscriptionRepository;
 import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.TeamPostLikeRepository;
 import com.grove.Repository.TimeOffRequestRepository;
@@ -53,6 +54,7 @@ public class UserService {
 	private final TimeOffRequestRepository timeOffRepo;
 	private final ScheduleNoteRepository scheduleNoteRepo;
 	private final TeamPostLikeRepository teamLikeRepo;
+	private final PushSubscriptionRepository pushRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
@@ -60,7 +62,7 @@ public class UserService {
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
 			TimeOffRequestRepository timeOffRepo, ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
-			PasswordEncoder passwordEncoder,
+			PushSubscriptionRepository pushRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -71,6 +73,7 @@ public class UserService {
 		this.timeOffRepo = timeOffRepo;
 		this.scheduleNoteRepo = scheduleNoteRepo;
 		this.teamLikeRepo = teamLikeRepo;
+		this.pushRepo = pushRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -234,6 +237,7 @@ public class UserService {
 		scheduleNoteRepo.deleteByUserId(user.getUserId());
 		// Their posts and comments stay on the board, shown as a former employee.
 		teamLikeRepo.deleteByUserId(user.getUserId());
+		pushRepo.deleteByUserId(user.getUserId());
 		userRepo.delete(user);
 	}
 

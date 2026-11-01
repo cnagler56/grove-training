@@ -53,10 +53,11 @@ public class TeamBoardService {
 	private final TeamPostLikeRepository likes;
 	private final UserRepository users;
 	private final PermissionService perms;
+	private final PushService push;
 	private final ZoneId zone;
 
 	public TeamBoardService(TeamPostRepository posts, TeamPostImageRepository images, TeamPostCommentRepository comments,
-			TeamPostLikeRepository likes, UserRepository users, PermissionService perms,
+			TeamPostLikeRepository likes, UserRepository users, PermissionService perms, PushService push,
 			@Value("${app.time-zone:America/Chicago}") String zone) {
 		this.posts = posts;
 		this.images = images;
@@ -64,6 +65,7 @@ public class TeamBoardService {
 		this.likes = likes;
 		this.users = users;
 		this.perms = perms;
+		this.push = push;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -109,7 +111,10 @@ public class TeamBoardService {
 		p.setAuthorId(author.getUserId());
 		p.setBody(body);
 		p.setCreatedAt(LocalDateTime.now(zone));
-		return posts.save(p).getId();
+		Long id = posts.save(p).getId();
+		push.notify(push.staffExcept(author.getUserId()), displayName(author) + " posted on the team board",
+			body == null ? "Shared photos" : preview(body), "/home");
+		return id;
 	}
 
 	/** Add one photo to your own post. Only JPEGs: the browser converts and shrinks them first. */
@@ -153,11 +158,14 @@ public class TeamBoardService {
 
 	public void comment(User author, Long postId, String text) {
 		requireStaff(author);
-		find(postId);
+		TeamPost post = find(postId);
 		String body = clean(text);
 		if (body == null) throw bad("Write a comment first");
 		if (body.length() > MAX_COMMENT) throw bad("Comments are limited to " + MAX_COMMENT + " characters");
 		comments.save(new TeamPostComment(postId, author.getUserId(), body, LocalDateTime.now(zone)));
+		if (!post.getAuthorId().equals(author.getUserId())) {
+			push.notify(List.of(post.getAuthorId()), displayName(author) + " commented on your post", preview(body), "/home");
+		}
 	}
 
 	public void deleteComment(User viewer, Long commentId) {
@@ -197,6 +205,14 @@ public class TeamBoardService {
 		if (u == null) return "Former employee";
 		String n = ((u.getFirstName() == null ? "" : u.getFirstName()) + " " + (u.getLastName() == null ? "" : u.getLastName())).trim();
 		return n.isEmpty() ? u.getEmail() : n;
+	}
+
+	private static String displayName(User u) {
+		return nameOf(Map.of(u.getUserId(), u), u.getUserId());
+	}
+
+	private static String preview(String text) {
+		return text.length() <= 140 ? text : text.substring(0, 137) + "...";
 	}
 
 	private static String clean(String s) {

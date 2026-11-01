@@ -11,6 +11,7 @@ import { useUser } from '@/src/lib/UserContext';
 import VideoCard from '@/src/components/VideoCard';
 import InstallAppCard from '@/src/components/InstallAppCard';
 import TeamBoard from '@/src/components/TeamBoard';
+import NotificationsCard from '@/src/components/NotificationsCard';
 import CelebrationMoment from '@/src/components/CelebrationMoment';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -140,6 +141,7 @@ export default function StaffHomePage() {
         </section>
       )}
 
+      {isStaff && <NotificationsCard />}
       {isStaff && <TeamBoard />}
 
       {/* Owners don't work shifts or take the training, so they skip both cards. */}

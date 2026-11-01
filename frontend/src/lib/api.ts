@@ -482,6 +482,10 @@ export const api = {
     send<WeekSchedule>(`/api/schedule/${weekStart}/send-back`, 'POST', { note }),
   waitingSchedules: () => send<PendingWeek[]>('/api/schedule/waiting'),
 
+  pushKey: () => send<{ publicKey: string }>('/api/push/key'),
+  pushSubscribe: (s: { endpoint: string; p256dh: string; auth: string }) => send<void>('/api/push/subscribe', 'POST', s),
+  pushUnsubscribe: (endpoint: string) => send<void>('/api/push/unsubscribe', 'POST', { endpoint }),
+
   teamBoard: (page: number) => send<TeamFeed>(`/api/team-board?page=${page}`),
   createTeamPost: (p: { body: string; withPhotos: boolean }) => send<{ id: number }>('/api/team-board', 'POST', p),
   /** One shrunk JPEG at a time, so a post with many photos never hits a size limit. */

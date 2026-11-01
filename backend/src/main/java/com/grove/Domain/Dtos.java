@@ -186,6 +186,11 @@ public final class Dtos {
 
 	public record TeamCommentInput(String body) {}
 
+	/** A device's push subscription, from the browser. */
+	public record PushSubscribeInput(String endpoint, String p256dh, String auth) {}
+
+	public record PushUnsubscribeInput(String endpoint) {}
+
 	public record TeamPinInput(boolean pinned) {}
 
 	public record TeamCommentView(Long id, String authorName, String body, LocalDateTime createdAt, boolean canDelete) {}

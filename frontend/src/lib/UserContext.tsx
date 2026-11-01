@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, type Credentials, type MyPermissions, type User } from './api';
+import { turnOffPush } from './push';
 import { confirmLeave, leavingNow } from './leaveGuard';
 
 const NO_PERMISSIONS: MyPermissions = { viewSchedule: false, editSchedule: false, approveSchedule: false, approveTimeOff: false, postUpdates: false };
@@ -73,6 +74,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     if (!(await confirmLeave())) return;
     leavingNow();
+    // A shared phone shouldn't keep getting this person's notifications.
+    await turnOffPush().catch(() => {});
     await api.logout();
     window.location.assign('/');
   }, []);

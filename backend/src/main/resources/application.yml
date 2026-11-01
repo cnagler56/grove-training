@@ -65,6 +65,12 @@ app:
     url: ${SALON_ULTIMATE_URL:https://fsnagel.salonultimate.com}
     username: ${SALON_ULTIMATE_USERNAME:}
     password: ${SALON_ULTIMATE_PASSWORD:}
+  # Phone notifications (web push). Blank = off. Keep the private key secret.
+  push:
+    public-key: ${VAPID_PUBLIC_KEY:}
+    private-key: ${VAPID_PRIVATE_KEY:}
+    # Who push services contact about these messages. Apple requires https: or mailto:.
+    subject: ${VAPID_SUBJECT:${APP_FRONTEND_URL:https://grove-training.vercel.app}}
   bunny:
     # Bunny Stream → your video library → API. All blank = uploads disabled.
     library-id: ${BUNNY_LIBRARY_ID:}

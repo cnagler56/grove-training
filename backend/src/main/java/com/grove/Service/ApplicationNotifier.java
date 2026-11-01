@@ -15,10 +15,12 @@ public class ApplicationNotifier {
 
 	private final Mailer mailer;
 	private final UserRepository users;
+	private final PushService push;
 
-	public ApplicationNotifier(Mailer mailer, UserRepository users) {
+	public ApplicationNotifier(Mailer mailer, UserRepository users, PushService push) {
 		this.mailer = mailer;
 		this.users = users;
+		this.push = push;
 	}
 
 	public void newApplication(JobApplication a) {
@@ -27,6 +29,8 @@ public class ApplicationNotifier {
 			.map(User::getEmail)
 			.toList();
 		String who = a.getFirstName() + " " + a.getLastName();
+		push.notify(users.findAll().stream().filter(u -> u.getRoles() == Role.OWNER).map(User::getUserId).toList(),
+			"New job application", who + " applied for " + a.getPosition() + ".", "/admin/applicants/" + a.getId());
 		mailer.send(owners, "New job application: " + who + " (" + a.getPosition() + ")", String.join("\n",
 			who + " applied for " + a.getPosition() + " at Grove Salons.",
 			"",

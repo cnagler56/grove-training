@@ -47,15 +47,17 @@ public class TimeOffService {
 	private final ShiftRepository shifts;
 	private final PermissionService perms;
 	private final Mailer mailer;
+	private final PushService push;
 	private final ZoneId zone;
 
 	public TimeOffService(TimeOffRequestRepository requests, UserRepository users, ShiftRepository shifts,
-			PermissionService perms, Mailer mailer, @Value("${app.time-zone:America/Chicago}") String zone) {
+			PermissionService perms, Mailer mailer, PushService push, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.requests = requests;
 		this.users = users;
 		this.shifts = shifts;
 		this.perms = perms;
 		this.mailer = mailer;
+		this.push = push;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -89,9 +91,12 @@ public class TimeOffService {
 		r.setCreatedAt(LocalDateTime.now(zone));
 		TimeOffRequest saved = requests.save(r);
 
-		List<String> approvers = users.findAll().stream()
+		List<User> approverList = users.findAll().stream()
 			.filter(u -> !u.getUserId().equals(employee.getUserId()) && perms.has(u, Permission.APPROVE_TIME_OFF))
-			.map(User::getEmail).toList();
+			.toList();
+		List<String> approvers = approverList.stream().map(User::getEmail).toList();
+		push.notify(approverList.stream().map(User::getUserId).toList(), "Time off request",
+			name(employee) + ": " + range(saved), "/time-off");
 		mailer.send(approvers, "Time off request: " + name(employee), String.join("\n",
 			name(employee) + " asked for time off: " + range(saved) + ".",
 			saved.getNote() == null ? "" : "\n\"" + saved.getNote() + "\"\n",
@@ -168,6 +173,7 @@ public class TimeOffService {
 	}
 
 	private void tell(TimeOffRequest r, String subject, String firstLine) {
+		push.notify(List.of(r.getUserId()), subject, r.getResponseNote() == null ? firstLine : r.getResponseNote(), "/time-off");
 		users.findById(r.getUserId()).ifPresent(u -> mailer.send(List.of(u.getEmail()), subject, String.join("\n",
 			firstLine,
 			r.getResponseNote() == null ? "" : "\n\"" + r.getResponseNote() + "\"\n",

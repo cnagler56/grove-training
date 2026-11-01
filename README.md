@@ -112,6 +112,7 @@ Service variables:
 | `APP_FRONTEND_URL` | the Vercel URL, so email links point at the live site |
 | `CORS_ALLOWED_ORIGINS` | the Vercel URL(s), comma-separated, e.g. `https://grove-salons.vercel.app`. Without it, sign-up, sign-in, and saves get 403. |
 | `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | optional, for notification emails |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | optional, turns on phone notifications; same values as `backend/.env` |
 | `SALON_ULTIMATE_USERNAME` / `SALON_ULTIMATE_PASSWORD` | optional, the Salon Ultimate sign-in used to pull weekly numbers |
 
 Railway sets `PORT` itself; the app reads it. Check `https://<railway domain>/api/health`.
