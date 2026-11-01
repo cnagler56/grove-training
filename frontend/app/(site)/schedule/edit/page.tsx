@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, type RosterEntry, type ShiftInput, type WeekSchedule } from '@/src/lib/api';
@@ -19,6 +19,10 @@ type Cell = { start: string; end: string; note: string; off?: boolean };
 /** Start-dropdown value meaning "requested off". */
 const RO = "__RO__";
 const key = (userId: number, date: string) => `${userId}|${date}`;
+/** Room left under the grid for the hint line and page margin. */
+const GRID_BOTTOM_SPACE = 72;
+/** On a very short screen, keep the grid usable and let the page scroll instead. */
+const GRID_MIN_HEIGHT = 340;
 
 export default function EditSchedulePage() {
   // useSearchParams needs a Suspense boundary in the app router.
@@ -46,6 +50,21 @@ function ScheduleEditor() {
   const [approverId, setApproverId] = useState<number | null>(null);
   const { user } = useUser();
   const dialogs = useDialogs();
+
+  // Size the grid to end at the bottom of the window, whatever banners sit above it,
+  // so the dates and coverage rows are always on screen. Re-checked after every render.
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const fit = () => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const top = grid.getBoundingClientRect().top + window.scrollY;
+      grid.style.maxHeight = `${Math.max(GRID_MIN_HEIGHT, window.innerHeight - top - GRID_BOTTOM_SPACE)}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  });
 
   // Load the week (its roster is the Name column) whenever the week changes.
   useEffect(() => {
@@ -218,18 +237,16 @@ function ScheduleEditor() {
   const [badgeText, badgeClass] = STATE_BADGE[week.state];
 
   return (
-    <div>
-      <Link href="/schedule" className="text-sm opacity-70 hover:opacity-100">Back to salon schedule</Link>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-extrabold tracking-tight">{readOnly ? 'Schedule' : 'Edit schedule'}</h1>
+    <div className="-mt-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="text-2xl font-extrabold tracking-tight">{readOnly ? 'Schedule' : 'Edit schedule'}</h1>
         <span className={`rounded-full px-3 py-1 text-xs font-bold ${badgeClass}`}>{badgeText}</span>
         {dirty && <span className="text-sm font-semibold text-[var(--warn)]">Unsaved changes</span>}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="flex-1" />
         <button className="btn-ghost" onClick={() => goToWeek(addDays(weekStart, -7))}>Previous week</button>
+        <span className="text-lg font-extrabold">{weekRangeLabel(weekStart)}</span>
         <button className="btn-ghost" onClick={() => goToWeek(addDays(weekStart, 7))}>Next week</button>
-        <span className="ml-2 text-lg font-extrabold">{weekRangeLabel(weekStart)}</span>
+        <Link href="/schedule" className="text-sm opacity-70 hover:opacity-100">Back to salon schedule</Link>
       </div>
 
       {/* Where this week stands in the approval process. */}
@@ -252,7 +269,7 @@ function ScheduleEditor() {
       ) : null}
 
       {!readOnly && (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button className="btn-ghost" onClick={() => void copyLastWeek()} disabled={busy}>Copy last week</button>
           <button
             className="btn-ghost"
@@ -307,21 +324,24 @@ function ScheduleEditor() {
         <p className="mt-2 text-sm opacity-70">This week is already posted. Staff will see your changes as soon as you save.</p>
       )}
 
-      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
-      {notice && <p className="mt-4 text-sm font-semibold text-[var(--success)]">{notice}</p>}
+      {error && <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
+      {notice && <p className="mt-2 text-sm font-semibold text-[var(--success)]">{notice}</p>}
 
-      <div className="card mt-4 overflow-x-auto">
+      {/* Dates and coverage stay pinned; only the employee rows scroll between them. */}
+      <div ref={gridRef} className="card mt-2 scroll-pb-28 scroll-pt-16 overflow-auto">
         <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
+          <thead className="sticky top-0 z-20 text-xs uppercase tracking-wide [&_th]:bg-[var(--surface)] [&_th]:shadow-[0_1px_0_var(--border)]">
             <tr>
-              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-2 font-semibold"><span className="opacity-60">Name</span></th>
               {days.map((d) => (
-                <th key={d} className="px-2 py-3 font-semibold">
-                  {dayLabel(d)}
-                  <div className="font-normal normal-case">{SALON.hoursByDay[weekday(d)] || 'Closed'}</div>
+                <th key={d} className="px-2 py-2 font-semibold">
+                  <div className="opacity-60">
+                    {dayLabel(d)}
+                    <div className="font-normal normal-case">{SALON.hoursByDay[weekday(d)] || 'Closed'}</div>
+                  </div>
                 </th>
               ))}
-              <th className="px-3 py-3 text-right font-semibold">Hours</th>
+              <th className="px-3 py-2 text-right font-semibold"><span className="opacity-60">Hours</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -332,7 +352,7 @@ function ScheduleEditor() {
               }, 0);
               return (
                 <tr key={m.userId} className={startsReceptionists(staff, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''}>
-                  <td className="whitespace-nowrap px-4 py-2 font-bold">{m.name}</td>
+                  <td className="whitespace-nowrap px-4 py-1 font-bold">{m.name}</td>
                   {days.map((d) => {
                     const k = key(m.userId, d);
                     const c = cells[k];
@@ -342,7 +362,7 @@ function ScheduleEditor() {
                       const startChoices = timeOptions(open, addMinutes(close, -TIME_STEP_MINUTES));
                       const endChoices = c.off ? [] : timeOptions(addMinutes(c.start, TIME_STEP_MINUTES), close);
                       return (
-                        <td key={d} className="bg-[var(--surface-2)] px-2 py-2 align-top">
+                        <td key={d} ref={(el) => el?.scrollIntoView({ block: 'nearest' })} className="bg-[var(--surface-2)] px-2 py-2 align-top">
                           <div className="flex flex-col gap-1">
                             <TimeSelect label="Start" value={c.off ? RO : c.start} choices={startChoices} withRO
                               onChange={(v) => update(k, v === RO
@@ -366,11 +386,11 @@ function ScheduleEditor() {
                     }
                     const invalid = c && !c.off && shiftHours(c.start, c.end) <= 0;
                     return (
-                      <td key={d} className="px-1 py-1 align-top">
+                      <td key={d} className="px-1 py-0.5 align-top">
                         <button
                           onClick={() => { if (!readOnly) openCell(m.userId, d); }}
                           disabled={readOnly}
-                          className={`w-full rounded-lg px-2 py-2 text-left hover:bg-[var(--surface-2)] ${
+                          className={`w-full rounded-lg px-2 py-1 text-left hover:bg-[var(--surface-2)] ${
                             c ? (c.off ? 'bg-amber-100 text-[var(--warn)]' : invalid ? 'bg-red-50 text-[var(--danger)]' : 'bg-[var(--accent-soft)]') : ''
                           }`}
                         >
@@ -386,7 +406,7 @@ function ScheduleEditor() {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 text-right font-semibold">{total ? hoursLabel(total) : ''}</td>
+                  <td className="px-3 py-1 text-right font-semibold">{total ? hoursLabel(total) : ''}</td>
                 </tr>
               );
             })}
@@ -400,7 +420,7 @@ function ScheduleEditor() {
           />
         </table>
       </div>
-      <p className="mt-3 text-xs opacity-60">
+      <p className="mt-2 text-xs opacity-60">
         Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Choose RO for a day someone requested off.
       </p>
     </div>

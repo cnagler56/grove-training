@@ -20,14 +20,14 @@ export default function CoverageRows({ days, shiftsOn }: { days: string[]; shift
   ];
 
   return (
-    <tfoot className="border-t-2 border-[var(--border)] text-xs">
+    <tfoot className="sticky bottom-0 z-20 text-xs">
       {rows.map((row) => (
-        <tr key={row.label} className="border-t border-[var(--border)]">
-          <td className="px-4 py-2 font-bold uppercase tracking-wide opacity-70">{row.label}</td>
+        <tr key={row.label} className="[&>td]:bg-[var(--surface)] [&>td]:shadow-[0_-1px_0_var(--border)]">
+          <td className="px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">{row.label}</span></td>
           {coverage.map((c, i) => {
             const count = row.pick(c).length;
             return (
-              <td key={days[i]} className="px-2 py-2 text-center">
+              <td key={days[i]} className="px-2 py-1 text-center">
                 {count ? (
                   <span className="text-sm font-bold">{count}</span>
                 ) : (
@@ -39,12 +39,12 @@ export default function CoverageRows({ days, shiftsOn }: { days: string[]; shift
           <td />
         </tr>
       ))}
-      <tr className="border-t border-[var(--border)] bg-[var(--surface-2)]/60">
-        <td className="px-4 py-2 font-bold uppercase tracking-wide opacity-70">Total hours</td>
+      <tr className="[&>td]:bg-[var(--surface-2)] [&>td]:shadow-[0_-1px_0_var(--border)]">
+        <td className="px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">Total hours</span></td>
         {dayHours.map((h, i) => (
-          <td key={days[i]} className="px-2 py-2 text-center text-sm font-bold">{h ? hoursLabel(h) : '–'}</td>
+          <td key={days[i]} className="px-2 py-1 text-center text-sm font-bold">{h ? hoursLabel(h) : '–'}</td>
         ))}
-        <td className="px-3 py-2 text-right text-sm font-extrabold">{hoursLabel(weekHours)}</td>
+        <td className="px-3 py-1 text-right text-sm font-extrabold">{hoursLabel(weekHours)}</td>
       </tr>
     </tfoot>
   );
