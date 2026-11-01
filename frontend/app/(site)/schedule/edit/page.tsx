@@ -20,9 +20,20 @@ const key = (userId: number, date: string) => `${userId}|${date}`;
 /** The note on a day that's RO because its time off was approved. */
 const APPROVED_NOTE = 'Approved time off';
 /** Room left under the grid for the hint line and page margin. */
-const GRID_BOTTOM_SPACE = 72;
+const GRID_BOTTOM_SPACE = 96;
 /** On a very short screen, keep the grid usable and let the page scroll instead. */
 const GRID_MIN_HEIGHT = 340;
+
+/** Shift color: green opens, red closes, blue does both, gray neither. Same rule as the Openers and Closers counts. */
+function shiftShade(date: string, start: string, end: string) {
+  const [open, close] = SALON.openClose[weekday(date)];
+  const opens = start <= open;
+  const closes = end >= close;
+  if (opens && closes) return 'bg-blue-100';
+  if (opens) return 'bg-green-100';
+  if (closes) return 'bg-red-100';
+  return 'bg-gray-200';
+}
 
 export default function EditSchedulePage() {
   // useSearchParams needs a Suspense boundary in the app router.
@@ -427,8 +438,8 @@ function ScheduleEditor() {
                         <button
                           onClick={() => { if (!readOnly) openCell(m.userId, d); }}
                           disabled={readOnly}
-                          className={`w-full rounded-lg px-2 py-1 text-left hover:bg-[var(--surface-2)] ${
-                            c ? (c.off ? 'bg-amber-100 text-[var(--warn)]' : invalid ? 'bg-red-50 text-[var(--danger)]' : 'bg-[var(--accent-soft)]') : ''
+                          className={`w-full rounded-lg px-2 py-1 text-left hover:brightness-95 ${
+                            c ? (c.off ? 'bg-amber-100 text-[var(--warn)]' : invalid ? 'bg-red-50 text-[var(--danger)]' : shiftShade(d, c.start, c.end)) : 'hover:bg-[var(--surface-2)]'
                           }`}
                         >
                           {c ? (
@@ -473,7 +484,14 @@ function ScheduleEditor() {
           />
         </table>
       </div>
-      <p className="mt-2 text-xs opacity-60">
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="rounded bg-green-100 px-2 py-0.5">Opens</span>
+        <span className="rounded bg-red-100 px-2 py-0.5">Closes</span>
+        <span className="rounded bg-blue-100 px-2 py-0.5">Opens and closes</span>
+        <span className="rounded bg-gray-200 px-2 py-0.5">Mid-day</span>
+        <span className="rounded bg-amber-100 px-2 py-0.5 text-[var(--warn)]">RO</span>
+      </div>
+      <p className="mt-1 text-xs opacity-60">
         Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Click RO for a day someone requested off. Approved time off shows as RO on its own.
       </p>
     </div>
