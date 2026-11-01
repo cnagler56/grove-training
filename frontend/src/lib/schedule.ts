@@ -124,13 +124,13 @@ type Entry = { type?: string; start: string | null; end: string | null };
 
 /** An RO day: the person requested it off. */
 /**
- * The displayed and printed schedule list only people with hours that week
- * (at least one working shift; requested-off days alone don't count). The
- * editor still lists everyone so they can be scheduled.
+ * The displayed and printed schedule list only people with something on that
+ * week: a shift or an RO day. The editor still lists everyone so they can be
+ * scheduled.
  */
-export function workingThisWeek<T extends { userId: number }>(roster: T[], shifts: (Entry & { userId: number })[]): T[] {
-  const working = new Set(shifts.filter((s) => !isRequestedOff(s)).map((s) => s.userId));
-  return roster.filter((p) => working.has(p.userId));
+export function scheduledThisWeek<T extends { userId: number }>(roster: T[], shifts: { userId: number }[]): T[] {
+  const scheduled = new Set(shifts.map((s) => s.userId));
+  return roster.filter((p) => scheduled.has(p.userId));
 }
 
 export const isRequestedOff = (s: Entry) => s.type === 'REQUESTED_OFF' || !s.start || !s.end;

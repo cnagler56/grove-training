@@ -162,7 +162,9 @@ public final class Dtos {
 		List<RosterEntry> roster,
 		List<ShiftView> shifts,
 		/** Every day this week someone is approved off (also merged into shifts as RO where the day is empty). */
-		List<TimeOffDay> timeOff) {}
+		List<TimeOffDay> timeOff,
+		/** Private notes by employee id. Only sent to people who can build or approve the schedule. */
+		Map<Long, String> builderNotes) {}
 
 	/** One row of the schedule. {@code active=false} only for a former employee with shifts that week. */
 	public record RosterEntry(Long userId, String name, Role role, boolean active) {}
@@ -171,7 +173,8 @@ public final class Dtos {
 	public record ShiftInput(Long userId, LocalDate date, ShiftType type, LocalTime start, LocalTime end, String note) {}
 
 	/** The whole week from the editor; replaces whatever was saved before. */
-	public record WeekSave(List<ShiftInput> shifts) {}
+	/** {@code notes}: private notes by employee id. Left out, the saved notes stay as they are. */
+	public record WeekSave(List<ShiftInput> shifts, Map<Long, String> notes) {}
 
 	public record WeekPublish(boolean published) {}
 

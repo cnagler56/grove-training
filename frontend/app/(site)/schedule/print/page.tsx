@@ -7,7 +7,7 @@ import { api, type WeekSchedule } from '@/src/lib/api';
 import { SALON } from '@/src/lib/salon';
 import {
   entryHours, hoursLabel, isRequestedOff, shortShift, startsReceptionists, todayIso, weekRangeLabel, weekStartOf, weekDates,
-  workingThisWeek,
+  scheduledThisWeek,
 } from '@/src/lib/schedule';
 
 const DAY_NAMES = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -77,8 +77,8 @@ function PrintSchedule() {
 function PrintWeek({ week }: { week: WeekSchedule }) {
   const days = weekDates(week.weekStart);
   const cell = new Map(week.shifts.map((s) => [`${s.userId}|${s.date}`, s]));
-  // Only people with hours this week; the editor still lists everyone.
-  const people = workingThisWeek(week.roster, week.shifts);
+  // Only people with a shift or RO this week; the editor still lists everyone.
+  const people = scheduledThisWeek(week.roster, week.shifts);
   const status = week.published ? null : week.canEdit ? 'Draft' : 'Not posted yet';
 
   return (
@@ -137,7 +137,7 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
           })}
         </tbody>
       </table>
-      {people.length === 0 && <p className="mt-2 text-sm text-gray-500">No one has hours this week yet.</p>}
+      {people.length === 0 && <p className="mt-2 text-sm text-gray-500">No one is on the schedule this week yet.</p>}
     </section>
   );
 }

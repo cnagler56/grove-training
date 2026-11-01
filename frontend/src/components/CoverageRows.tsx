@@ -9,7 +9,12 @@ type DayShift = { name: string; start: string; end: string };
  * day's total scheduled hours and the week's total. Fits a table whose columns
  * are Name, the seven days, then Hours.
  */
-export default function CoverageRows({ days, shiftsOn }: { days: string[]; shiftsOn: (date: string) => DayShift[] }) {
+export default function CoverageRows({ days, shiftsOn, extraColumn = false }: {
+  days: string[];
+  shiftsOn: (date: string) => DayShift[];
+  /** The table has one more column after Hours. */
+  extraColumn?: boolean;
+}) {
   const byDay = days.map((d) => shiftsOn(d));
   const coverage = days.map((d, i) => dayCoverage(d, byDay[i], SALON.openClose));
   const dayHours = byDay.map((shifts) => shifts.reduce((h, s) => h + shiftHours(s.start, s.end), 0));
@@ -23,7 +28,7 @@ export default function CoverageRows({ days, shiftsOn }: { days: string[]; shift
     <tfoot className="sticky bottom-0 z-20 text-xs">
       {rows.map((row) => (
         <tr key={row.label} className="[&>td]:bg-[var(--surface)] [&>td]:shadow-[0_-1px_0_var(--border)]">
-          <td className="px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">{row.label}</span></td>
+          <td className="sticky left-0 z-30 px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">{row.label}</span></td>
           {coverage.map((c, i) => {
             const count = row.pick(c).length;
             return (
@@ -37,14 +42,16 @@ export default function CoverageRows({ days, shiftsOn }: { days: string[]; shift
             );
           })}
           <td />
+          {extraColumn && <td />}
         </tr>
       ))}
       <tr className="[&>td]:bg-[var(--surface-2)] [&>td]:shadow-[0_-1px_0_var(--border)]">
-        <td className="px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">Total hours</span></td>
+        <td className="sticky left-0 z-30 px-4 py-1 font-bold uppercase tracking-wide"><span className="opacity-70">Total hours</span></td>
         {dayHours.map((h, i) => (
           <td key={days[i]} className="px-2 py-1 text-center text-sm font-bold">{h ? hoursLabel(h) : '–'}</td>
         ))}
         <td className="px-3 py-1 text-right text-sm font-extrabold">{hoursLabel(weekHours)}</td>
+        {extraColumn && <td />}
       </tr>
     </tfoot>
   );

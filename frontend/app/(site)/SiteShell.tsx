@@ -25,7 +25,7 @@ const OWNER_TABS = [
 ];
 
 /** Pages with wide tables and card grids get a wider layout (header included, so it lines up). */
-const WIDE_PAGES = ['/my-week', '/admin/stats'];
+const WIDE_PAGES = ['/my-week', '/admin/stats', '/schedule/edit'];
 const pageWidth = (pathname: string) => (WIDE_PAGES.some((p) => pathname.startsWith(p)) ? 'max-w-7xl' : 'max-w-5xl');
 
 const hasMyWeek = (r: string | undefined) => !!r && !['CUSTOMER', 'OWNER', 'RECEPTIONIST'].includes(r);

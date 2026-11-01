@@ -48,6 +48,8 @@ function ScheduleEditor() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [approverId, setApproverId] = useState<number | null>(null);
+  // Private notes by employee id: only people who build or approve the schedule see them.
+  const [notes, setNotes] = useState<Record<number, string>>({});
   const { user } = useUser();
   const dialogs = useDialogs();
 
@@ -84,6 +86,7 @@ function ScheduleEditor() {
         setStaff(active);
         setWeek(w);
         setCells(next);
+        setNotes(w.builderNotes ?? {});
         // Default "send to": whoever it was last sent to, or the only approver.
         setApproverId(w.submittedToId ?? (w.approvers.length === 1 ? w.approvers[0].userId : null));
         setDirty(false);
@@ -167,7 +170,7 @@ function ScheduleEditor() {
           ? { userId: Number(userId), date, type: 'REQUESTED_OFF' as const, note: c.note || null }
           : { userId: Number(userId), date, type: 'WORK' as const, start: c.start, end: c.end, note: c.note || null };
       });
-      setWeek(await api.saveSchedule(weekStart, shifts));
+      setWeek(await api.saveSchedule(weekStart, shifts, notes));
       setDirty(false);
       setEditing(null);
       setNotice('Saved.');
@@ -350,10 +353,10 @@ function ScheduleEditor() {
 
       {/* Dates and coverage stay pinned; only the employee rows scroll between them. */}
       <div ref={gridRef} className="card mt-2 scroll-pb-28 scroll-pt-16 overflow-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[1060px] text-left text-sm">
           <thead className="sticky top-0 z-20 text-xs uppercase tracking-wide [&_th]:bg-[var(--surface)] [&_th]:shadow-[0_1px_0_var(--border)]">
             <tr>
-              <th className="px-4 py-2 font-semibold"><span className="opacity-60">Name</span></th>
+              <th className="sticky left-0 z-30 px-4 py-2 font-semibold"><span className="opacity-60">Name</span></th>
               {days.map((d) => (
                 <th key={d} className="px-2 py-2 font-semibold">
                   <div className="opacity-60">
@@ -363,6 +366,10 @@ function ScheduleEditor() {
                 </th>
               ))}
               <th className="px-3 py-2 text-right font-semibold"><span className="opacity-60">Hours</span></th>
+              <th className="w-44 px-2 py-2 font-semibold">
+                <span className="opacity-60">Notes</span>
+                <div className="font-normal normal-case opacity-60">Not on the posted schedule</div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -373,7 +380,7 @@ function ScheduleEditor() {
               }, 0);
               return (
                 <tr key={m.userId} className={startsReceptionists(staff, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''}>
-                  <td className="whitespace-nowrap px-4 py-1 font-bold">{m.name}</td>
+                  <td className="sticky left-0 z-10 whitespace-nowrap bg-[var(--surface)] px-4 py-1 font-bold">{m.name}</td>
                   {days.map((d) => {
                     const k = key(m.userId, d);
                     const c = cells[k];
@@ -437,11 +444,27 @@ function ScheduleEditor() {
                     );
                   })}
                   <td className="px-3 py-1 text-right font-semibold">{total ? hoursLabel(total) : ''}</td>
+                  <td className="px-2 py-0.5 align-top">
+                    <textarea
+                      className="input min-h-0 resize-y px-2 py-1 text-xs"
+                      rows={1}
+                      maxLength={500}
+                      aria-label={`Notes about ${m.name}`}
+                      value={notes[m.userId] ?? ''}
+                      disabled={readOnly}
+                      onChange={(e) => {
+                        setNotes({ ...notes, [m.userId]: e.target.value });
+                        setDirty(true);
+                        setNotice(null);
+                      }}
+                    />
+                  </td>
                 </tr>
               );
             })}
           </tbody>
           <CoverageRows
+            extraColumn
             days={days}
             shiftsOn={(d) => staff.flatMap((m) => {
               const c = cells[key(m.userId, d)];

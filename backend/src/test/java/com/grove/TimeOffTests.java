@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.grove.Domain.Role;
 import com.grove.Repository.AppSettingRepository;
+import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.TimeOffRequestRepository;
@@ -42,6 +43,7 @@ class TimeOffTests {
 	@Autowired UserRepository users;
 	@Autowired UserSessionRepository sessions;
 	@Autowired TimeOffRequestRepository requests;
+	@Autowired ScheduleNoteRepository scheduleNotes;
 	@Autowired ShiftRepository shifts;
 	@Autowired ScheduleWeekRepository weeks;
 	@Autowired AppSettingRepository settings;
@@ -56,6 +58,7 @@ class TimeOffTests {
 	@BeforeEach
 	void setUp() throws Exception {
 		requests.deleteAll();
+		scheduleNotes.deleteAll();
 		shifts.deleteAll();
 		weeks.deleteAll();
 		settings.deleteAll();
@@ -97,6 +100,33 @@ class TimeOffTests {
 			.andExpect(status().isOk());
 		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(ava))
 			.andExpect(jsonPath("$.shifts.length()").value(2));
+	}
+
+	@Test
+	void builderNotesNeverReachStaff() throws Exception {
+		mvc.perform(put("/api/schedule/" + week).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[" + shift(week, "10:00", "18:00") + "],\"notes\":{\"" + avaId + "\":\"Ask about Tuesday\"}}"))
+			.andExpect(jsonPath("$.builderNotes['" + avaId + "']").value("Ask about Tuesday"));
+		mvc.perform(put("/api/schedule/" + week + "/published").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"published\":true}"))
+			.andExpect(status().isOk());
+
+		// Posted, staff get the shifts but no notes, not even in the raw response.
+		String staffSees = mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(ava))
+			.andExpect(jsonPath("$.shifts.length()").value(1))
+			.andExpect(jsonPath("$.builderNotes").isEmpty())
+			.andReturn().getResponse().getContentAsString();
+		org.assertj.core.api.Assertions.assertThat(staffSees).doesNotContain("Ask about Tuesday");
+		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.builderNotes['" + avaId + "']").value("Ask about Tuesday"));
+
+		// Saving without notes keeps them; a blank note removes it.
+		save(week, shift(week, "10:00", "17:00"));
+		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.builderNotes['" + avaId + "']").value("Ask about Tuesday"));
+		mvc.perform(put("/api/schedule/" + week).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"shifts\":[],\"notes\":{\"" + avaId + "\":\"  \"}}"))
+			.andExpect(jsonPath("$.builderNotes").isEmpty());
 	}
 
 	@Test

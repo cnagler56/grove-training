@@ -6,7 +6,7 @@ import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
 import { roleLabel } from '@/src/lib/roles';
 import {
   addDays, dayLabel, entryHours, hoursLabel, isRequestedOff, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
-  workingThisWeek,
+  scheduledThisWeek,
 } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 
@@ -32,8 +32,8 @@ export default function SalonSchedulePage() {
     return m;
   }, [current]);
 
-  // Only people with hours this week; the editor still lists everyone.
-  const people = useMemo(() => (current ? workingThisWeek(current.roster, current.shifts) : []), [current]);
+  // Only people with a shift or RO this week; the editor still lists everyone.
+  const people = useMemo(() => (current ? scheduledThisWeek(current.roster, current.shifts) : []), [current]);
 
   const days = weekDates(weekStart);
   const today = todayIso();
@@ -83,7 +83,7 @@ export default function SalonSchedulePage() {
       ) : !visible ? (
         <div className="card mt-6 p-6 text-center opacity-80">This week’s schedule hasn’t been posted yet.</div>
       ) : people.length === 0 ? (
-        <div className="card mt-6 p-6 text-center opacity-80">No one has hours this week yet.</div>
+        <div className="card mt-6 p-6 text-center opacity-80">No one is on the schedule this week yet.</div>
       ) : (
         <div className="card mt-6 overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">

@@ -27,11 +27,13 @@ import com.grove.Domain.Dtos.TimeOffDay;
 import com.grove.Domain.Dtos.WeekSchedule;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
+import com.grove.Domain.ScheduleNote;
 import com.grove.Domain.ScheduleWeek;
 import com.grove.Domain.Shift;
 import com.grove.Domain.ShiftType;
 import com.grove.Domain.TimeOffRequest;
 import com.grove.Domain.User;
+import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.TimeOffRequestRepository;
@@ -51,6 +53,7 @@ public class ScheduleService {
 
 	private static final DayOfWeek WEEK_STARTS = DayOfWeek.SATURDAY;
 	private static final DateTimeFormatter EMAIL_DATE = DateTimeFormatter.ofPattern("MMM d");
+	private static final int MAX_NOTE = 500;
 
 	private final ShiftRepository shifts;
 	private final ScheduleWeekRepository weeks;
@@ -58,15 +61,17 @@ public class ScheduleService {
 	private final PermissionService perms;
 	private final Mailer mailer;
 	private final TimeOffRequestRepository timeOff;
+	private final ScheduleNoteRepository notes;
 
 	public ScheduleService(ShiftRepository shifts, ScheduleWeekRepository weeks, UserRepository users,
-			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff) {
+			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff, ScheduleNoteRepository notes) {
 		this.shifts = shifts;
 		this.weeks = weeks;
 		this.users = users;
 		this.perms = perms;
 		this.mailer = mailer;
 		this.timeOff = timeOff;
+		this.notes = notes;
 	}
 
 	/** The Saturday on or before {@code day}. */
@@ -99,7 +104,11 @@ public class ScheduleService {
 			w == null ? null : w.getReturnNote(),
 			w == null ? null : nameOf(w.getReturnedBy()),
 			seesDrafts ? approvers(viewer) : List.of(),
-			roster, list, daysOff);
+			roster, list, daysOff, seesDrafts ? builderNotes(start) : Map.of());
+	}
+
+	private Map<Long, String> builderNotes(LocalDate start) {
+		return notes.findByWeekStart(start).stream().collect(Collectors.toMap(ScheduleNote::getUserId, ScheduleNote::getNote));
 	}
 
 	/** Every day this week that someone on the roster has approved time off. */
@@ -183,7 +192,7 @@ public class ScheduleService {
 
 	/** Replace a whole week with what the editor sent. */
 	@Transactional
-	public WeekSchedule saveWeek(User editor, LocalDate start, List<ShiftInput> input) {
+	public WeekSchedule saveWeek(User editor, LocalDate start, List<ShiftInput> input, Map<Long, String> builderNotes) {
 		requireSaturday(start);
 		ScheduleWeek existing = weeks.findById(start).orElse(null);
 		boolean canApprove = perms.has(editor, Permission.APPROVE_SCHEDULE);
@@ -217,6 +226,7 @@ public class ScheduleService {
 			if (s.note() != null && s.note().length() > 100) throw bad("Shift notes are limited to 100 characters");
 		}
 
+		if (builderNotes != null) saveNotes(start, builderNotes);
 		shifts.deleteByDateBetween(start, end);
 		shifts.flush();
 		for (ShiftInput s : list) {
@@ -317,6 +327,20 @@ public class ScheduleService {
 	}
 
 	// ---- helpers -------------------------------------------------------------
+
+	/** Replace a week's private notes. Blank ones are dropped. */
+	private void saveNotes(LocalDate start, Map<Long, String> builderNotes) {
+		for (String note : builderNotes.values()) {
+			if (note != null && note.length() > MAX_NOTE) throw bad("Notes are limited to " + MAX_NOTE + " characters");
+		}
+		notes.deleteWeek(start);
+		notes.flush();
+		Set<Long> people = users.findAllById(builderNotes.keySet()).stream().map(User::getUserId).collect(Collectors.toSet());
+		notes.saveAll(builderNotes.entrySet().stream()
+			.filter(e -> e.getValue() != null && !e.getValue().isBlank() && people.contains(e.getKey()))
+			.map(e -> new ScheduleNote(start, e.getKey(), e.getValue().trim()))
+			.toList());
+	}
 
 	private static ScheduleWeek newWeek(LocalDate start) {
 		ScheduleWeek w = new ScheduleWeek();

@@ -26,6 +26,7 @@ import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
+import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VideoAssignmentRepository;
@@ -49,13 +50,14 @@ public class UserService {
 	private final ShiftRepository shiftRepo;
 	private final VideoAssignmentRepository assignmentRepo;
 	private final TimeOffRequestRepository timeOffRepo;
+	private final ScheduleNoteRepository scheduleNoteRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
 
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
-			TimeOffRequestRepository timeOffRepo, PasswordEncoder passwordEncoder,
+			TimeOffRequestRepository timeOffRepo, ScheduleNoteRepository scheduleNoteRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -64,6 +66,7 @@ public class UserService {
 		this.shiftRepo = shiftRepo;
 		this.assignmentRepo = assignmentRepo;
 		this.timeOffRepo = timeOffRepo;
+		this.scheduleNoteRepo = scheduleNoteRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -224,6 +227,7 @@ public class UserService {
 		shiftRepo.deleteByUserId(user.getUserId());
 		assignmentRepo.deleteByUserId(user.getUserId());
 		timeOffRepo.deleteByUserId(user.getUserId());
+		scheduleNoteRepo.deleteByUserId(user.getUserId());
 		userRepo.delete(user);
 	}
 

@@ -174,6 +174,8 @@ export interface WeekSchedule {
   shifts: ShiftView[];
   /** Every day this week someone is approved off (already in shifts as RO unless the day has a shift). */
   timeOff: { userId: number; name: string; date: string }[];
+  /** Private notes by employee id. Only sent to people who can build or approve the schedule. */
+  builderNotes: Record<number, string>;
 }
 
 export interface Person {
@@ -442,8 +444,8 @@ export const api = {
 
   schedule: (date?: string) => send<WeekSchedule>(`/api/schedule${date ? `?date=${date}` : ''}`),
   mySchedule: () => send<ShiftView[]>('/api/schedule/mine'),
-  saveSchedule: (weekStart: string, shifts: ShiftInput[]) =>
-    send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts }),
+  saveSchedule: (weekStart: string, shifts: ShiftInput[], notes: Record<number, string>) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts, notes }),
   publishSchedule: (weekStart: string, published: boolean) =>
     send<WeekSchedule>(`/api/schedule/${weekStart}/published`, 'PUT', { published }),
   submitSchedule: (weekStart: string, approverId: number) =>
