@@ -35,12 +35,18 @@ export default function ContestHomeCard({ userId }: { userId: number }) {
               ) : (
                 <>
                   {mine && mine.rank !== null && (
-                    <div className="mt-0.5 font-semibold">You&apos;re {ordinal(mine.rank)} with {mine.count} {c.metricLabel}.</div>
+                    <div className="mt-0.5 font-semibold">
+                      You&apos;re {ordinal(mine.rank)} with {c.handicap === 'NONE'
+                        ? `${mine.count} ${c.metricLabel}`
+                        : `${(mine.points ?? 0).toLocaleString('en-US')} points`}.
+                    </div>
                   )}
                   {leadingTeam.length === 1 ? (
-                    <div className="mt-0.5">{leadingTeam[0].name} leads with {leadingTeam[0].total}.</div>
+                    <div className="mt-0.5">{leadingTeam[0].name} leads with {leadingTeam[0].total.toLocaleString('en-US')}.</div>
                   ) : leaders.length > 0 && !(mine && mine.rank === 1 && leaders.length === 1) && (
-                    <div className="mt-0.5">Leading: {leaders.map((l) => l.name).join(', ')} with {leaders[0].count}.</div>
+                    <div className="mt-0.5">
+                      Leading: {leaders.map((l) => l.name).join(', ')} with {(leaders[0].points ?? 0).toLocaleString('en-US')}.
+                    </div>
                   )}
                 </>
               )}

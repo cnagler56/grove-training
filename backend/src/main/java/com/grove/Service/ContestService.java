@@ -1,10 +1,12 @@
 package com.grove.Service;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -25,15 +27,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.Contest;
+import com.grove.Domain.Contest.Handicap;
 import com.grove.Domain.Contest.Metric;
 import com.grove.Domain.ContestEntry;
 import com.grove.Domain.ContestTeam;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
+import com.grove.Domain.WeeklyStat;
 import com.grove.Repository.ContestEntryRepository;
 import com.grove.Repository.ContestRepository;
 import com.grove.Repository.ContestTeamRepository;
 import com.grove.Repository.UserRepository;
+import com.grove.Repository.WeeklyStatRepository;
 
 /**
  * Contests: who can do the most treatments, colors, or waxes between two dates,
@@ -50,21 +55,31 @@ public class ContestService {
 	private static final int MAX_TEAMS = 4;
 	private static final String PAGE = "/contests";
 	private static final DateTimeFormatter SHORT_DATE = DateTimeFormatter.ofPattern("MMM d");
+	/** Handicaps look at this many finished weeks before the contest starts. */
+	static final int HISTORY_WEEKS = 4;
+	/** A handicapped service is worth this at the least (average or better) and the most. */
+	static final int BASE_WORTH = 100;
+	static final int MAX_WORTH = 200;
 
 	public record PersonInput(Long userId, Integer team) {}
 
-	/** What the contest form sends. {@code teams} is empty for everyone-for-themselves; otherwise each person's {@code team} is a position in it. */
+	/**
+	 * What the contest form sends. {@code teams} is empty for everyone-for-themselves; otherwise each
+	 * person's {@code team} is a position in it. A missing {@code handicap} means NONE.
+	 */
 	public record ContestInput(String name, Metric metric, LocalDate startDate, LocalDate endDate, String prize,
-		List<String> teams, List<PersonInput> people) {}
+		List<String> teams, List<PersonInput> people, Handicap handicap) {}
 
+	/** {@code total} is the team's points (with no handicap, its count). */
 	public record TeamView(int position, String name, int total, Integer rank, int members) {}
 
-	public record StandingView(Long userId, String name, Integer count, Integer rank, Integer team) {}
+	/** {@code worth} is points per service with a handicap, null without one or before the first check. */
+	public record StandingView(Long userId, String name, Integer count, Integer points, Integer worth, Integer rank, Integer team) {}
 
 	/** {@code status}: UPCOMING, LIVE, ENDED (waiting for the final check), or FINISHED. */
-	public record ContestView(Long id, String name, String metric, String metricLabel, LocalDate startDate, LocalDate endDate,
-		String prize, String status, LocalDateTime lastCheckedAt, String checkProblem, String createdByName,
-		List<TeamView> teams, List<StandingView> standings) {}
+	public record ContestView(Long id, String name, String metric, String metricLabel, String handicap,
+		LocalDate startDate, LocalDate endDate, String prize, String status, LocalDateTime lastCheckedAt, String checkProblem,
+		String createdByName, List<TeamView> teams, List<StandingView> standings) {}
 
 	/** Someone who can be in a contest: on staff and linked to a Salon Ultimate name. */
 	public record Eligible(Long userId, String name) {}
@@ -73,18 +88,20 @@ public class ContestService {
 	private final ContestEntryRepository entries;
 	private final ContestTeamRepository teams;
 	private final UserRepository users;
+	private final WeeklyStatRepository stats;
 	private final SalonUltimateClient salonUltimate;
 	private final PushService push;
 	private final TeamBoardService teamBoard;
 	private final ZoneId zone;
 
 	public ContestService(ContestRepository contests, ContestEntryRepository entries, ContestTeamRepository teams,
-			UserRepository users, SalonUltimateClient salonUltimate, PushService push, TeamBoardService teamBoard,
-			@Value("${app.time-zone:America/Chicago}") String zone) {
+			UserRepository users, WeeklyStatRepository stats, SalonUltimateClient salonUltimate, PushService push,
+			TeamBoardService teamBoard, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.contests = contests;
 		this.entries = entries;
 		this.teams = teams;
 		this.users = users;
+		this.stats = stats;
 		this.salonUltimate = salonUltimate;
 		this.push = push;
 		this.teamBoard = teamBoard;
@@ -129,14 +146,14 @@ public class ContestService {
 		return view(saved, manager);
 	}
 
-	/** Change a contest that isn't finished. Changing what's counted or when it starts clears the standings. */
+	/** Change a contest that isn't finished. Changing what's counted, the handicap, or when it starts clears the standings. */
 	@Transactional
 	public ContestView update(User manager, Long id, ContestInput input) {
 		requireManager(manager);
 		Contest c = find(id);
 		if (c.getFinishedAt() != null) throw bad("A finished contest can't be changed");
 		Checked ok = validate(input);
-		boolean recount = c.getMetric() != ok.metric() || !c.getStartDate().equals(ok.startDate());
+		boolean recount = c.getMetric() != ok.metric() || !c.getStartDate().equals(ok.startDate()) || c.getHandicap() != ok.handicap();
 		apply(c, ok);
 		if (recount || ok.teamNames().size() != teams.findByContestIdOrderByPositionAsc(id).size()) c.setLeadingTeam(null);
 		contests.save(c);
@@ -156,6 +173,8 @@ public class ContestService {
 			e.setTeam(p.team());
 			if (recount) {
 				e.setCount(null);
+				e.setPoints(null);
+				e.setWorth(null);
 				e.setRank(null);
 			}
 			entries.save(e);
@@ -233,15 +252,17 @@ public class ContestService {
 		List<ContestEntry> list = entries.findByContestId(c.getId());
 		Map<Long, User> people = people(list);
 		boolean firstCheck = list.stream().allMatch(e -> e.getRank() == null);
+		lockWorth(c, list, people);
 		Map<Long, Integer> before = new HashMap<>();
 		for (ContestEntry e : list) {
 			before.put(e.getId(), e.getRank());
 			User u = people.get(e.getUserId());
 			String su = u == null || u.getSalonUltimateName() == null ? null : u.getSalonUltimateName().toLowerCase();
 			e.setCount(su == null ? 0 : value(counts.get(su), c.getMetric()));
+			e.setPoints(e.getCount() * unit(c, e));
 		}
 		for (ContestEntry e : list) {
-			e.setRank(1 + (int) list.stream().filter(o -> o.getCount() > e.getCount()).count());
+			e.setRank(1 + (int) list.stream().filter(o -> o.getPoints() > e.getPoints()).count());
 		}
 		entries.saveAll(list);
 
@@ -267,14 +288,17 @@ public class ContestService {
 			if (was == null || was.equals(e.getRank())) continue;
 			String place = place(e, list);
 			String text = (e.getRank() < was ? "You moved up to " + place : "You're now " + place)
-				+ " with " + c.getMetric().count(e.getCount()) + "." + toMoveUp(e, list, c.getMetric());
+				+ " with " + score(c, e) + "." + toMoveUp(c, e, list);
 			push.notify(List.of(e.getUserId()), c.getName(), text, PAGE);
 		}
 		if (leader != null && !leader.equals(previousLeader)) {
 			int second = totals.entrySet().stream().filter(t -> !t.getKey().equals(leader))
 				.mapToInt(Map.Entry::getValue).max().orElse(0);
+			String margin = handicapped(c)
+				? String.format("%,d to %,d points", totals.get(leader), second)
+				: totals.get(leader) + " to " + second;
 			push.notify(list.stream().map(ContestEntry::getUserId).toList(), c.getName(),
-				teamName(teamList, leader) + " took the lead, " + totals.get(leader) + " to " + second + ".", PAGE);
+				teamName(teamList, leader) + " took the lead, " + margin + ".", PAGE);
 		}
 	}
 
@@ -285,17 +309,24 @@ public class ContestService {
 			: leader == null ? " The teams tied." : " " + teamName(teamList, leader) + " won as a team.";
 		for (ContestEntry e : list) {
 			push.notify(List.of(e.getUserId()), c.getName() + " is over",
-				"You finished " + place(e, list) + " with " + c.getMetric().count(e.getCount()) + "." + teamResult, PAGE);
+				"You finished " + place(e, list) + " with " + score(c, e) + "." + teamResult, PAGE);
 		}
 
 		List<String> lines = new ArrayList<>();
 		lines.add(c.getName() + " results (" + c.getStartDate().format(SHORT_DATE) + " to " + c.getEndDate().format(SHORT_DATE) + ")");
+		if (handicapped(c)) {
+			lines.add(c.getHandicap() == Handicap.HOURS
+				? "With a handicap for hours worked." : "With a handicap for how many " + c.getMetric().plural() + " each person usually does.");
+		}
 		lines.add("");
-		list.stream().sorted(standingOrder(people)).forEach(e ->
-			lines.add(place(e, list) + ": " + nameOf(people, e.getUserId()) + ", " + c.getMetric().count(e.getCount())));
+		list.stream().sorted(standingOrder(people)).forEach(e -> lines.add(place(e, list) + ": " + nameOf(people, e.getUserId()) + ", "
+			+ score(c, e) + (handicapped(c) ? ", worth " + unit(c, e) + " each" : "")));
 		if (!teamList.isEmpty()) {
 			lines.add("");
-			for (ContestTeam t : teamList) lines.add(t.getName() + ": " + c.getMetric().count(totals.get(t.getPosition())));
+			for (ContestTeam t : teamList) {
+				int total = totals.get(t.getPosition());
+				lines.add(t.getName() + ": " + (handicapped(c) ? String.format("%,d points", total) : c.getMetric().count(total)));
+			}
 			lines.add(leader == null ? "The teams tied!" : teamName(teamList, leader) + " wins!");
 		}
 		if (c.getPrize() != null) {
@@ -321,14 +352,16 @@ public class ContestService {
 			return new TeamView(t.getPosition(), t.getName(), total, rank, members);
 		}).toList();
 		List<StandingView> standings = list.stream().sorted(standingOrder(people))
-			.map(e -> new StandingView(e.getUserId(), nameOf(people, e.getUserId()), e.getCount(), e.getRank(), e.getTeam()))
+			.map(e -> new StandingView(e.getUserId(), nameOf(people, e.getUserId()), e.getCount(), e.getPoints(),
+				handicapped(c) ? e.getWorth() : null, e.getRank(), e.getTeam()))
 			.toList();
-		return new ContestView(c.getId(), c.getName(), c.getMetric().name(), c.getMetric().plural(), c.getStartDate(), c.getEndDate(),
+		return new ContestView(c.getId(), c.getName(), c.getMetric().name(), c.getMetric().plural(), c.getHandicap().name(),
+			c.getStartDate(), c.getEndDate(),
 			c.getPrize(), status(c), c.getLastCheckedAt(), viewer.isAdmin() ? c.getCheckProblem() : null,
 			users.findById(c.getCreatedBy()).map(ContestService::name).orElse("Former employee"), teamViews, standings);
 	}
 
-	private record Checked(String name, Metric metric, LocalDate startDate, LocalDate endDate, String prize,
+	private record Checked(String name, Metric metric, Handicap handicap, LocalDate startDate, LocalDate endDate, String prize,
 		List<String> teamNames, List<PersonInput> people) {}
 
 	private Checked validate(ContestInput input) {
@@ -359,6 +392,7 @@ public class ContestService {
 			if (p == null || p.userId() == null || !seen.add(p.userId())) continue;
 			User u = users.findById(p.userId()).orElse(null);
 			if (u == null || !u.isActive() || !u.getRoles().isStaff()) throw bad("One of those people isn't on the team anymore");
+			if (u.getRoles() == Role.RECEPTIONIST) throw bad("Receptionists aren't part of contests");
 			if (!canEnter(u)) throw bad(name(u) + " isn't linked to Salon Ultimate yet. Link them on the Team page first.");
 			Integer team = teamNames.isEmpty() ? null : p.team();
 			if (!teamNames.isEmpty() && (team == null || team < 0 || team >= teamNames.size())) throw bad("Put " + name(u) + " on a team");
@@ -369,12 +403,14 @@ public class ContestService {
 			int position = i;
 			if (people.stream().noneMatch(p -> p.team() == position)) throw bad(teamNames.get(i) + " has no one on it");
 		}
-		return new Checked(name, input.metric(), start, end, prize, teamNames, people);
+		return new Checked(name, input.metric(), input.handicap() == null ? Handicap.NONE : input.handicap(),
+			start, end, prize, teamNames, people);
 	}
 
 	private static void apply(Contest c, Checked ok) {
 		c.setName(ok.name());
 		c.setMetric(ok.metric());
+		c.setHandicap(ok.handicap());
 		c.setStartDate(ok.startDate());
 		c.setEndDate(ok.endDate());
 		c.setPrize(ok.prize());
@@ -413,6 +449,15 @@ public class ContestService {
 		return c.getFinishedAt() == null && c.getEndDate().isBefore(today);
 	}
 
+	private static int value(WeeklyStat w, Metric metric) {
+		Integer n = switch (metric) {
+			case TREATMENTS -> w.getTreatments();
+			case COLORS -> w.getColors();
+			case WAXES -> w.getWaxes();
+		};
+		return n == null ? 0 : n;
+	}
+
 	private static int value(SalonUltimateReport.ServiceTypes t, Metric metric) {
 		if (t == null) return 0;
 		return switch (metric) {
@@ -422,12 +467,70 @@ public class ContestService {
 		};
 	}
 
+	/**
+	 * With a handicap, give everyone who doesn't have one yet their points per service,
+	 * from the {@link #HISTORY_WEEKS} finished weeks before the contest started. Compared
+	 * with the average of everyone in it: average or better is {@link #BASE_WORTH}, fewer
+	 * hours (or a lower usual rate) is worth more, up to {@link #MAX_WORTH}. Once set it
+	 * stays for the contest, so a slow week mid-contest doesn't change it.
+	 */
+	private void lockWorth(Contest c, List<ContestEntry> list, Map<Long, User> people) {
+		if (!handicapped(c) || list.stream().allMatch(e -> e.getWorth() != null)) return;
+		LocalDate startWeek = c.getStartDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		LocalDate firstWeek = startWeek.minusWeeks(HISTORY_WEEKS);
+		Map<Long, Double> usual = new HashMap<>();
+		for (ContestEntry e : list) {
+			User u = people.get(e.getUserId());
+			if (u == null || u.getSalonUltimateName() == null) continue;
+			List<WeeklyStat> weeks = stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(u.getSalonUltimateName()).stream()
+				.filter(w -> !w.getWeekStart().isBefore(firstWeek) && w.getWeekStart().isBefore(startWeek))
+				.toList();
+			if (weeks.isEmpty()) continue;
+			if (c.getHandicap() == Handicap.HOURS) {
+				double hours = weeks.stream().mapToDouble(w -> w.getFloorHours() == null ? 0 : w.getFloorHours().doubleValue()).sum();
+				if (hours > 0) usual.put(e.getUserId(), hours / weeks.size());
+			} else {
+				int guests = weeks.stream().mapToInt(w -> w.getClients() == null ? 0 : w.getClients()).sum();
+				int done = weeks.stream().mapToInt(w -> value(w, c.getMetric())).sum();
+				if (guests > 0) usual.put(e.getUserId(), (double) done / guests);
+			}
+		}
+		double average = usual.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+		for (ContestEntry e : list) {
+			if (e.getWorth() == null) e.setWorth(worth(average, usual.get(e.getUserId())));
+		}
+	}
+
+	/** Points per service: 100 at the average or better, more below it (to the nearest 5), up to 200. No history: 100. */
+	public static int worth(double average, Double mine) {
+		if (mine == null || average <= 0) return BASE_WORTH;
+		if (mine <= 0) return MAX_WORTH;
+		int rounded = (int) Math.round(BASE_WORTH * average / mine / 5) * 5;
+		return Math.max(BASE_WORTH, Math.min(MAX_WORTH, rounded));
+	}
+
+	private static boolean handicapped(Contest c) {
+		return c.getHandicap() != Handicap.NONE;
+	}
+
+	/** What one service is worth to this person: 1 without a handicap. */
+	private static int unit(Contest c, ContestEntry e) {
+		if (!handicapped(c)) return 1;
+		return e.getWorth() == null ? BASE_WORTH : e.getWorth();
+	}
+
+	/** "3 treatments", or "420 points (3 treatments)" with a handicap. */
+	private static String score(Contest c, ContestEntry e) {
+		String count = c.getMetric().count(e.getCount());
+		return handicapped(c) ? String.format("%,d points (%s)", e.getPoints(), count) : count;
+	}
+
 	private static Map<Integer, Integer> totals(List<ContestTeam> teamList, List<ContestEntry> list) {
 		Map<Integer, Integer> out = new HashMap<>();
 		for (ContestTeam t : teamList) {
 			out.put(t.getPosition(), list.stream()
 				.filter(e -> t.getPosition().equals(e.getTeam()))
-				.mapToInt(e -> e.getCount() == null ? 0 : e.getCount()).sum());
+				.mapToInt(e -> e.getPoints() == null ? 0 : e.getPoints()).sum());
 		}
 		return out;
 	}
@@ -439,20 +542,25 @@ public class ContestService {
 		return top.size() == 1 ? top.get(0) : null;
 	}
 
-	/** "2nd", or "tied for 2nd" when someone else has the same count. */
+	/** "2nd", or "tied for 2nd" when someone else has the same points. */
 	private static String place(ContestEntry e, List<ContestEntry> list) {
-		boolean tied = list.stream().anyMatch(o -> o != e && o.getCount().equals(e.getCount()));
+		boolean tied = list.stream().anyMatch(o -> o != e && o.getPoints().equals(e.getPoints()));
 		return (tied ? "tied for " : "") + ordinal(e.getRank());
 	}
 
-	/** " 2 more treatments to move up." for anyone not alone in first. */
-	private static String toMoveUp(ContestEntry e, List<ContestEntry> list, Metric metric) {
-		boolean tiedFirst = e.getRank() == 1 && list.stream().anyMatch(o -> o != e && o.getCount().equals(e.getCount()));
+	/**
+	 * " 2 more treatments to move up." for anyone not alone in first. With a handicap,
+	 * it's how many of their own services it takes to reach the next place's points.
+	 */
+	private static String toMoveUp(Contest c, ContestEntry e, List<ContestEntry> list) {
+		Metric metric = c.getMetric();
+		boolean tiedFirst = e.getRank() == 1 && list.stream().anyMatch(o -> o != e && o.getPoints().equals(e.getPoints()));
 		if (tiedFirst) return " 1 more " + metric.word(1) + " takes the lead.";
-		int above = list.stream().mapToInt(ContestEntry::getCount).filter(n -> n > e.getCount()).min().orElse(-1);
+		int above = list.stream().mapToInt(ContestEntry::getPoints).filter(n -> n > e.getPoints()).min().orElse(-1);
 		if (above < 0) return "";
-		int gap = above - e.getCount();
-		return " " + gap + " more " + metric.word(gap) + " to move up.";
+		int unit = unit(c, e);
+		int needed = (above - e.getPoints() + unit - 1) / unit;
+		return " " + needed + " more " + metric.word(needed) + " to move up.";
 	}
 
 	static String ordinal(int n) {
@@ -476,8 +584,10 @@ public class ContestService {
 			.collect(Collectors.toMap(User::getUserId, Function.identity()));
 	}
 
+	/** On staff, not a receptionist (they don't do services), and linked to a Salon Ultimate name. */
 	private boolean canEnter(User u) {
-		return u.isActive() && u.getRoles().isStaff() && u.getSalonUltimateName() != null && !u.getSalonUltimateName().isBlank();
+		return u.isActive() && u.getRoles().isStaff() && u.getRoles() != Role.RECEPTIONIST
+			&& u.getSalonUltimateName() != null && !u.getSalonUltimateName().isBlank();
 	}
 
 	private Contest find(Long id) {

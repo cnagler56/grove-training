@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Contest, type ContestInput, type ContestMetric } from '@/src/lib/api';
+import { api, type Contest, type ContestHandicap, type ContestInput, type ContestMetric } from '@/src/lib/api';
 import { canManageSite } from '@/src/lib/roles';
 import { useUser } from '@/src/lib/UserContext';
 import { useDialogs } from '@/src/components/Dialogs';
@@ -15,9 +15,22 @@ const METRICS: { value: ContestMetric; label: string }[] = [
 ];
 const MAX_TEAMS = 4;
 
+const HANDICAPS: { value: ContestHandicap; label: string; help: string }[] = [
+  { value: 'NONE', label: 'None', help: 'Every service counts the same.' },
+  {
+    value: 'HOURS', label: 'Hours worked',
+    help: 'Each service is worth 100 points for anyone working the group\'s average hours or more, and more for people who work fewer, up to 200.',
+  },
+  {
+    value: 'RATE', label: 'Usual rate per guest',
+    help: 'Each service is worth 100 points for anyone who usually does the group\'s average or more per guest, and more for people who usually do fewer, up to 200.',
+  },
+];
+
 type Form = {
   name: string;
   metric: ContestMetric;
+  handicap: ContestHandicap;
   startDate: string | null;
   endDate: string | null;
   prize: string;
@@ -28,7 +41,7 @@ type Form = {
 };
 
 const empty = (): Form => ({
-  name: '', metric: 'TREATMENTS', startDate: null, endDate: null, prize: '',
+  name: '', metric: 'TREATMENTS', handicap: 'NONE', startDate: null, endDate: null, prize: '',
   useTeams: false, teamNames: ['Team 1', 'Team 2'], picked: {},
 });
 
@@ -36,6 +49,7 @@ function fromContest(c: Contest): Form {
   return {
     name: c.name,
     metric: c.metric,
+    handicap: c.handicap,
     startDate: c.startDate,
     endDate: c.endDate,
     prize: c.prize ?? '',
@@ -99,14 +113,19 @@ export default function ContestsPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (editing === null) return;
+    // Only people who can still be picked: someone who became a receptionist, say, drops out.
+    const allowed = new Set((people ?? []).map((p) => p.userId));
     const input: ContestInput = {
       name: form.name,
       metric: form.metric,
+      handicap: form.handicap,
       startDate: form.startDate,
       endDate: form.endDate,
       prize: form.prize.trim() || null,
       teams: form.useTeams ? form.teamNames : [],
-      people: Object.entries(form.picked).map(([id, team]) => ({ userId: Number(id), team: form.useTeams ? team : null })),
+      people: Object.entries(form.picked)
+        .filter(([id]) => allowed.has(Number(id)))
+        .map(([id, team]) => ({ userId: Number(id), team: form.useTeams ? team : null })),
     };
     const saved = await run(
       () => (editing === 'new' ? api.createContest(input) : api.updateContest(editing, input)),
@@ -189,7 +208,8 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
 }) {
-  const pickedIds = Object.keys(form.picked).map(Number);
+  const pickedIds = Object.keys(form.picked).map(Number)
+    .filter((id) => people === null || people.some((p) => p.userId === id));
 
   function toggle(userId: number) {
     const next = { ...form.picked };
@@ -248,7 +268,18 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
         <input className="input" value={form.prize} maxLength={200} placeholder="$50 gift card"
           onChange={(e) => setForm({ ...form, prize: e.target.value })} />
       </label>
-      {!isNew && <p className="text-xs opacity-60">Changing what&apos;s counted or the first day starts the standings over at the next check.</p>}
+      <label className="block text-sm">
+        <span className="mb-1 block font-semibold opacity-80">Handicap</span>
+        <select className="input cursor-pointer sm:max-w-xs" value={form.handicap}
+          onChange={(e) => setForm({ ...form, handicap: e.target.value as ContestHandicap })}>
+          {HANDICAPS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+        </select>
+        <span className="mt-1 block text-xs opacity-70">
+          {HANDICAPS.find((h) => h.value === form.handicap)?.help}
+          {form.handicap !== 'NONE' && ' It comes from each person\'s last 4 weeks before the contest starts and is set once it begins.'}
+        </span>
+      </label>
+      {!isNew && <p className="text-xs opacity-60">Changing what&apos;s counted, the handicap, or the first day starts the standings over at the next check.</p>}
 
       <fieldset className="space-y-3 text-sm">
         <label className="flex cursor-pointer items-center gap-2 font-semibold">
@@ -326,7 +357,7 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
             })}
           </ul>
         )}
-        <p className="mt-2 text-xs opacity-60">Only people linked to their Salon Ultimate name can be in a contest.</p>
+        <p className="mt-2 text-xs opacity-60">Only people linked to their Salon Ultimate name can be in a contest. Receptionists aren&apos;t included.</p>
       </fieldset>
 
       <div className="flex flex-wrap gap-2">

@@ -501,6 +501,9 @@ export interface TodoAssignOptions {
 
 export type ContestMetric = 'TREATMENTS' | 'COLORS' | 'WAXES';
 
+/** HOURS: fewer hours worked, more points per service. RATE: a lower usual rate per guest, more points. */
+export type ContestHandicap = 'NONE' | 'HOURS' | 'RATE';
+
 /** A contest as everyone on staff sees it. Places are null until the first check; tied people share one. */
 export interface Contest {
   id: number;
@@ -508,6 +511,7 @@ export interface Contest {
   metric: ContestMetric;
   /** "treatments", "colors", "waxes". */
   metricLabel: string;
+  handicap: ContestHandicap;
   startDate: string;
   endDate: string;
   prize: string | null;
@@ -517,13 +521,19 @@ export interface Contest {
   /** Why the last Salon Ultimate check failed. Managers only. */
   checkProblem: string | null;
   createdByName: string;
+  /** `total` is points (the count, without a handicap). */
   teams: { position: number; name: string; total: number; rank: number | null; members: number }[];
-  standings: { userId: number; name: string; count: number | null; rank: number | null; team: number | null }[];
+  /** `worth` is points per service with a handicap, set at the first check; null otherwise. */
+  standings: {
+    userId: number; name: string; count: number | null; points: number | null; worth: number | null;
+    rank: number | null; team: number | null;
+  }[];
 }
 
 export interface ContestInput {
   name: string;
   metric: ContestMetric;
+  handicap: ContestHandicap;
   startDate: string | null;
   endDate: string | null;
   prize: string | null;

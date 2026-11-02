@@ -35,10 +35,12 @@ export default function ContestCard({ contest: c, viewerId, actions }: {
   /** Manager buttons, shown under the title. */
   actions?: React.ReactNode;
 }) {
-  const best = Math.max(1, ...c.standings.map((s) => s.count ?? 0));
+  const handicapped = c.handicap !== 'NONE';
+  const best = Math.max(1, ...c.standings.map((s) => s.points ?? 0));
   const bestTeam = Math.max(1, ...c.teams.map((t) => t.total));
   const teamName = (position: number | null) => c.teams.find((t) => t.position === position)?.name;
   const checked = c.lastCheckedAt !== null;
+  const teamUnit = handicapped ? 'points' : c.metricLabel;
 
   return (
     <section className="card space-y-4 p-5">
@@ -51,6 +53,12 @@ export default function ContestCard({ contest: c, viewerId, actions }: {
           Most {c.metricLabel}, {formatDate(c.startDate, false)} to {formatDate(c.endDate, false)}
           {c.teams.length > 0 && `, ${c.teams.length} teams`}
         </p>
+        {handicapped && (
+          <p className="mt-1 text-sm">
+            <b>Handicap:</b> {c.handicap === 'HOURS' ? 'hours worked' : `usual ${c.metricLabel} per guest`}.
+            {' '}Places go by points: each person&apos;s services are worth 100 to 200 points.
+          </p>
+        )}
         {c.prize && <p className="mt-1 text-sm"><b>Prize:</b> {c.prize}</p>}
         <p className="mt-1 text-xs opacity-60">
           {checked
@@ -72,8 +80,8 @@ export default function ContestCard({ contest: c, viewerId, actions }: {
                   <span className="text-lg font-extrabold">{t.name}</span>
                   {checked && t.rank !== null && <span className="text-sm font-bold">{leading ? 'In the lead' : ordinal(t.rank)}</span>}
                 </div>
-                <div className="mt-1 text-3xl font-extrabold">{checked ? t.total : '-'}</div>
-                <div className="text-sm opacity-70">{c.metricLabel}, {t.members} {t.members === 1 ? 'person' : 'people'}</div>
+                <div className="mt-1 text-3xl font-extrabold">{checked ? t.total.toLocaleString('en-US') : '-'}</div>
+                <div className="text-sm opacity-70">{teamUnit}, {t.members} {t.members === 1 ? 'person' : 'people'}</div>
                 <div className="mt-2 h-2 rounded-full bg-[var(--surface-2)]">
                   <div className="h-2 rounded-full bg-[var(--accent)]" style={{ width: `${(t.total / bestTeam) * 100}%` }} />
                 </div>
@@ -94,13 +102,21 @@ export default function ContestCard({ contest: c, viewerId, actions }: {
                   <span className="break-words font-bold">{s.name}{me && ' (you)'}</span>
                   {teamName(s.team) && <span className="text-xs font-semibold opacity-60">{teamName(s.team)}</span>}
                 </div>
+                {handicapped && checked && s.count !== null && (
+                  <div className="text-xs opacity-70">
+                    {s.count} {s.count === 1 ? c.metricLabel.replace(/(es|s)$/, '') : c.metricLabel}
+                    {s.worth !== null && `, worth ${s.worth} each`}
+                  </div>
+                )}
                 {checked && (
                   <div className="mt-1 h-1.5 rounded-full bg-[var(--surface-2)]">
-                    <div className="h-1.5 rounded-full bg-[var(--accent)]" style={{ width: `${((s.count ?? 0) / best) * 100}%` }} />
+                    <div className="h-1.5 rounded-full bg-[var(--accent)]" style={{ width: `${((s.points ?? 0) / best) * 100}%` }} />
                   </div>
                 )}
               </div>
-              <span className="w-10 shrink-0 text-right text-lg font-extrabold">{s.count ?? '-'}</span>
+              <span className="w-16 shrink-0 text-right text-lg font-extrabold">
+                {s.points === null ? '-' : s.points.toLocaleString('en-US')}
+              </span>
             </li>
           );
         })}

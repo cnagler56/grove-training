@@ -18,7 +18,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -49,6 +52,8 @@ import com.grove.Repository.ContestTeamRepository;
 import com.grove.Repository.TeamPostRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
+import com.grove.Repository.WeeklyStatRepository;
+import com.grove.Domain.WeeklyStat;
 import com.grove.Service.ContestService;
 import com.grove.Service.PushService;
 import com.grove.Service.SalonUltimateClient;
@@ -67,6 +72,7 @@ class ContestTests {
 	@Autowired ContestEntryRepository entries;
 	@Autowired ContestTeamRepository teams;
 	@Autowired TeamPostRepository posts;
+	@Autowired WeeklyStatRepository stats;
 	@Autowired ContestService service;
 	@MockBean SalonUltimateClient salonUltimate;
 	@SpyBean PushService push;
@@ -80,6 +86,7 @@ class ContestTests {
 	void setUp() throws Exception {
 		entries.deleteAll();
 		teams.deleteAll();
+		stats.deleteAll();
 		contests.deleteAll();
 		sessions.deleteAll();
 		users.deleteAll();
@@ -117,6 +124,19 @@ class ContestTests {
 		mvc.perform(get("/api/contests/people").cookie(owner))
 			.andExpect(jsonPath("$.length()").value(4))
 			.andExpect(jsonPath("$[0].name").value("Ava Stone"));
+	}
+
+	@Test
+	void receptionistsAreNotPartOfContestsEvenWhenLinked() throws Exception {
+		var rae = users.findById(raeId).orElseThrow();
+		rae.setSalonUltimateName("Rae Hill");
+		users.save(rae);
+		mvc.perform(get("/api/contests/people").cookie(owner))
+			.andExpect(jsonPath("$.length()").value(4))
+			.andExpect(jsonPath("$[?(@.name == 'Rae Hill')]").isEmpty());
+		send(manager, post("/api/contests"), contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(raeId, null)),
+			status().isBadRequest());
+		assertThat(contests.findAll()).isEmpty();
 	}
 
 	@Test
@@ -275,6 +295,84 @@ class ContestTests {
 	}
 
 	@Test
+	void aHandicapIsOneHundredAtTheAverageOrBetterAndUpToTwoHundredBelowIt() {
+		assertThat(ContestService.worth(10, 10.0)).isEqualTo(100);
+		assertThat(ContestService.worth(10, 15.0)).isEqualTo(100);
+		assertThat(ContestService.worth(32, 20.0)).isEqualTo(160);
+		assertThat(ContestService.worth(10, 8.0)).isEqualTo(125);
+		assertThat(ContestService.worth(10, 1.0)).isEqualTo(200);
+		assertThat(ContestService.worth(10, 0.0)).isEqualTo(200);
+		assertThat(ContestService.worth(10, null)).isEqualTo(100);
+		assertThat(ContestService.worth(0, 5.0)).isEqualTo(100);
+	}
+
+	@Test
+	void anHoursHandicapGivesPartTimersMorePointsFromTheFourWeeksBeforeTheStart() throws Exception {
+		LocalDate startWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		for (int w = 1; w <= 4; w++) {
+			week("Ava Stone", startWeek.minusWeeks(w), 40, 50, 0);
+			week("Mia Cruz", startWeek.minusWeeks(w), 20, 25, 0);
+		}
+		// Weeks outside the four before the start don't count.
+		week("Mia Cruz", startWeek.minusWeeks(5), 0, 0, 0);
+		week("Mia Cruz", startWeek, 0, 0, 0);
+
+		long id = create(manager, with(contest("Blitz", List.of("Oak", "Pine"),
+			person(avaId, 0), person(miaId, 1), person(leeId, 1)), "handicap", "HOURS"));
+		report("Ava Stone", 3, "Mia Cruz", 2, "Lee Moss", 2);
+		// Average 30 hours: Ava (40) is worth 100, Mia (20) 150, Lee (no weeks yet) 100.
+		check(id)
+			.andExpect(jsonPath("$.handicap").value("HOURS"))
+			.andExpect(jsonPath("$.standings[0].name").value("Ava Stone"))
+			.andExpect(jsonPath("$.standings[0].worth").value(100))
+			.andExpect(jsonPath("$.standings[0].points").value(300))
+			.andExpect(jsonPath("$.standings[0].rank").value(1))
+			.andExpect(jsonPath("$.standings[1].name").value("Mia Cruz"))
+			.andExpect(jsonPath("$.standings[1].worth").value(150))
+			.andExpect(jsonPath("$.standings[1].points").value(300))
+			.andExpect(jsonPath("$.standings[1].count").value(2))
+			.andExpect(jsonPath("$.standings[1].rank").value(1))
+			.andExpect(jsonPath("$.standings[2].worth").value(100))
+			.andExpect(jsonPath("$.teams[0].total").value(300))
+			.andExpect(jsonPath("$.teams[1].total").value(500));
+	}
+
+	@Test
+	void aRateHandicapValuesServicesBySomeonesUsualRateAndStaysPutDuringTheContest() throws Exception {
+		LocalDate startWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		for (int w = 1; w <= 4; w++) {
+			week("Ava Stone", startWeek.minusWeeks(w), 35, 10, 1);
+			week("Mia Cruz", startWeek.minusWeeks(w), 35, 40, 1);
+		}
+		long id = create(manager, with(contest("Treatment Blitz", List.of(), person(avaId, null), person(miaId, null)), "handicap", "RATE"));
+		// Ava: 1 in 10 guests. Mia: 1 in 40. Average 1 in 16: Ava 100, Mia 200 (the most).
+		report("Ava Stone", 1, "Mia Cruz", 0);
+		check(id)
+			.andExpect(jsonPath("$.standings[0].worth").value(100))
+			.andExpect(jsonPath("$.standings[1].worth").value(200));
+
+		report("Ava Stone", 3, "Mia Cruz", 2);
+		check(id)
+			.andExpect(jsonPath("$.standings[0].name").value("Mia Cruz"))
+			.andExpect(jsonPath("$.standings[0].points").value(400));
+		verify(push).notify(eq(List.of(miaId)), eq("Treatment Blitz"), eq("You moved up to 1st with 400 points (2 treatments)."), eq("/contests"));
+		verify(push).notify(eq(List.of(avaId)), eq("Treatment Blitz"),
+			eq("You're now 2nd with 300 points (3 treatments). 1 more treatment to move up."), eq("/contests"));
+
+		// A new week of stats mid-contest doesn't change anyone's value.
+		stats.findAll().stream().filter(s -> s.getSuName().equals("Ava Stone")).forEach(s -> { s.setTreatments(0); stats.save(s); });
+		check(id).andExpect(jsonPath("$.standings[1].worth").value(100));
+
+		// Turning the handicap off starts the standings over, counting 1 each.
+		send(manager, put("/api/contests/" + id), contest("Treatment Blitz", List.of(), person(avaId, null), person(miaId, null)), status().isOk());
+		check(id)
+			.andExpect(jsonPath("$.handicap").value("NONE"))
+			.andExpect(jsonPath("$.standings[0].name").value("Ava Stone"))
+			.andExpect(jsonPath("$.standings[0].points").value(3))
+			.andExpect(jsonPath("$.standings[0].worth").doesNotExist());
+	}
+
+	@Test
 	void deletingAnAccountTakesThemOutOfContests() throws Exception {
 		create(manager, contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(leeId, null)));
 		mvc.perform(delete("/api/admin/team/" + leeId).cookie(owner)).andExpect(status().is2xxSuccessful());
@@ -297,6 +395,17 @@ class ContestTests {
 			}
 		}
 		when(salonUltimate.detailedServiceByEmployee(any(), any())).thenReturn(html.append("</table>").toString());
+	}
+
+	/** One finished week of Leaderboards stats for a Salon Ultimate name. */
+	private void week(String suName, LocalDate weekStart, int hours, int guests, int treatments) {
+		WeeklyStat s = stats.findByWeekStart(weekStart).stream().filter(x -> x.getSuName().equals(suName)).findFirst().orElseGet(WeeklyStat::new);
+		s.setWeekStart(weekStart);
+		s.setSuName(suName);
+		s.setFloorHours(BigDecimal.valueOf(hours));
+		s.setClients(guests);
+		s.setTreatments(treatments);
+		stats.save(s);
 	}
 
 	private org.springframework.test.web.servlet.ResultActions check(long id) throws Exception {

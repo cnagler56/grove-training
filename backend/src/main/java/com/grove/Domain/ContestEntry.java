@@ -31,6 +31,14 @@ public class ContestEntry {
 	@Column(name = "entry_count")
 	private Integer count;
 
+	/** With a handicap, points per service (100 to 200), set at the first check and kept for the whole contest. */
+	@Column(name = "worth")
+	private Integer worth;
+
+	/** Count times worth with a handicap, otherwise the count. What places are decided by. */
+	@Column(name = "points")
+	private Integer points;
+
 	/** 1 is first; people who are tied share a place. Null until the first check. */
 	@Column(name = "entry_rank")
 	private Integer rank;
@@ -48,6 +56,13 @@ public class ContestEntry {
 
 	public Integer getCount() { return count; }
 	public void setCount(Integer count) { this.count = count; }
+
+	public Integer getWorth() { return worth; }
+	public void setWorth(Integer worth) { this.worth = worth; }
+
+	/** Entries checked before points existed have only a count. */
+	public Integer getPoints() { return points != null ? points : count; }
+	public void setPoints(Integer points) { this.points = points; }
 
 	public Integer getRank() { return rank; }
 	public void setRank(Integer rank) { this.rank = rank; }

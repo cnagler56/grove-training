@@ -46,6 +46,12 @@ public class Contest {
 		public String plural() { return many; }
 	}
 
+	/**
+	 * How much each person's service is worth. NONE: 1 each. HOURS: more for people
+	 * who work fewer hours. RATE: more for people who usually do fewer per guest.
+	 */
+	public enum Handicap { NONE, HOURS, RATE }
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -57,6 +63,12 @@ public class Contest {
 	@JdbcTypeCode(SqlTypes.VARCHAR)
 	@Column(nullable = false, length = 20)
 	private Metric metric;
+
+	/** Null on contests made before handicaps, which means NONE. */
+	@Enumerated(EnumType.STRING)
+	@JdbcTypeCode(SqlTypes.VARCHAR)
+	@Column(length = 20)
+	private Handicap handicap;
 
 	@Column(name = "start_date", nullable = false)
 	private LocalDate startDate;
@@ -96,6 +108,9 @@ public class Contest {
 
 	public Metric getMetric() { return metric; }
 	public void setMetric(Metric metric) { this.metric = metric; }
+
+	public Handicap getHandicap() { return handicap == null ? Handicap.NONE : handicap; }
+	public void setHandicap(Handicap handicap) { this.handicap = handicap; }
 
 	public LocalDate getStartDate() { return startDate; }
 	public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
