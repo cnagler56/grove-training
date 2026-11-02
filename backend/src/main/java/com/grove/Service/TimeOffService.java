@@ -105,12 +105,34 @@ public class TimeOffService {
 		return view(saved);
 	}
 
-	/** Take back your own request while it's still waiting. */
+	/**
+	 * Take back your own request while it's waiting, or after it's approved up through
+	 * its first day. An approved one comes off the schedule and approvers are told, since
+	 * they may have planned around it. Once it's under way, an approver can undo it.
+	 */
+	@Transactional
 	public void cancel(User employee, Long id) {
 		TimeOffRequest r = find(id);
 		if (!r.getUserId().equals(employee.getUserId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found");
-		if (r.getStatus() != Status.PENDING) throw bad("Only a request that's still waiting can be cancelled");
+		if (r.getStatus() == Status.SENT_BACK) throw bad("This request was already sent back");
+		boolean wasApproved = r.getStatus() == Status.APPROVED;
+		if (wasApproved && r.getStartDate().isBefore(LocalDate.now(zone))) {
+			throw bad("This time off has already started. Ask a manager to change it.");
+		}
+		if (wasApproved) removeApprovedDays(r);
 		requests.delete(r);
+		if (!wasApproved) return;
+
+		List<User> approverList = users.findAll().stream()
+			.filter(u -> !u.getUserId().equals(employee.getUserId()) && perms.has(u, Permission.APPROVE_TIME_OFF))
+			.toList();
+		push.notify(approverList.stream().map(User::getUserId).toList(), "Approved time off cancelled",
+			name(employee) + ": " + range(r), "/schedule");
+		mailer.send(approverList.stream().map(User::getEmail).toList(), "Approved time off cancelled: " + name(employee), String.join("\n",
+			name(employee) + " cancelled their approved time off: " + range(r) + ".",
+			"Those days came off the schedule as RO.",
+			"",
+			mailer.link("/schedule")));
 	}
 
 	/** What an approver sees: everyone else's waiting requests, and approved time off still to come. */

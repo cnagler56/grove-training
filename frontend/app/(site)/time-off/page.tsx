@@ -14,6 +14,8 @@ const STATUS: Record<TimeOffRequest['status'], [string, string]> = {
   SENT_BACK: ['Sent back', 'bg-red-50 text-[var(--danger)]'],
 };
 
+const today = () => new Date().toLocaleDateString('en-CA');
+
 /**
  * Employees ask for days off and see what happened to their requests. People
  * whose role can approve time off (owner's Settings) answer requests here too.
@@ -81,6 +83,17 @@ export default function TimeOffPage() {
       confirmLabel: undoing ? 'Undo approval' : 'Send back',
     });
     if (message) void run(() => api.sendBackTimeOff(r.id, message), `Sent back to ${r.name}.`);
+  }
+
+  async function cancelApproved(r: TimeOffRequest) {
+    if (!(await dialogs.confirm({
+      title: 'Cancel your approved time off?',
+      message: `${timeOffRange(r.startDate, r.endDate)}. These days come off the schedule as RO, and whoever approves time off will be told.`,
+      confirmLabel: 'Cancel it',
+      cancelLabel: 'Keep it',
+      danger: true,
+    }))) return;
+    void run(() => api.cancelTimeOff(r.id), 'Approved time off cancelled. Those days came off the schedule.');
   }
 
   return (
@@ -164,6 +177,10 @@ export default function TimeOffPage() {
                     {r.status === 'PENDING' && (
                       <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
                         onClick={() => void run(() => api.cancelTimeOff(r.id), 'Request cancelled.')}>Cancel</button>
+                    )}
+                    {r.status === 'APPROVED' && r.startDate >= today() && (
+                      <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
+                        onClick={() => void cancelApproved(r)}>Cancel</button>
                     )}
                   </div>
                 </li>

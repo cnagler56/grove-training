@@ -1,5 +1,11 @@
 package com.grove;
 
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
 
 import jakarta.servlet.http.Cookie;
 
@@ -17,12 +25,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.grove.Domain.Role;
+import com.grove.Domain.TimeOffRequest;
 import com.grove.Repository.AppSettingRepository;
 import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.ScheduleWeekRepository;
@@ -30,6 +40,7 @@ import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
+import com.grove.Service.Mailer;
 import com.grove.Service.ScheduleService;
 import com.grove.Service.SessionService;
 import com.grove.Service.TimeOffService;
@@ -48,6 +59,7 @@ class TimeOffTests {
 	@Autowired ScheduleWeekRepository weeks;
 	@Autowired AppSettingRepository settings;
 	@MockBean JavaMailSender mailSender;
+	@SpyBean Mailer mailer;
 
 	/** A Saturday safely in the future. */
 	private final LocalDate week = ScheduleService.weekStart(LocalDate.now().plusDays(30));
@@ -100,6 +112,57 @@ class TimeOffTests {
 			.andExpect(status().isOk());
 		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(ava))
 			.andExpect(jsonPath("$.shifts.length()").value(2));
+	}
+
+	@Test
+	void approvedTimeOffCanBeCancelledAndComesOffTheSchedule() throws Exception {
+		long id = request(ava, week.plusDays(2), week.plusDays(3), null);
+		mvc.perform(put("/api/time-off/" + id + "/approve").cookie(owner)).andExpect(status().isOk());
+		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.shifts.length()").value(2));
+
+		// Only by the person who asked.
+		mvc.perform(delete("/api/time-off/" + id).cookie(owner)).andExpect(status().isNotFound());
+		mvc.perform(delete("/api/time-off/" + id).cookie(ava)).andExpect(status().isNoContent());
+
+		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.shifts.length()").value(0))
+			.andExpect(jsonPath("$.timeOff.length()").value(0));
+		mvc.perform(get("/api/time-off/mine").cookie(ava)).andExpect(jsonPath("$.length()").value(0));
+		mvc.perform(get("/api/time-off/queue").cookie(owner)).andExpect(jsonPath("$.approved.length()").value(0));
+		verify(mailer).send(eq(List.of("owner@grove.test")), contains("Approved time off cancelled"), contains("Ava Stone"));
+
+		// The days can be asked for again.
+		request(ava, week.plusDays(2), week.plusDays(3), null);
+	}
+
+	@Test
+	void approvedTimeOffCanBeCancelledThroughItsFirstDayOnly() throws Exception {
+		LocalDate today = LocalDate.now(ZoneId.of("America/Chicago"));
+		long started = request(ava, week, week, null);
+		mvc.perform(put("/api/time-off/" + started + "/approve").cookie(owner)).andExpect(status().isOk());
+		TimeOffRequest r = requests.findById(started).orElseThrow();
+		r.setStartDate(today.minusDays(1));
+		r.setEndDate(today.plusDays(1));
+		requests.save(r);
+		mvc.perform(delete("/api/time-off/" + started).cookie(ava)).andExpect(status().isBadRequest());
+
+		r.setStartDate(today);
+		requests.save(r);
+		mvc.perform(delete("/api/time-off/" + started).cookie(ava)).andExpect(status().isNoContent());
+	}
+
+	@Test
+	void aSentBackRequestCannotBeCancelledAndAWaitingOneSendsNoNotice() throws Exception {
+		long waiting = request(ava, week, week, null);
+		mvc.perform(delete("/api/time-off/" + waiting).cookie(ava)).andExpect(status().isNoContent());
+		verify(mailer, never()).send(anyList(), contains("cancelled"), anyString());
+
+		long sentBack = request(ava, week, week, null);
+		mvc.perform(put("/api/time-off/" + sentBack + "/send-back").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"No\"}"))
+			.andExpect(status().isOk());
+		mvc.perform(delete("/api/time-off/" + sentBack).cookie(ava)).andExpect(status().isBadRequest());
 	}
 
 	@Test
