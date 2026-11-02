@@ -53,12 +53,10 @@ export default function SignInPage() {
           </>
         )}
         <Field label="Email" type="email" value={email} onChange={setEmail} required />
-        <Field
+        <PasswordField
           label={mode === 'register' ? 'Password (8+ characters)' : 'Password'}
-          type="password"
           value={password}
           onChange={setPassword}
-          required
         />
 
         {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
@@ -116,5 +114,37 @@ function Field({
         className="input"
       />
     </label>
+  );
+}
+
+/** A required password box with a button to show what was typed. */
+function PasswordField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="text-sm">
+      <label htmlFor="password" className="mb-1 block opacity-70">{label}</label>
+      <div className="relative">
+        <input
+          id="password"
+          type={shown ? 'text' : 'password'}
+          value={value}
+          required
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value)}
+          className="input"
+          style={{ paddingRight: '4rem' }}
+        />
+        <button
+          type="button"
+          aria-pressed={shown}
+          onClick={() => setShown(!shown)}
+          className="absolute inset-y-0 right-0 px-4 font-semibold text-[var(--accent-strong)] hover:underline"
+        >
+          {shown ? 'Hide' : 'Show'}
+        </button>
+      </div>
+    </div>
   );
 }

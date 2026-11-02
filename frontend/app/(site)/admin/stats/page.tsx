@@ -102,13 +102,29 @@ export default function LeaderboardsPage() {
   const total = (key: string) => rows.reduce((sum, r) => sum + (column(key).value(r.stats) ?? 0), 0);
 
   return (
-    <div className="space-y-6">
+    <div className="leaderboard-sheet space-y-6">
+      {/* Letter, landscape, so the full table fits. Boards go three across, the table on its own page. */}
+      <style>{`
+        @page { size: letter landscape; margin: 0.4in; }
+        @media print {
+          .leaderboard-sheet { font-size: 12px; }
+          .leaderboard-sheet .card { overflow: visible; box-shadow: none; border-radius: 0.5rem; padding: 0.5rem 0.75rem; break-inside: avoid; }
+          .leaderboard-sheet .board-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+          .leaderboard-sheet .board-grid li { padding-block: 0.125rem; }
+          .leaderboard-sheet .everyone { break-before: page; }
+          .leaderboard-sheet table { font-size: 11px; }
+          .leaderboard-sheet th, .leaderboard-sheet td { padding: 0.25rem 0.375rem; }
+          .leaderboard-sheet .card > * { padding-inline: 0; }
+        }
+      `}</style>
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Leaderboards</h1>
-          <p className="mt-1 text-sm opacity-70">From Salon Ultimate. Each week is pulled automatically on Saturday morning.</p>
+          <p className="mt-1 text-sm opacity-70 print:hidden">From Salon Ultimate. Each week is pulled automatically on Saturday morning.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {rows.length > 0 && <button className="btn-ghost" onClick={() => window.print()}>Print</button>}
           <button className="btn-ghost" onClick={() => setWeek(addDays(shown, -7))}>Previous week</button>
           <button className="btn-ghost" disabled={isLatest} onClick={() => setWeek(addDays(shown, 7))}>Next week</button>
           {!isLatest && <button className="btn-ghost" onClick={() => setWeek(undefined)}>Latest</button>}
@@ -118,20 +134,20 @@ export default function LeaderboardsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-extrabold">Week of {weekRangeLabel(shown)}</h2>
         {data.configured && (
-          <button className="btn" onClick={() => void pull()} disabled={pulling}>
+          <button className="btn print:hidden" onClick={() => void pull()} disabled={pulling}>
             {pulling ? 'Pulling from Salon Ultimate…' : rows.length ? 'Pull again' : 'Pull this week'}
           </button>
         )}
       </div>
 
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--danger)] print:hidden">{error}</p>}
       {!data.configured && (
-        <p className="card p-4 text-sm">
+        <p className="card p-4 text-sm print:hidden">
           Salon Ultimate sign-in isn&apos;t set up on the server yet, so weeks can&apos;t be pulled.
         </p>
       )}
       {last && last.status !== 'OK' && (
-        <p className="card border-2 border-[var(--danger)] p-4 text-sm">
+        <p className="card border-2 border-[var(--danger)] p-4 text-sm print:hidden">
           <b>Last try {formatDate(last.attemptedAt)}:</b> {last.message}
         </p>
       )}
@@ -142,7 +158,7 @@ export default function LeaderboardsPage() {
         </p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="board-grid grid gap-4 md:grid-cols-2">
             {BOARDS.map((b) => {
               const c = column(b.column);
               const eligible = rows.filter((r) => c.value(r.stats) !== null
@@ -176,7 +192,7 @@ export default function LeaderboardsPage() {
                     ))}
                   </ol>
                   {more && (
-                    <button type="button" className="mt-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline"
+                    <button type="button" className="mt-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline print:hidden"
                       onClick={() => toggleBoard(b.title)}>
                       {expanded ? 'Show top 5' : `Show all ${ranked.length}`}
                     </button>
@@ -186,10 +202,10 @@ export default function LeaderboardsPage() {
             })}
           </div>
 
-          <section className="card overflow-x-auto">
+          <section className="everyone card overflow-x-auto">
             <div className="px-5 pt-5">
               <h3 className="text-lg font-extrabold">Everyone</h3>
-              <p className="text-xs opacity-60">Click a column to rank by it.</p>
+              <p className="text-xs opacity-60 print:hidden">Click a column to rank by it.</p>
             </div>
             <table className="mt-3 w-full text-left text-sm">
               <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide">
@@ -247,7 +263,7 @@ export default function LeaderboardsPage() {
           <MonthlyServices teamWeeks={data.teamWeeks} />
 
           {unlinked.length > 0 && (
-            <p className="text-sm opacity-70">
+            <p className="text-sm opacity-70 print:hidden">
               Not linked to a site account yet: {unlinked.map((r) => r.suName).join(', ')}. Link them from their page under Team so they see
               their own numbers on My week.
             </p>
