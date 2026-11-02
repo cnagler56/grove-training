@@ -21,6 +21,18 @@ function keyBytes(base64url: string) {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
+/**
+ * Take this app's notifications off the phone's notification tray and the count on
+ * its icon: the app has opened, and the Notifications list has them all.
+ */
+export async function clearDelivered() {
+  if (!('serviceWorker' in navigator)) return;
+  const registration = await navigator.serviceWorker.getRegistration('/');
+  if (registration) (await registration.getNotifications()).forEach((n) => n.close());
+  const nav = navigator as Navigator & { clearAppBadge?: () => Promise<void> };
+  await nav.clearAppBadge?.();
+}
+
 /** This device's existing subscription, if it has one. */
 export async function currentSubscription() {
   if (pushSupport() !== 'ready') return null;

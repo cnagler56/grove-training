@@ -543,6 +543,16 @@ export interface ContestInput {
   people: { userId: number; team: number | null }[];
 }
 
+/** Something the app told this person. `url` is the page it opens. */
+export interface AppNotification {
+  id: number;
+  title: string;
+  body: string | null;
+  url: string;
+  createdAt: string;
+  read: boolean;
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -679,6 +689,12 @@ export const api = {
     send<Todo[]>('/api/todos', 'POST', { text, userIds, dueDate }),
   removeTodo: (id: number) => send<void>(`/api/todos/${id}`, 'DELETE'),
   removeSavedTodoItem: (id: number) => send<void>(`/api/todos/items/${id}`, 'DELETE'),
+
+  notifications: () => send<{ unread: number; notifications: AppNotification[] }>('/api/notifications'),
+  /** Marks anything pointing to this page read; returns how many are still unread. */
+  notificationsSeen: (path: string) => send<{ unread: number }>('/api/notifications/seen', 'POST', { path }),
+  readNotification: (id: number) => send<void>(`/api/notifications/${id}/read`, 'PUT', {}),
+  readAllNotifications: () => send<void>('/api/notifications/read-all', 'PUT', {}),
 
   contests: () => send<Contest[]>('/api/contests'),
   contestPeople: () => send<{ userId: number; name: string }[]>('/api/contests/people'),

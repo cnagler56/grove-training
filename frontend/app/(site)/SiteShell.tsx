@@ -6,9 +6,11 @@ import { useEffect, useState } from 'react';
 import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
 import { canManageSite, hasTodos, onSchedule } from '@/src/lib/roles';
+import { clearDelivered } from '@/src/lib/push';
 import TodoPopup from '@/src/components/TodoPopup';
 
 const TABS = [{ href: '/home', label: 'Home' }];
+const NOTIFICATION_TABS = [{ href: '/notifications', label: 'Notifications' }];
 const TODO_TABS = [{ href: '/todos', label: 'To-do' }];
 const STAFF_TABS = [{ href: '/videos', label: 'Videos' }, { href: '/contests', label: 'Contests' }];
 const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
@@ -42,8 +44,10 @@ function Header() {
   const { user, perms, logout } = useUser();
   const pathname = usePathname();
   const isOwner = user?.roles === 'OWNER';
+  const isStaff = !!user && user.roles !== 'CUSTOMER';
   const tabs = [
     ...TABS,
+    ...(isStaff ? NOTIFICATION_TABS : []),
     ...(hasTodos(user?.roles) ? TODO_TABS : []),
     ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
     ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
@@ -60,6 +64,26 @@ function Header() {
     if (!isOwner) return;
     api.newApplicationCount().then(setNewApplicants).catch(() => {});
   }, [isOwner, pathname]);
+
+  // Unread notifications. Opening a page marks what pointed to it read, so this
+  // runs on every page change, and again when the app comes back into view.
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!isStaff) return;
+    const refresh = () => {
+      api.notificationsSeen(window.location.pathname).then((r) => setUnread(r.unread)).catch(() => {});
+      clearDelivered().catch(() => {});
+    };
+    refresh();
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    // The Notifications page says when it's changed what's read.
+    window.addEventListener('notifications-changed', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('notifications-changed', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isStaff, pathname]);
 
   return (
     <header className="print:hidden">
@@ -113,6 +137,14 @@ function Header() {
                       {newApplicants}
                     </span>
                   )}
+                  {tab.href === '/notifications' && unread > 0 && (
+                    <span
+                      className="ml-1.5 rounded-full bg-[var(--danger)] px-1.5 py-0.5 text-xs font-bold text-white"
+                      aria-label={`${unread} unread`}
+                    >
+                      {unread}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -133,7 +165,8 @@ function Gate({ children }: { children: React.ReactNode }) {
   // Applicants, adding accounts, and Settings are for owners only.
   const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new'
     || pathname.startsWith('/admin/settings');
-  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account') || pathname.startsWith('/contests');
+  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account') || pathname.startsWith('/contests')
+    || pathname.startsWith('/notifications');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
   const needsVacationPay = pathname.startsWith('/paid-time-off');

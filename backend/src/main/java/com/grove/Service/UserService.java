@@ -33,6 +33,7 @@ import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.TeamPostLikeRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.TodoAssignmentRepository;
+import com.grove.Repository.UserNotificationRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VacationPayRequestRepository;
 import com.grove.Repository.VideoAssignmentRepository;
@@ -62,6 +63,7 @@ public class UserService {
 	private final PushSubscriptionRepository pushRepo;
 	private final TodoAssignmentRepository todoRepo;
 	private final ContestEntryRepository contestEntryRepo;
+	private final UserNotificationRepository notificationRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
@@ -71,7 +73,7 @@ public class UserService {
 			TimeOffRequestRepository timeOffRepo, VacationPayRequestRepository vacationPayRepo,
 			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
 			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, ContestEntryRepository contestEntryRepo,
-			PasswordEncoder passwordEncoder,
+			UserNotificationRepository notificationRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -86,6 +88,7 @@ public class UserService {
 		this.pushRepo = pushRepo;
 		this.todoRepo = todoRepo;
 		this.contestEntryRepo = contestEntryRepo;
+		this.notificationRepo = notificationRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -255,6 +258,7 @@ public class UserService {
 		todoRepo.deleteByAssigneeId(user.getUserId());
 		// Their contest entries go; contests they made stay.
 		contestEntryRepo.deleteByUserId(user.getUserId());
+		notificationRepo.deleteByUserId(user.getUserId());
 		userRepo.delete(user);
 	}
 

@@ -48,18 +48,20 @@ public class PushService {
 
 	private final PushSubscriptionRepository subscriptions;
 	private final UserRepository users;
+	private final NotificationService inbox;
 	private final String publicKey;
 	private final String privateKey;
 	private final String subject;
 	private final ObjectMapper json = new ObjectMapper();
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-	public PushService(PushSubscriptionRepository subscriptions, UserRepository users,
+	public PushService(PushSubscriptionRepository subscriptions, UserRepository users, NotificationService inbox,
 			@Value("${app.push.public-key:}") String publicKey,
 			@Value("${app.push.private-key:}") String privateKey,
 			@Value("${app.push.subject:}") String subject) {
 		this.subscriptions = subscriptions;
 		this.users = users;
+		this.inbox = inbox;
 		this.publicKey = publicKey.trim();
 		this.privateKey = privateKey.trim();
 		this.subject = subject.trim();
@@ -95,12 +97,17 @@ public class PushService {
 		if (!blank(endpoint)) subscriptions.deleteByEndpoint(endpoint);
 	}
 
-	/** Tell these people, on every device they've turned on. Disabled accounts are skipped. */
+	/**
+	 * Tell these people, on every device they've turned on. Disabled accounts are
+	 * skipped. Each one also goes on their Notifications list, phone or not.
+	 */
 	public void notify(Collection<Long> userIds, String title, String body, String url) {
-		if (!isConfigured() || userIds == null || userIds.isEmpty()) return;
+		if (userIds == null || userIds.isEmpty()) return;
 		Set<Long> active = users.findAllById(userIds).stream()
 			.filter(User::isActive).map(User::getUserId).collect(Collectors.toSet());
 		if (active.isEmpty()) return;
+		inbox.save(active, title, body, url);
+		if (!isConfigured()) return;
 		List<PushSubscription> targets = subscriptions.findByUserIdIn(active);
 		if (targets.isEmpty()) return;
 		byte[] message;
