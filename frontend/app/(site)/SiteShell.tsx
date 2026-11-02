@@ -13,7 +13,7 @@ const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 /** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
 const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
-const VACATION_PAY_TABS = [{ href: '/vacation-pay', label: 'Vacation pay' }];
+const VACATION_PAY_TABS = [{ href: '/paid-time-off', label: 'Paid Time Off' }];
 const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
   { href: '/admin', label: 'Manage videos' },
@@ -132,7 +132,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
-  const needsVacationPay = pathname.startsWith('/vacation-pay');
+  const needsVacationPay = pathname.startsWith('/paid-time-off');
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');

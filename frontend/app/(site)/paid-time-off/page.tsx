@@ -16,10 +16,10 @@ const STATUS: Record<VacationPayRequest['status'], [string, string]> = {
 const hoursLabel = (h: number) => `${h} ${h === 1 ? 'hour' : 'hours'}`;
 
 /**
- * Employees ask to be paid vacation hours on a check date and see what happened
+ * Employees ask for paid time off hours on a check date and see what happened
  * to their requests. Owners answer them here.
  */
-export default function VacationPayPage() {
+export default function PaidTimeOffPage() {
   const { user } = useUser();
   const dialogs = useDialogs();
   const asks = onSchedule(user?.roles);
@@ -72,7 +72,7 @@ export default function VacationPayPage() {
 
   async function sendBack(r: VacationPayRequest, undoing: boolean) {
     const message = await dialogs.prompt({
-      title: undoing ? `Undo ${r.name}'s approved vacation pay?` : `Send back ${r.name}'s request?`,
+      title: undoing ? `Undo ${r.name}'s approved paid time off?` : `Send back ${r.name}'s request?`,
       message: `${hoursLabel(r.hours)} on the ${longDayLabel(r.checkDate)} check. They'll see your message.`,
       placeholder: 'Your message to them',
       multiline: true,
@@ -84,9 +84,9 @@ export default function VacationPayPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-extrabold tracking-tight">Vacation pay</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight">Paid Time Off</h1>
         <p className="mt-1 text-sm opacity-70">
-          {asks ? 'Ask to be paid vacation hours on an upcoming check.' : 'Answer your team\'s requests to be paid vacation hours.'}
+          {asks ? 'Ask for paid time off hours on an upcoming check.' : 'Answer your team\'s paid time off requests.'}
         </p>
       </div>
 
@@ -111,7 +111,7 @@ export default function VacationPayPage() {
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button className="btn" disabled={busy}
-                      onClick={() => void run(() => api.approveVacationPay(r.id), `Approved ${r.name}'s vacation pay.`)}>Approve</button>
+                      onClick={() => void run(() => api.approveVacationPay(r.id), `Approved ${r.name}'s paid time off.`)}>Approve</button>
                     <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, false)}>Send back</button>
                   </div>
                 </li>
@@ -123,7 +123,7 @@ export default function VacationPayPage() {
 
       {asks && (
         <form onSubmit={submit} className="card space-y-3 p-5">
-          <h2 className="text-lg font-extrabold">Ask for vacation pay</h2>
+          <h2 className="text-lg font-extrabold">Ask for paid time off</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="mb-1 block font-semibold opacity-80">Number of hours</span>
@@ -148,7 +148,7 @@ export default function VacationPayPage() {
           {!mine ? (
             <p className="mt-2 text-sm opacity-60">Loading…</p>
           ) : mine.length === 0 ? (
-            <p className="mt-2 text-sm opacity-70">You haven&apos;t asked for any vacation pay yet.</p>
+            <p className="mt-2 text-sm opacity-70">You haven&apos;t asked for any paid time off yet.</p>
           ) : (
             <ul className="mt-2 divide-y divide-[var(--border)]">
               {mine.map((r) => (

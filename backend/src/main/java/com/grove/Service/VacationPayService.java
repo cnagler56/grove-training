@@ -25,7 +25,7 @@ import com.grove.Repository.UserRepository;
 import com.grove.Repository.VacationPayRequestRepository;
 
 /**
- * Vacation pay requests. An employee asks for a number of hours on an upcoming
+ * Paid time off requests. An employee asks for a number of hours on an upcoming
  * check date; owners approve it or send it back with a message. Hours are pay,
  * so only owners see other people's requests (the controller enforces that).
  */
@@ -79,7 +79,7 @@ public class VacationPayService {
 	/** Anyone who works on the schedule can ask, the same people as time off. */
 	public VacationPayView request(User employee, VacationPayInput input) {
 		if (!employee.getRoles().isScheduled()) {
-			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Vacation pay is for people on the schedule");
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Paid time off is for people on the schedule");
 		}
 		BigDecimal hours = input == null ? null : input.hours();
 		LocalDate checkDate = input == null ? null : input.checkDate();
@@ -100,13 +100,13 @@ public class VacationPayService {
 		VacationPayRequest saved = requests.save(r);
 
 		List<User> owners = users.findAll().stream().filter(u -> u.isActive() && u.getRoles() == Role.OWNER).toList();
-		push.notify(owners.stream().map(User::getUserId).toList(), "Vacation pay request",
-			name(employee) + ": " + summary(saved), "/vacation-pay");
-		mailer.send(owners.stream().map(User::getEmail).toList(), "Vacation pay request: " + name(employee), String.join("\n",
-			name(employee) + " asked for vacation pay: " + summary(saved) + ".",
+		push.notify(owners.stream().map(User::getUserId).toList(), "Paid time off request",
+			name(employee) + ": " + summary(saved), "/paid-time-off");
+		mailer.send(owners.stream().map(User::getEmail).toList(), "Paid time off request: " + name(employee), String.join("\n",
+			name(employee) + " asked for paid time off: " + summary(saved) + ".",
 			"",
 			"Approve it or send it back:",
-			mailer.link("/vacation-pay")));
+			mailer.link("/paid-time-off")));
 		return view(saved);
 	}
 
@@ -133,8 +133,8 @@ public class VacationPayService {
 		if (r.getStatus() != Status.PENDING) throw bad("This request has already been answered");
 		decide(r, Status.APPROVED, owner, null);
 		VacationPayRequest saved = requests.save(r);
-		tell(saved, "Vacation pay approved: " + summary(saved),
-			name(owner) + " approved your vacation pay: " + summary(saved) + ".");
+		tell(saved, "Paid time off approved: " + summary(saved),
+			name(owner) + " approved your paid time off: " + summary(saved) + ".");
 		return view(saved);
 	}
 
@@ -146,8 +146,8 @@ public class VacationPayService {
 		if (r.getStatus() == Status.SENT_BACK) throw bad("This request was already sent back");
 		decide(r, Status.SENT_BACK, owner, note);
 		VacationPayRequest saved = requests.save(r);
-		tell(saved, "Vacation pay sent back: " + summary(saved),
-			name(owner) + " sent back your vacation pay request: " + summary(saved) + ".");
+		tell(saved, "Paid time off sent back: " + summary(saved),
+			name(owner) + " sent back your paid time off request: " + summary(saved) + ".");
 		return view(saved);
 	}
 
@@ -159,11 +159,11 @@ public class VacationPayService {
 	}
 
 	private void tell(VacationPayRequest r, String subject, String firstLine) {
-		push.notify(List.of(r.getUserId()), subject, r.getResponseNote() == null ? firstLine : r.getResponseNote(), "/vacation-pay");
+		push.notify(List.of(r.getUserId()), subject, r.getResponseNote() == null ? firstLine : r.getResponseNote(), "/paid-time-off");
 		users.findById(r.getUserId()).ifPresent(u -> mailer.send(List.of(u.getEmail()), subject, String.join("\n",
 			firstLine,
 			r.getResponseNote() == null ? "" : "\n\"" + r.getResponseNote() + "\"\n",
-			mailer.link("/vacation-pay"))));
+			mailer.link("/paid-time-off"))));
 	}
 
 	private VacationPayRequest find(Long id) {

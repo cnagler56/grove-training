@@ -250,7 +250,7 @@ export interface TimeOffQueue {
   approved: TimeOffRequest[];
 }
 
-/** A request to be paid vacation hours. checkDate is "YYYY-MM-DD". */
+/** A request for paid time off hours. checkDate is "YYYY-MM-DD". */
 export interface VacationPayRequest {
   id: number;
   userId: number;

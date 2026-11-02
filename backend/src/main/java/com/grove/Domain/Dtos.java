@@ -237,10 +237,10 @@ public final class Dtos {
 	/** What an approver sees: requests waiting on them, and approved time off still to come. */
 	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}
 
-	/** What an employee sends to ask for vacation pay. */
+	/** What an employee sends to ask for paid time off. */
 	public record VacationPayInput(BigDecimal hours, LocalDate checkDate) {}
 
-	/** A vacation pay request. {@code status} is PENDING, APPROVED, or SENT_BACK. */
+	/** A paid time off request. {@code status} is PENDING, APPROVED, or SENT_BACK. */
 	public record VacationPayView(
 		Long id,
 		Long userId,

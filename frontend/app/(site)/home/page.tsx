@@ -129,8 +129,8 @@ export default function StaffHomePage() {
       {vacationPayToAnswer.length > 0 && (
         <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-extrabold">Vacation pay waiting for your answer</h2>
-            <Link href="/vacation-pay" className="btn shrink-0">Review</Link>
+            <h2 className="text-lg font-extrabold">Paid time off waiting for your answer</h2>
+            <Link href="/paid-time-off" className="btn shrink-0">Review</Link>
           </div>
           <ul className="mt-2 space-y-1 text-sm">
             {vacationPayToAnswer.map((r) => (

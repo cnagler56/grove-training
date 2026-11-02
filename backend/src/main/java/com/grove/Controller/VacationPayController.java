@@ -22,7 +22,7 @@ import com.grove.Domain.Dtos.VacationPayView;
 import com.grove.Service.SessionService;
 import com.grove.Service.VacationPayService;
 
-/** The Vacation pay tab: employees ask for hours on a check date; owners answer. */
+/** The Paid Time Off tab: employees ask for hours on a check date; owners answer. */
 @RestController
 @RequestMapping("/api/vacation-pay")
 public class VacationPayController {

@@ -17,7 +17,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
-/** An employee asking to be paid vacation hours on a given check date. */
+/** An employee asking for paid time off hours on a given check date. */
 @Entity
 @Table(name = "vacation_pay_requests", indexes = @Index(name = "ix_vacation_pay_user", columnList = "user_id"))
 public class VacationPayRequest {
