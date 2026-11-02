@@ -62,6 +62,7 @@ class StatsTests {
 		when(salonUltimate.isConfigured()).thenReturn(true);
 		when(salonUltimate.weekReport(any(), any())).thenReturn(SalonUltimateReportTest.REPORT);
 		when(salonUltimate.stylistComparison(any(), any())).thenReturn(SalonUltimateReportTest.COMPARISON);
+		when(salonUltimate.detailedServiceByEmployee(any(), any())).thenReturn(SalonUltimateReportTest.DETAILED_SERVICE);
 	}
 
 	@Test
@@ -160,6 +161,40 @@ class StatsTests {
 		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
 			.andExpect(jsonPath("$.status").value("BLOCKED"))
 			.andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Ava Stone on 10/22/2026")));
+	}
+
+	@Test
+	void colorsTreatmentsAndWaxesWithTeamTotals() throws Exception {
+		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
+		Cookie ava = signUp("ava@grove.test", "Ava", "Stone");
+		LocalDate week = statsService.latestCompleteWeek();
+		mvc.perform(post("/api/stats/import").param("week", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.status").value("OK"));
+
+		// Her own counts, plus the whole team's total (and nothing else about anyone else).
+		mvc.perform(get("/api/stats/mine").cookie(ava))
+			.andExpect(jsonPath("$.weeks[0].colors").value(5))
+			.andExpect(jsonPath("$.weeks[0].treatments").value(0))
+			.andExpect(jsonPath("$.weeks[0].waxes").value(4))
+			.andExpect(jsonPath("$.teamWeeks[0].weekStart").value(week.toString()))
+			.andExpect(jsonPath("$.teamWeeks[0].colors").value(5))
+			.andExpect(jsonPath("$.teamWeeks[0].treatments").value(6))
+			.andExpect(jsonPath("$.teamWeeks[0].waxes").value(4));
+		mvc.perform(get("/api/stats/team").cookie(owner))
+			.andExpect(jsonPath("$.teamWeeks[0].treatments").value(6))
+			.andExpect(jsonPath("$.rows[1].stats.treatments").value(6));
+	}
+
+	@Test
+	void aFailedDetailedServiceStillSavesTheWeek() throws Exception {
+		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
+		Cookie ava = signUp("ava@grove.test", "Ava", "Stone");
+		when(salonUltimate.detailedServiceByEmployee(any(), any())).thenThrow(new java.io.IOException("server error"));
+		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
+			.andExpect(jsonPath("$.status").value("OK"));
+		mvc.perform(get("/api/stats/mine").cookie(ava))
+			.andExpect(jsonPath("$.weeks[0].services").value(44))
+			.andExpect(jsonPath("$.weeks[0].colors").doesNotExist());
 	}
 
 	@Test

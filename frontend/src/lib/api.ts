@@ -348,6 +348,18 @@ export interface StatLine {
   /** Services done and clients seen (null for weeks pulled before these were saved). */
   services: number | null;
   clients: number | null;
+  /** Color, treatment, and waxing services (null for weeks pulled before these were saved). */
+  colors: number | null;
+  treatments: number | null;
+  waxes: number | null;
+}
+
+/** The whole team's services by type for one week. */
+export interface TeamServiceWeek {
+  weekStart: string;
+  colors: number | null;
+  treatments: number | null;
+  waxes: number | null;
 }
 
 /** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */
@@ -375,6 +387,7 @@ export interface MyStats {
   linked: boolean;
   salonUltimateName: string | null;
   weeks: StatLine[];
+  teamWeeks: TeamServiceWeek[];
 }
 
 export interface TeamStatRow {
@@ -393,6 +406,7 @@ export interface TeamStats {
   configured: boolean;
   lastImport: StatsImport | null;
   rows: TeamStatRow[];
+  teamWeeks: TeamServiceWeek[];
 }
 
 export interface SalonUltimateName {

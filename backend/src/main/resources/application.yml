@@ -65,6 +65,8 @@ app:
     url: ${SALON_ULTIMATE_URL:https://fsnagel.salonultimate.com}
     username: ${SALON_ULTIMATE_USERNAME:}
     password: ${SALON_ULTIMATE_PASSWORD:}
+    # The store whose store-level reports to read (FS Maple Grove Parkway).
+    store-id: ${SALON_ULTIMATE_STORE_ID:3}
   # Phone notifications (web push). Blank = off. Keep the private key secret.
   push:
     public-key: ${VAPID_PUBLIC_KEY:}

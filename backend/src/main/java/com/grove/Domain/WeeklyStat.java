@@ -70,6 +70,13 @@ public class WeeklyStat {
 	/** Clients seen ("Tot. Cli." on Stylist Comparison); null if that report couldn't be read. */
 	private Integer clients;
 
+	/** Color, treatment, and waxing services (Detailed Service report); null if that report couldn't be read. */
+	private Integer colors;
+
+	private Integer treatments;
+
+	private Integer waxes;
+
 	@Column(name = "imported_at")
 	private LocalDateTime importedAt;
 
@@ -110,6 +117,15 @@ public class WeeklyStat {
 
 	public Integer getClients() { return clients; }
 	public void setClients(Integer clients) { this.clients = clients; }
+
+	public Integer getColors() { return colors; }
+	public void setColors(Integer colors) { this.colors = colors; }
+
+	public Integer getTreatments() { return treatments; }
+	public void setTreatments(Integer treatments) { this.treatments = treatments; }
+
+	public Integer getWaxes() { return waxes; }
+	public void setWaxes(Integer waxes) { this.waxes = waxes; }
 
 	public LocalDateTime getImportedAt() { return importedAt; }
 	public void setImportedAt(LocalDateTime importedAt) { this.importedAt = importedAt; }

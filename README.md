@@ -32,7 +32,9 @@ this app only stores titles, categories, who's watched what, and accounts.
   **Leaderboards** and can pull any past week. Link each person to their Salon
   Ultimate name on their Team page (exact name matches link automatically). If a
   timecard is still open, Salon Ultimate refuses the report and Leaderboards says
-  which one to close.
+  which one to close. Colors, treatments, and waxes come from the store's "Detailed
+  Service" report, separated by employee, with whole-team totals by week and month.
+  Weeks pulled before these were saved stay blank until **Pull again**.
 - **Tracking:** each video page shows managers who has watched it. The Team
   page shows how many videos each person has watched.
 

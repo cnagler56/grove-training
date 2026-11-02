@@ -27,6 +27,19 @@ public interface WeeklyStatRepository extends JpaRepository<WeeklyStat, Long> {
 	@Query("select distinct s.suName from WeeklyStat s order by s.suName")
 	List<String> names();
 
+	/** The whole team's services by type for one week. */
+	interface TeamServices {
+		LocalDate getWeekStart();
+		Long getColors();
+		Long getTreatments();
+		Long getWaxes();
+	}
+
+	/** Team totals for every week, newest first. Totals are null for weeks pulled before these were saved. */
+	@Query("select s.weekStart as weekStart, sum(s.colors) as colors, sum(s.treatments) as treatments, sum(s.waxes) as waxes"
+		+ " from WeeklyStat s group by s.weekStart order by s.weekStart desc")
+	List<TeamServices> teamServices();
+
 	@Modifying
 	@Transactional
 	@Query("delete from WeeklyStat s where s.weekStart = :week")

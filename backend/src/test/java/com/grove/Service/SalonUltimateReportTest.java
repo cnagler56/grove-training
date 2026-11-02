@@ -76,6 +76,38 @@ public class SalonUltimateReportTest {
 		assertThat(SalonUltimateReport.parseStylistComparison("<p>nothing</p>")).isEmpty();
 	}
 
+	/** Made-up rows laid out like Salon Ultimate's "Detailed Service" table, separated by employee. */
+	public static final String DETAILED_SERVICE = """
+		<table>
+		<tr><td></td><td>Report period:</td><td>10/17/2026 - 10/23/2026</td></tr>
+		<tr><td>Service Provider: Ava Stone</td></tr>
+		<tr><td>Category</td><td>Service Code</td><td>Service Description</td><td>Total Units</td><td>Total Dollars</td><td>Avg. Sales/Unit</td></tr>
+		<tr><td>Color</td></tr>
+		<tr><td></td><td>AC1</td><td>Additional Color</td><td>2</td><td>20.00</td><td>10.00</td></tr>
+		<tr><td></td><td>AOCC</td><td>All over Color</td><td>3</td><td>210.00</td><td>70.00</td></tr>
+		<tr><td></td><td></td><td></td><td>5</td><td>230.00</td><td>46.00</td></tr>
+		<tr><td>Haircut</td></tr>
+		<tr><td></td><td>HC</td><td>Haircut</td><td>30</td><td>810.00</td><td>27.00</td></tr>
+		<tr><td></td><td></td><td></td><td>30</td><td>810.00</td><td>27.00</td></tr>
+		<tr><td>Waxing</td></tr>
+		<tr><td></td><td>WB</td><td>Brow Wax</td><td>4</td><td>60.00</td><td>15.00</td></tr>
+		<tr><td></td><td></td><td></td><td>4</td><td>60.00</td><td>15.00</td></tr>
+		<tr><td>Service Provider: Mia De La Cruz</td></tr>
+		<tr><td>Category</td><td>Service Code</td><td>Service Description</td><td>Total Units</td><td>Total Dollars</td><td>Avg. Sales/Unit</td></tr>
+		<tr><td>Treatment</td></tr>
+		<tr><td></td><td>EMT</td><td>Oil Treatment</td><td>6</td><td>150.00</td><td>25.00</td></tr>
+		<tr><td></td><td></td><td></td><td>6</td><td>150.00</td><td>25.00</td></tr>
+		</table>
+		""";
+
+	@Test
+	void readsColorsTreatmentsAndWaxesByStylistAndSkipsSubtotals() {
+		var types = SalonUltimateReport.parseDetailedService(DETAILED_SERVICE);
+		assertThat(types.get("ava stone")).isEqualTo(new SalonUltimateReport.ServiceTypes(5, 0, 4));
+		assertThat(types.get("mia de la cruz")).isEqualTo(new SalonUltimateReport.ServiceTypes(0, 6, 0));
+		assertThat(SalonUltimateReport.parseDetailedService("<p>nothing</p>")).isEmpty();
+	}
+
 	@Test
 	void readsMoneyFormats() {
 		assertThat(SalonUltimateReport.number("(29.00)")).isEqualByComparingTo(new BigDecimal("-29.00"));

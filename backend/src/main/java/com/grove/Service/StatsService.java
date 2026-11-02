@@ -26,6 +26,7 @@ import com.grove.Domain.Dtos.MyStats;
 import com.grove.Domain.Dtos.SalonUltimateName;
 import com.grove.Domain.Dtos.StatLine;
 import com.grove.Domain.Dtos.StatsImportView;
+import com.grove.Domain.Dtos.TeamServiceWeek;
 import com.grove.Domain.Dtos.TeamStatRow;
 import com.grove.Domain.Dtos.TeamStats;
 import com.grove.Domain.StatsImport;
@@ -138,8 +139,19 @@ public class StatsService {
 		}
 
 		Map<String, SalonUltimateReport.Counts> counts = serviceCounts(weekStart);
+		Map<String, SalonUltimateReport.ServiceTypes> types = serviceTypes(weekStart);
 		stats.deleteWeek(weekStart);
-		stats.saveAll(rows.stream().map(r -> toEntity(weekStart, r, counts.get(r.name().toLowerCase()), now)).toList());
+		stats.saveAll(rows.stream().map(r -> {
+			WeeklyStat s = toEntity(weekStart, r, counts.get(r.name().toLowerCase()), now);
+			// When the report came back, someone it doesn't list did none of these services.
+			if (!types.isEmpty()) {
+				var t = types.getOrDefault(r.name().toLowerCase(), SalonUltimateReport.ServiceTypes.NONE);
+				s.setColors(t.colors());
+				s.setTreatments(t.treatments());
+				s.setWaxes(t.waxes());
+			}
+			return s;
+		}).toList());
 		linkByName(rows);
 		return record(new StatsImport(weekStart, Status.OK, null, rows.size(), now));
 	}
@@ -161,14 +173,34 @@ public class StatsService {
 		}
 	}
 
+	/** Each stylist's color, treatment, and waxing counts. Like {@link #serviceCounts}, a problem here doesn't stop the week saving. */
+	private Map<String, SalonUltimateReport.ServiceTypes> serviceTypes(LocalDate weekStart) {
+		try {
+			String html = salonUltimate.detailedServiceByEmployee(weekStart, weekStart.plusDays(6));
+			return html == null ? Map.of() : SalonUltimateReport.parseDetailedService(html);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Map.of();
+		} catch (Exception e) {
+			log.warn("Detailed Service for {} failed; saving the week without colors, treatments, and waxes", weekStart, e);
+			return Map.of();
+		}
+	}
+
+	private List<TeamServiceWeek> teamWeeks() {
+		return stats.teamServices().stream()
+			.map(t -> new TeamServiceWeek(t.getWeekStart(), t.getColors(), t.getTreatments(), t.getWaxes()))
+			.toList();
+	}
+
 	/** The viewer's own weeks, newest first, with each week's pay rate (only ever shown to them). */
 	public MyStats mine(User viewer) {
 		catchUp();
 		String name = viewer.getSalonUltimateName();
-		if (name == null || name.isBlank()) return new MyStats(false, null, List.of());
+		if (name == null || name.isBlank()) return new MyStats(false, null, List.of(), List.of());
 		var rates = pay.rates(name);
 		return new MyStats(true, name, stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(name).stream()
-			.map(s -> ownLine(s, rates.apply(s))).toList());
+			.map(s -> ownLine(s, rates.apply(s))).toList(), teamWeeks());
 	}
 
 	/** Everyone's numbers for one week (latest finished week by default). */
@@ -185,7 +217,7 @@ public class StatsService {
 			.sorted(Comparator.comparing((TeamStatRow r) -> r.stats().serviceSales()).reversed())
 			.toList();
 		return new TeamStats(shown, latest, stats.weeks(), salonUltimate.isConfigured(),
-			imports.findById(shown).map(StatsService::view).orElse(null), rows);
+			imports.findById(shown).map(StatsService::view).orElse(null), rows, teamWeeks());
 	}
 
 	/** Every name Salon Ultimate has reported and who it's linked to (for the Team page). */
@@ -275,7 +307,7 @@ public class StatsService {
 		BigDecimal total = payRate != null && tipsPerHour != null ? payRate.add(tipsPerHour) : null;
 		return new StatLine(base.weekStart(), base.serviceSales(), base.netServiceSales(), base.retailSales(),
 			base.productPerGuest(), hours, base.offFloorHours(), base.serviceSalesPerHour(), base.pph(),
-			payRate, tips, tipsPerHour, total, base.services(), base.clients());
+			payRate, tips, tipsPerHour, total, base.services(), base.clients(), base.colors(), base.treatments(), base.waxes());
 	}
 
 	/** One week's numbers as managers see them: no pay or tips. */
@@ -285,7 +317,7 @@ public class StatsService {
 		BigDecimal perHour = hours.signum() > 0 ? sales.divide(hours, 2, RoundingMode.HALF_UP) : null;
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
 			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate,
-			null, null, null, s.getServices(), s.getClients());
+			null, null, null, s.getServices(), s.getClients(), s.getColors(), s.getTreatments(), s.getWaxes());
 	}
 
 	private static BigDecimal zeroIfNull(BigDecimal n) {

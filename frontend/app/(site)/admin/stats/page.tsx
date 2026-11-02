@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api, type StatLine, type TeamStatRow, type TeamStats } from '@/src/lib/api';
 import { formatDate, hours, money, moneyCents } from '@/src/lib/format';
 import { addDays, weekRangeLabel } from '@/src/lib/schedule';
+import MonthlyServices from '@/src/components/MonthlyServices';
 
 /** Below this many floor hours, "per hour" is too noisy to rank. */
 const MIN_HOURS_FOR_RATE = 5;
@@ -23,6 +24,9 @@ const count = (n: number) => n.toLocaleString('en-US');
 const COLUMNS: Column[] = [
   { key: 'services', label: 'Services', value: (s) => s.services, format: count },
   { key: 'clients', label: 'Clients', value: (s) => s.clients, format: count },
+  { key: 'colors', label: 'Colors', value: (s) => s.colors, format: count },
+  { key: 'treatments', label: 'Treatments', value: (s) => s.treatments, format: count },
+  { key: 'waxes', label: 'Waxes', value: (s) => s.waxes, format: count },
   { key: 'service', label: 'Service', value: (s) => s.serviceSales, format: money },
   { key: 'net', label: 'After discounts', value: (s) => s.netServiceSales, format: money },
   { key: 'retail', label: 'Retail', value: (s) => s.retailSales, format: money },
@@ -35,6 +39,9 @@ const COLUMNS: Column[] = [
 const BOARDS: { title: string; column: string; note?: string }[] = [
   { title: 'Services', column: 'services' },
   { title: 'Clients', column: 'clients' },
+  { title: 'Colors', column: 'colors' },
+  { title: 'Treatments', column: 'treatments' },
+  { title: 'Waxes', column: 'waxes' },
   { title: 'Service sales', column: 'service' },
   { title: 'Retail sales', column: 'retail' },
   { title: 'Product per guest', column: 'ppg' },
@@ -220,6 +227,9 @@ export default function LeaderboardsPage() {
                   <td className="px-5 py-2">Salon total</td>
                   <td className="px-3 py-2 text-right">{rows.some((r) => r.stats.services !== null) ? count(total('services')) : ''}</td>
                   <td className="px-3 py-2 text-right">{rows.some((r) => r.stats.clients !== null) ? count(total('clients')) : ''}</td>
+                  {(['colors', 'treatments', 'waxes'] as const).map((key) => (
+                    <td key={key} className="px-3 py-2 text-right">{rows.some((r) => r.stats[key] !== null) ? count(total(key)) : ''}</td>
+                  ))}
                   <td className="px-3 py-2 text-right">{money(total('service'))}</td>
                   <td className="px-3 py-2 text-right">{money(total('net'))}</td>
                   <td className="px-3 py-2 text-right">{money(total('retail'))}</td>
@@ -233,6 +243,8 @@ export default function LeaderboardsPage() {
               </tfoot>
             </table>
           </section>
+
+          <MonthlyServices teamWeeks={data.teamWeeks} />
 
           {unlinked.length > 0 && (
             <p className="text-sm opacity-70">

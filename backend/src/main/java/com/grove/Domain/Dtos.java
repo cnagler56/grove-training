@@ -284,13 +284,20 @@ public final class Dtos {
 		BigDecimal totalPerHour,
 		/** Services done and clients seen that week (null for weeks pulled before these were saved). */
 		Integer services,
-		Integer clients) {}
+		Integer clients,
+		/** Color, treatment, and waxing services (null for weeks pulled before these were saved). */
+		Integer colors,
+		Integer treatments,
+		Integer waxes) {}
+
+	/** The whole team's services by type for one week. */
+	public record TeamServiceWeek(LocalDate weekStart, Long colors, Long treatments, Long waxes) {}
 
 	/** How the last pull of a week went. */
 	public record StatsImportView(LocalDate weekStart, String status, String message, Integer rowCount, LocalDateTime attemptedAt) {}
 
 	/** The signed-in person's own weeks, newest first. {@code linked=false}: no Salon Ultimate name set yet. */
-	public record MyStats(boolean linked, String salonUltimateName, List<StatLine> weeks) {}
+	public record MyStats(boolean linked, String salonUltimateName, List<StatLine> weeks, List<TeamServiceWeek> teamWeeks) {}
 
 	/** One person on the leaderboard. {@code userId} is null if no site account is linked to this name. */
 	public record TeamStatRow(String suName, Long userId, String name, StatLine stats) {}
@@ -304,7 +311,8 @@ public final class Dtos {
 		List<LocalDate> weeks,
 		boolean configured,
 		StatsImportView lastImport,
-		List<TeamStatRow> rows) {}
+		List<TeamStatRow> rows,
+		List<TeamServiceWeek> teamWeeks) {}
 
 	/** A name from Salon Ultimate and who on the site it's linked to, for the Team page picker. */
 	public record SalonUltimateName(String name, Long linkedUserId, String linkedTo) {}

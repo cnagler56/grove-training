@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, type MyStats, type StatLine } from '@/src/lib/api';
 import { hours, money, moneyCents } from '@/src/lib/format';
 import { weekRangeLabel } from '@/src/lib/schedule';
+import MonthlyServices from '@/src/components/MonthlyServices';
 
 /** How many past weeks make up "your average". */
 const AVERAGE_WEEKS = 8;
@@ -57,6 +58,15 @@ export default function MyWeekPage() {
   const week = weeks[picked];
   const before = weeks[picked + 1];
   const earlier = weeks.slice(picked + 1, picked + 1 + AVERAGE_WEEKS);
+  const teamWeek = week && data.teamWeeks.find((t) => t.weekStart === week.weekStart);
+  // Each card shows the viewer's number with the whole team's total under it.
+  const services: Metric[] = (['colors', 'treatments', 'waxes'] as const).map((key) => ({
+    label: key[0].toUpperCase() + key.slice(1),
+    value: (s) => s[key],
+    format: count,
+    hint: teamWeek?.[key] != null ? `Whole team: ${count(teamWeek[key])}` : undefined,
+  }));
+  const showServices = weeks.some((w) => w.colors !== null);
   const showPay = weeks.some((w) => w.payRate !== null);
   const showTips = weeks.some((w) => w.tips !== null);
   const showCounts = weeks.some((w) => w.services !== null);
@@ -85,6 +95,12 @@ export default function MyWeekPage() {
           )}
           <Group title="Production" metrics={PRODUCTION} week={week} before={before} earlier={earlier} columns="sm:grid-cols-2 lg:grid-cols-4" />
 
+          {week.colors !== null && (
+            <Group title="Services" metrics={services} week={week} before={before} earlier={earlier} columns="sm:grid-cols-3" />
+          )}
+
+          <MonthlyServices teamWeeks={data.teamWeeks} mine={weeks} />
+
           <section className="card overflow-x-auto">
             <h2 className="px-5 pt-5 text-lg font-extrabold">Every week</h2>
             <p className="px-5 text-xs opacity-60">Pick a week to see it above.</p>
@@ -94,6 +110,9 @@ export default function MyWeekPage() {
                   <th className="px-5 py-2 font-semibold">Week of</th>
                   {showCounts && <th className="px-3 py-2 text-right font-semibold">Services</th>}
                   {showCounts && <th className="px-3 py-2 text-right font-semibold">Clients</th>}
+                  {showServices && <th className="px-3 py-2 text-right font-semibold">Colors</th>}
+                  {showServices && <th className="px-3 py-2 text-right font-semibold">Treatments</th>}
+                  {showServices && <th className="px-3 py-2 text-right font-semibold">Waxes</th>}
                   <th className="px-3 py-2 text-right font-semibold">Service</th>
                   <th className="px-3 py-2 text-right font-semibold">Retail</th>
                   <th className="px-3 py-2 text-right font-semibold">Per guest</th>
@@ -115,6 +134,9 @@ export default function MyWeekPage() {
                     <td className="whitespace-nowrap px-5 py-2">{weekRangeLabel(w.weekStart)}</td>
                     {showCounts && <td className="px-3 py-2 text-right">{w.services ?? ''}</td>}
                     {showCounts && <td className="px-3 py-2 text-right">{w.clients ?? ''}</td>}
+                    {showServices && <td className="px-3 py-2 text-right">{w.colors ?? ''}</td>}
+                    {showServices && <td className="px-3 py-2 text-right">{w.treatments ?? ''}</td>}
+                    {showServices && <td className="px-3 py-2 text-right">{w.waxes ?? ''}</td>}
                     <td className="px-3 py-2 text-right">{money(w.serviceSales)}</td>
                     <td className="px-3 py-2 text-right">{money(w.retailSales)}</td>
                     <td className="px-3 py-2 text-right">{moneyCents(w.productPerGuest)}</td>

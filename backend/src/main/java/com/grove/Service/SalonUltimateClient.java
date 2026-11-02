@@ -33,6 +33,9 @@ public class SalonUltimateClient {
 	};
 	private static final DateTimeFormatter US = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 	private static final String STYLIST_COMPARISON = "Stylist Comparison - Corp.";
+	/** The store-level report; the corporate one can't separate by employee. */
+	private static final String DETAILED_SERVICE = "Detailed Service";
+	private static final String SEPARATE_BY_EMPLOYEE = "ZenithPOSBundleReportsSalesReportsReportServiceseparateByEmployee";
 	private static final String USER_AGENT =
 		"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
@@ -44,14 +47,17 @@ public class SalonUltimateClient {
 	private final String baseUrl;
 	private final String username;
 	private final String password;
+	private final String storeId;
 
 	public SalonUltimateClient(
 			@Value("${app.salon-ultimate.url:https://fsnagel.salonultimate.com}") String baseUrl,
 			@Value("${app.salon-ultimate.username:}") String username,
-			@Value("${app.salon-ultimate.password:}") String password) {
+			@Value("${app.salon-ultimate.password:}") String password,
+			@Value("${app.salon-ultimate.store-id:3}") String storeId) {
 		this.baseUrl = baseUrl.replaceAll("/+$", "");
 		this.username = username;
 		this.password = password;
+		this.storeId = storeId;
 	}
 
 	public boolean isConfigured() {
@@ -97,6 +103,38 @@ public class SalonUltimateClient {
 		report.put("report[startDate]", start.format(US));
 		report.put("report[endDate]", end.format(US));
 		HttpResponse<String> res = http.send(post("/report", report, 90), HttpResponse.BodyHandlers.ofString());
+		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
+		return res.body();
+	}
+
+	/**
+	 * The store-level "Detailed Service" report, separated by employee: each
+	 * stylist's services by category. Reports run in the store view, which the
+	 * session has to switch to first, and this one fails without a sort column.
+	 */
+	public String detailedServiceByEmployee(LocalDate start, LocalDate end) throws IOException, InterruptedException {
+		HttpClient http = signIn();
+		URI storeView = URI.create(baseUrl + "/report?store_id=" + storeId);
+		HttpResponse<Void> opened = http.send(
+			HttpRequest.newBuilder(storeView).timeout(Duration.ofSeconds(30)).header("User-Agent", USER_AGENT).GET().build(),
+			HttpResponse.BodyHandlers.discarding());
+		if (opened.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + opened.statusCode());
+
+		Map<String, String> report = new LinkedHashMap<>();
+		report.put("reportName", DETAILED_SERVICE);
+		report.put("reportSelect", DETAILED_SERVICE);
+		report.put("reportTask", "Report_Serv_DetailedService");
+		report.put("renderedStoreId", storeId);
+		report.put("report[startDate]", start.format(US));
+		report.put("report[endDate]", end.format(US));
+		report.put("report[employee]", "");
+		report.put("report[sortColumn]", "id");
+		report.put("report[isSortAscending]", "1");
+		report.put(SEPARATE_BY_EMPLOYEE, "1");
+		HttpRequest request = HttpRequest.newBuilder(post("/report", report, 120), (name, value) -> true)
+			.header("Referer", storeView.toString())
+			.build();
+		HttpResponse<String> res = http.send(request, HttpResponse.BodyHandlers.ofString());
 		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
 		return res.body();
 	}

@@ -31,6 +31,7 @@ public final class SalonUltimateReport {
 
 	private static final Pattern TR = Pattern.compile("<tr[^>]*>(.*?)</tr>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 	private static final Pattern TD = Pattern.compile("<td[^>]*>(.*?)</td>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+	private static final Pattern CELL = Pattern.compile("<t[dh][^>]*>(.*?)</t[dh]>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
 	private SalonUltimateReport() {}
 
@@ -79,7 +80,7 @@ public final class SalonUltimateReport {
 		Matcher tr = TR.matcher(html);
 		while (tr.find()) {
 			List<String> cells = new ArrayList<>();
-			Matcher td = Pattern.compile("<t[dh][^>]*>(.*?)</t[dh]>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(tr.group(1));
+			Matcher td = CELL.matcher(tr.group(1));
 			while (td.find()) cells.add(clean(td.group(1)));
 			if (servicesCol < 0) {
 				for (int i = 0; i < cells.size(); i++) {
@@ -100,6 +101,56 @@ public final class SalonUltimateReport {
 		return out;
 	}
 
+	/** One stylist's services by type from the "Detailed Service" report. */
+	public record ServiceTypes(int colors, int treatments, int waxes) {
+		static final ServiceTypes NONE = new ServiceTypes(0, 0, 0);
+
+		ServiceTypes plus(String category, int units) {
+			return switch (category.toLowerCase()) {
+				case "color" -> new ServiceTypes(colors + units, treatments, waxes);
+				case "treatment" -> new ServiceTypes(colors, treatments + units, waxes);
+				case "waxing" -> new ServiceTypes(colors, treatments, waxes + units);
+				default -> this;
+			};
+		}
+	}
+
+	/**
+	 * Reads "Detailed Service" separated by employee, keyed by lowercase name. Each
+	 * stylist starts with a "Service Provider: Name" row, then category rows
+	 * ("Color") each followed by one row per service code and a subtotal with no
+	 * code, which is skipped. Empty when the table isn't there.
+	 */
+	public static Map<String, ServiceTypes> parseDetailedService(String html) {
+		Map<String, ServiceTypes> out = new LinkedHashMap<>();
+		String provider = null;
+		String category = null;
+		int unitsCol = -1;
+		Matcher tr = TR.matcher(html);
+		while (tr.find()) {
+			List<String> cells = new ArrayList<>();
+			Matcher td = CELL.matcher(tr.group(1));
+			while (td.find()) cells.add(clean(td.group(1)));
+			if (cells.isEmpty()) continue;
+			String first = cells.get(0);
+			if (cells.size() == 1) {
+				if (first.startsWith("Service Provider:")) {
+					provider = first.substring("Service Provider:".length()).trim().toLowerCase();
+					category = null;
+					out.putIfAbsent(provider, ServiceTypes.NONE);
+				} else if (provider != null && !first.isEmpty()) {
+					category = first;
+				}
+			} else if (first.equalsIgnoreCase("Category")) {
+				unitsCol = cells.indexOf("Total Units");
+			} else if (provider != null && category != null && unitsCol > 1 && cells.size() > unitsCol && !cells.get(1).isEmpty()) {
+				out.merge(provider, ServiceTypes.NONE.plus(category, number(cells.get(unitsCol)).intValue()),
+					(a, b) -> new ServiceTypes(a.colors() + b.colors(), a.treatments() + b.treatments(), a.waxes() + b.waxes()));
+			}
+		}
+		return out;
+	}
+
 	/**
 	 * Salon Ultimate won't run the report while a timecard in the week is still
 	 * open. Returns who/when it lists ("Jane Doe on 10/24/2026"), or null if not blocked.
@@ -115,7 +166,7 @@ public final class SalonUltimateReport {
 
 	private static String clean(String fragment) {
 		return fragment.replaceAll("<[^>]+>", "")
-			.replace("&amp;", "&").replace("&nbsp;", " ").replace("&#39;", "'")
+			.replace("&amp;", "&").replace("&nbsp;", " ").replace("&#39;", "'").replace("&#039;", "'")
 			.replaceAll("\\s+", " ").trim();
 	}
 
