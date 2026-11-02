@@ -479,16 +479,24 @@ export interface Todo {
   text: string;
   assigneeId: number;
   assigneeName: string;
+  assigneeRole: UserRole | null;
   assignedByName: string;
   assignedAt: string;
+  /** Optional, "YYYY-MM-DD". */
+  dueDate: string | null;
   /** Null until they mark it done. */
   completedAt: string | null;
 }
 
-/** What the assign form offers: who you can assign to, and items assigned before. */
-export interface TodoAssignOptions {
-  people: { userId: number; name: string; role: UserRole }[];
+/** A group you can assign to: its people, and its own items assigned before. */
+export interface TodoAssignGroup {
+  role: UserRole;
+  people: { userId: number; name: string }[];
   items: { id: number; text: string }[];
+}
+
+export interface TodoAssignOptions {
+  groups: TodoAssignGroup[];
 }
 
 export interface AdminStatus {
@@ -623,7 +631,8 @@ export const api = {
   setTodoDone: (id: number, done: boolean) => send<Todo>(`/api/todos/${id}/${done ? 'done' : 'not-done'}`, 'PUT', {}),
   assignedTodos: () => send<Todo[]>('/api/todos/assigned'),
   todoAssignOptions: () => send<TodoAssignOptions>('/api/todos/assign-options'),
-  assignTodo: (text: string, userIds: number[]) => send<Todo[]>('/api/todos', 'POST', { text, userIds }),
+  assignTodo: (text: string, userIds: number[], dueDate: string | null) =>
+    send<Todo[]>('/api/todos', 'POST', { text, userIds, dueDate }),
   removeTodo: (id: number) => send<void>(`/api/todos/${id}`, 'DELETE'),
   removeSavedTodoItem: (id: number) => send<void>(`/api/todos/items/${id}`, 'DELETE'),
 

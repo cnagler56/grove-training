@@ -1,5 +1,6 @@
 package com.grove.Domain;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -38,6 +39,10 @@ public class TodoAssignment {
 	@Column(name = "assigned_at", nullable = false)
 	private LocalDateTime assignedAt;
 
+	/** Optional. */
+	@Column(name = "due_date")
+	private LocalDate dueDate;
+
 	/** Null until the assignee marks it done. */
 	@Column(name = "completed_at")
 	private LocalDateTime completedAt;
@@ -55,6 +60,9 @@ public class TodoAssignment {
 
 	public LocalDateTime getAssignedAt() { return assignedAt; }
 	public void setAssignedAt(LocalDateTime assignedAt) { this.assignedAt = assignedAt; }
+
+	public LocalDate getDueDate() { return dueDate; }
+	public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
 
 	public LocalDateTime getCompletedAt() { return completedAt; }
 	public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }

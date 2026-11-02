@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
 
 import com.grove.Domain.Role;
+import com.grove.Domain.TodoItem;
 import com.grove.Repository.TodoAssignmentRepository;
 import com.grove.Repository.TodoItemRepository;
 import com.grove.Repository.UserRepository;
@@ -64,18 +67,35 @@ class TodoTests {
 	}
 
 	@Test
-	void ownersAndGeneralManagersAssignToManagersAndReceptionists() throws Exception {
-		for (Cookie boss : List.of(owner, gm)) {
-			assign(boss, "Order towels " + boss.getValue(), status().isCreated(), "manny@grove.test", "rae@grove.test");
-			assign(boss, "No", status().isForbidden(), "ava@grove.test");
-			assign(boss, "No", status().isForbidden(), "lee@grove.test");
-			assign(boss, "No", status().isForbidden(), "gm@grove.test");
-			assign(boss, "No", status().isForbidden(), "owner@grove.test");
+	void ownersAssignToGeneralManagersManagersAndReceptionists() throws Exception {
+		assign(owner, "Review the books", status().isCreated(), "gm@grove.test");
+		assign(owner, "Order towels", status().isCreated(), "manny@grove.test");
+		assign(owner, "Fold towels", status().isCreated(), "rae@grove.test");
+		for (String no : List.of("ava@grove.test", "lee@grove.test", "owner@grove.test")) {
+			assign(owner, "No", status().isForbidden(), no);
+		}
+		mvc.perform(get("/api/todos/mine").cookie(gm)).andExpect(jsonPath("$[0].text").value("Review the books"));
+		mvc.perform(get("/api/todos/assign-options").cookie(owner))
+			.andExpect(jsonPath("$.groups.length()").value(3))
+			.andExpect(jsonPath("$.groups[0].role").value("GENERAL_MANAGER"))
+			.andExpect(jsonPath("$.groups[0].people[0].name").value("Gia Ray"))
+			.andExpect(jsonPath("$.groups[1].role").value("MANAGER"))
+			.andExpect(jsonPath("$.groups[1].people.length()").value(2))
+			.andExpect(jsonPath("$.groups[1].people[0].name").value("Manny Reed"))
+			.andExpect(jsonPath("$.groups[2].role").value("RECEPTIONIST"));
+	}
+
+	@Test
+	void generalManagersAssignToManagersAndReceptionists() throws Exception {
+		assign(gm, "Order towels", status().isCreated(), "manny@grove.test");
+		assign(gm, "Fold towels", status().isCreated(), "rae@grove.test");
+		for (String no : List.of("ava@grove.test", "lee@grove.test", "gm@grove.test", "owner@grove.test")) {
+			assign(gm, "No", status().isForbidden(), no);
 		}
 		mvc.perform(get("/api/todos/assign-options").cookie(gm))
-			.andExpect(jsonPath("$.people.length()").value(4))
-			.andExpect(jsonPath("$.people[0].name").value("Manny Reed"))
-			.andExpect(jsonPath("$.people[0].role").value("MANAGER"));
+			.andExpect(jsonPath("$.groups.length()").value(2))
+			.andExpect(jsonPath("$.groups[0].role").value("MANAGER"))
+			.andExpect(jsonPath("$.groups[1].role").value("RECEPTIONIST"));
 	}
 
 	@Test
@@ -83,11 +103,43 @@ class TodoTests {
 		assign(manager, "Wipe the counter", status().isCreated(), "rae@grove.test");
 		assign(manager, "No", status().isForbidden(), "mo@grove.test");
 		assign(manager, "No", status().isForbidden(), "manny@grove.test");
+		assign(manager, "No", status().isForbidden(), "gm@grove.test");
 		assign(manager, "No", status().isForbidden(), "ava@grove.test");
 		mvc.perform(get("/api/todos/assign-options").cookie(manager))
-			.andExpect(jsonPath("$.people.length()").value(2))
-			.andExpect(jsonPath("$.people[0].name").value("Rae Hill"))
-			.andExpect(jsonPath("$.people[1].name").value("Rio Park"));
+			.andExpect(jsonPath("$.groups.length()").value(1))
+			.andExpect(jsonPath("$.groups[0].role").value("RECEPTIONIST"))
+			.andExpect(jsonPath("$.groups[0].people[0].name").value("Rae Hill"))
+			.andExpect(jsonPath("$.groups[0].people[1].name").value("Rio Park"));
+	}
+
+	@Test
+	void oneAssignmentGoesToOneGroup() throws Exception {
+		assign(owner, "Sweep", status().isBadRequest(), "manny@grove.test", "rae@grove.test");
+		assertThat(assignments.findAll()).isEmpty();
+		assertThat(items.findAll()).isEmpty();
+	}
+
+	@Test
+	void aDueDateIsOptionalAndCannotBeInThePast() throws Exception {
+		LocalDate today = LocalDate.now(ZoneId.of("America/Chicago"));
+		long rae = userId("rae@grove.test");
+		assignDue("Yesterday", rae, "\"" + today.minusDays(1) + "\"", status().isBadRequest());
+		assertThat(assignments.findAll()).isEmpty();
+		assignDue("No date", rae, "null", status().isCreated());
+		assignDue("Next week", rae, "\"" + today.plusDays(7) + "\"", status().isCreated());
+		assignDue("Today", rae, "\"" + today + "\"", status().isCreated());
+
+		// Soonest due first, no date last, for both sides.
+		mvc.perform(get("/api/todos/mine").cookie(this.rae))
+			.andExpect(jsonPath("$[0].text").value("Today"))
+			.andExpect(jsonPath("$[0].dueDate").value(today.toString()))
+			.andExpect(jsonPath("$[1].text").value("Next week"))
+			.andExpect(jsonPath("$[2].text").value("No date"))
+			.andExpect(jsonPath("$[2].dueDate").value(nullValue()));
+		mvc.perform(get("/api/todos/assigned").cookie(manager))
+			.andExpect(jsonPath("$[0].text").value("Today"))
+			.andExpect(jsonPath("$[0].assigneeRole").value("RECEPTIONIST"))
+			.andExpect(jsonPath("$[2].text").value("No date"));
 	}
 
 	@Test
@@ -174,18 +226,57 @@ class TodoTests {
 		assign(owner, "Backup the register", status().isCreated(), "rio@grove.test");
 
 		mvc.perform(get("/api/todos/assign-options").cookie(manager))
-			.andExpect(jsonPath("$.items.length()").value(2))
-			.andExpect(jsonPath("$.items[0].text").value("Backup the register"))
-			.andExpect(jsonPath("$.items[1].text").value("Restock retail"));
+			.andExpect(jsonPath("$.groups[0].items.length()").value(2))
+			.andExpect(jsonPath("$.groups[0].items[0].text").value("Backup the register"))
+			.andExpect(jsonPath("$.groups[0].items[1].text").value("Restock retail"));
 		mvc.perform(get("/api/todos/mine").cookie(rio)).andExpect(jsonPath("$[0].text").value("Restock retail"));
 
 		// Removing from the dropdown leaves it on lists. Only assigners can.
-		long saved = items.findFirstByTextIgnoreCase("Restock retail").orElseThrow().getId();
+		long saved = items.findAll().stream().filter(i -> i.getText().equals("Restock retail")).findFirst().orElseThrow().getId();
 		mvc.perform(delete("/api/todos/items/" + saved).cookie(rae)).andExpect(status().isForbidden());
 		mvc.perform(delete("/api/todos/items/" + saved).cookie(manager)).andExpect(status().isNoContent());
 		mvc.perform(delete("/api/todos/items/" + saved).cookie(manager)).andExpect(status().isNotFound());
-		mvc.perform(get("/api/todos/assign-options").cookie(manager)).andExpect(jsonPath("$.items.length()").value(1));
+		mvc.perform(get("/api/todos/assign-options").cookie(manager)).andExpect(jsonPath("$.groups[0].items.length()").value(1));
 		mvc.perform(get("/api/todos/mine").cookie(rae)).andExpect(jsonPath("$[0].text").value("Restock retail"));
+	}
+
+	@Test
+	void eachGroupKeepsItsOwnSavedItems() throws Exception {
+		assign(owner, "Review the books", status().isCreated(), "gm@grove.test");
+		assign(owner, "Order towels", status().isCreated(), "manny@grove.test");
+		assign(owner, "Fold towels", status().isCreated(), "rae@grove.test");
+		// The same words can be saved for two groups, and removing one leaves the other.
+		assign(owner, "Fold towels", status().isCreated(), "manny@grove.test");
+
+		mvc.perform(get("/api/todos/assign-options").cookie(owner))
+			.andExpect(jsonPath("$.groups[0].items.length()").value(1))
+			.andExpect(jsonPath("$.groups[0].items[0].text").value("Review the books"))
+			.andExpect(jsonPath("$.groups[1].items.length()").value(2))
+			.andExpect(jsonPath("$.groups[1].items[0].text").value("Fold towels"))
+			.andExpect(jsonPath("$.groups[1].items[1].text").value("Order towels"))
+			.andExpect(jsonPath("$.groups[2].items.length()").value(1))
+			.andExpect(jsonPath("$.groups[2].items[0].text").value("Fold towels"));
+
+		long managersCopy = items.findAll().stream()
+			.filter(i -> i.getRole() == Role.MANAGER && i.getText().equals("Fold towels")).findFirst().orElseThrow().getId();
+		mvc.perform(delete("/api/todos/items/" + managersCopy).cookie(owner)).andExpect(status().isNoContent());
+		mvc.perform(get("/api/todos/assign-options").cookie(owner))
+			.andExpect(jsonPath("$.groups[1].items.length()").value(1))
+			.andExpect(jsonPath("$.groups[2].items[0].text").value("Fold towels"));
+	}
+
+	@Test
+	void itemsSavedBeforeGroupsShowForEveryGroupAndAreNotDuplicated() throws Exception {
+		TodoItem old = new TodoItem();
+		old.setText("Older item");
+		items.save(old);
+		mvc.perform(get("/api/todos/assign-options").cookie(owner))
+			.andExpect(jsonPath("$.groups[0].items[0].text").value("Older item"))
+			.andExpect(jsonPath("$.groups[1].items[0].text").value("Older item"))
+			.andExpect(jsonPath("$.groups[2].items[0].text").value("Older item"));
+		assign(owner, "older ITEM", status().isCreated(), "rae@grove.test");
+		assertThat(items.findAll()).hasSize(1);
+		mvc.perform(get("/api/todos/mine").cookie(rae)).andExpect(jsonPath("$[0].text").value("Older item"));
 	}
 
 	@Test
@@ -216,6 +307,12 @@ class TodoTests {
 		String ids = List.of(emails).stream().map(e -> String.valueOf(userId(e))).collect(Collectors.joining(","));
 		mvc.perform(post("/api/todos").cookie(who).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"text\":\"" + text + "\",\"userIds\":[" + ids + "]}"))
+			.andExpect(expected);
+	}
+
+	private void assignDue(String text, long userId, String dueJson, ResultMatcher expected) throws Exception {
+		mvc.perform(post("/api/todos").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"text\":\"" + text + "\",\"userIds\":[" + userId + "],\"dueDate\":" + dueJson + "}"))
 			.andExpect(expected);
 	}
 

@@ -2,7 +2,18 @@
 
 import { useState } from 'react';
 import { api, type Todo } from '@/src/lib/api';
-import { formatDateTime } from '@/src/lib/format';
+import { formatDate, formatDateTime } from '@/src/lib/format';
+
+/** "Due Nov 5", in red once an unfinished to-do is past it. Nothing without a due date. */
+export function TodoDue({ todo }: { todo: Todo }) {
+  if (!todo.dueDate) return null;
+  const overdue = !todo.completedAt && todo.dueDate < new Date().toLocaleDateString('en-CA');
+  return (
+    <span className={`block text-xs font-semibold ${overdue ? 'text-[var(--danger)]' : 'opacity-70'}`}>
+      {overdue ? 'Overdue, was due' : 'Due'} {formatDate(todo.dueDate, false)}
+    </span>
+  );
+}
 
 /** Someone's own to-dos with boxes to check off. Used on the To-do page and in the pop-up. */
 export default function TodoChecklist({ todos, onChange }: { todos: Todo[]; onChange: (updated: Todo) => void }) {
@@ -37,6 +48,7 @@ export default function TodoChecklist({ todos, onChange }: { todos: Todo[]; onCh
               />
               <span className="min-w-0">
                 <span className={`block break-words font-semibold ${t.completedAt ? 'line-through opacity-60' : ''}`}>{t.text}</span>
+                <TodoDue todo={t} />
                 <span className="block text-xs opacity-60">
                   {t.completedAt
                     ? `Done ${formatDateTime(t.completedAt)}`

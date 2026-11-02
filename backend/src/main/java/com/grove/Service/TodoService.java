@@ -1,5 +1,6 @@
 package com.grove.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -23,9 +24,10 @@ import com.grove.Repository.TodoItemRepository;
 import com.grove.Repository.UserRepository;
 
 /**
- * To-do checklists. Owners and general managers assign to managers and receptionists;
- * managers assign to receptionists. Each person checks off their own copy, and whoever
- * assigned it sees when it was done and by whom.
+ * To-do checklists. Owners assign to general managers, managers, and receptionists;
+ * general managers to managers and receptionists; managers to receptionists. Each of
+ * those groups keeps its own saved items. Each person checks off their own copy, and
+ * whoever assigned it sees when it was done and by whom.
  */
 @Service
 public class TodoService {
@@ -36,17 +38,23 @@ public class TodoService {
 	private static final int DONE_DAYS_ON_ASSIGNED_LIST = 30;
 	private static final int MAX_TEXT = 200;
 
-	public record TodoView(Long id, String text, Long assigneeId, String assigneeName, String assignedByName,
-		LocalDateTime assignedAt, LocalDateTime completedAt) {}
+	/** The groups to-dos are assigned to, in the order they're offered. */
+	private static final List<Role> GROUPS = List.of(Role.GENERAL_MANAGER, Role.MANAGER, Role.RECEPTIONIST);
 
-	public record Person(Long userId, String name, String role) {}
+	public record TodoView(Long id, String text, Long assigneeId, String assigneeName, String assigneeRole, String assignedByName,
+		LocalDateTime assignedAt, LocalDate dueDate, LocalDateTime completedAt) {}
+
+	public record Person(Long userId, String name) {}
 
 	public record SavedItem(Long id, String text) {}
 
-	/** What the assign form offers. */
-	public record AssignOptions(List<Person> people, List<SavedItem> items) {}
+	/** One group the viewer can assign to: its people and its own saved items. */
+	public record AssignGroup(String role, List<Person> people, List<SavedItem> items) {}
 
-	public record AssignRequest(String text, List<Long> userIds) {}
+	/** What the assign form offers. */
+	public record AssignOptions(List<AssignGroup> groups) {}
+
+	public record AssignRequest(String text, List<Long> userIds, LocalDate dueDate) {}
 
 	private final TodoAssignmentRepository assignments;
 	private final TodoItemRepository items;
@@ -64,25 +72,29 @@ public class TodoService {
 	/** Can {@code assigner} put something on {@code assignee}'s list? */
 	public static boolean canAssign(Role assigner, Role assignee) {
 		return switch (assigner) {
-			case OWNER, GENERAL_MANAGER -> assignee == Role.MANAGER || assignee == Role.RECEPTIONIST;
+			case OWNER -> GROUPS.contains(assignee);
+			case GENERAL_MANAGER -> assignee == Role.MANAGER || assignee == Role.RECEPTIONIST;
 			case MANAGER -> assignee == Role.RECEPTIONIST;
 			default -> false;
 		};
 	}
 
-	/** The viewer's own list: what's left, oldest first, then what they finished lately. */
+	/** The viewer's own list: what's left, soonest due first, then what they finished lately. */
 	public List<TodoView> mine(User viewer) {
 		return openThenRecentlyDone(assignments.findByAssigneeIdOrderByAssignedAtAsc(viewer.getUserId()), DONE_DAYS_ON_MY_LIST);
 	}
 
-	/** What the viewer assigned: what's still open, then what was finished lately, latest first. */
+	/** What the viewer assigned: what's still open, soonest due first, then what was finished lately. */
 	public List<TodoView> assignedBy(User viewer) {
 		return openThenRecentlyDone(assignments.findByAssignedByOrderByAssignedAtDesc(viewer.getUserId()), DONE_DAYS_ON_ASSIGNED_LIST);
 	}
 
 	private List<TodoView> openThenRecentlyDone(List<TodoAssignment> all, int doneDays) {
 		LocalDateTime cutoff = LocalDateTime.now(zone).minusDays(doneDays);
-		List<TodoView> list = new ArrayList<>(all.stream().filter(t -> t.getCompletedAt() == null).map(this::view).toList());
+		List<TodoView> list = new ArrayList<>(all.stream()
+			.filter(t -> t.getCompletedAt() == null)
+			.sorted(Comparator.comparing(TodoAssignment::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
+			.map(this::view).toList());
 		list.addAll(all.stream()
 			.filter(t -> t.getCompletedAt() != null && t.getCompletedAt().isAfter(cutoff))
 			.sorted(Comparator.comparing(TodoAssignment::getCompletedAt).reversed())
@@ -92,19 +104,25 @@ public class TodoService {
 
 	public AssignOptions options(User viewer) {
 		requireAssigner(viewer);
-		List<Person> people = users.findAll().stream()
-			.filter(u -> u.isActive() && canAssign(viewer.getRoles(), u.getRoles()))
-			.map(u -> new Person(u.getUserId(), name(u), u.getRoles().name()))
-			.sorted(Comparator.comparing((Person p) -> p.name().toLowerCase()))
-			.toList();
-		List<SavedItem> saved = items.findAll().stream()
-			.map(i -> new SavedItem(i.getId(), i.getText()))
-			.sorted(Comparator.comparing((SavedItem i) -> i.text().toLowerCase()))
-			.toList();
-		return new AssignOptions(people, saved);
+		List<User> everyone = users.findAll();
+		List<TodoItem> allItems = items.findAll();
+		return new AssignOptions(GROUPS.stream()
+			.filter(group -> canAssign(viewer.getRoles(), group))
+			.map(group -> new AssignGroup(group.name(),
+				everyone.stream()
+					.filter(u -> u.isActive() && u.getRoles() == group)
+					.map(u -> new Person(u.getUserId(), name(u)))
+					.sorted(Comparator.comparing((Person p) -> p.name().toLowerCase()))
+					.toList(),
+				allItems.stream()
+					.filter(i -> i.getRole() == null || i.getRole() == group)
+					.map(i -> new SavedItem(i.getId(), i.getText()))
+					.sorted(Comparator.comparing((SavedItem i) -> i.text().toLowerCase()))
+					.toList()))
+			.toList());
 	}
 
-	/** Puts one item on each person's list and saves it for the dropdown. All or nothing. */
+	/** Puts one item on each person's list and saves it in that group's dropdown. All or nothing. */
 	@Transactional
 	public List<TodoView> assign(User assigner, AssignRequest body) {
 		requireAssigner(assigner);
@@ -112,6 +130,8 @@ public class TodoService {
 		if (typed.isEmpty()) throw bad("Pick or type a to-do");
 		if (typed.length() > MAX_TEXT) typed = typed.substring(0, MAX_TEXT);
 		if (body.userIds() == null || body.userIds().isEmpty()) throw bad("Pick at least one person");
+		LocalDate dueDate = body.dueDate();
+		if (dueDate != null && dueDate.isBefore(LocalDate.now(zone))) throw bad("The due date can't be in the past");
 
 		Set<Long> ids = new LinkedHashSet<>(body.userIds());
 		List<User> people = new ArrayList<>();
@@ -124,7 +144,10 @@ public class TodoService {
 			people.add(u);
 		}
 
-		String text = saved(typed).getText();
+		Role group = people.get(0).getRoles();
+		if (people.stream().anyMatch(u -> u.getRoles() != group)) throw bad("Assign to one group at a time");
+
+		String text = saved(group, typed).getText();
 		LocalDateTime now = LocalDateTime.now(zone);
 		// Someone who still has this one open doesn't need it twice.
 		List<TodoAssignment> created = people.stream()
@@ -135,6 +158,7 @@ public class TodoService {
 				t.setAssigneeId(u.getUserId());
 				t.setAssignedBy(assigner.getUserId());
 				t.setAssignedAt(now);
+				t.setDueDate(dueDate);
 				return assignments.save(t);
 			}).toList();
 		if (created.isEmpty()) {
@@ -166,13 +190,16 @@ public class TodoService {
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "That item isn't saved anymore")));
 	}
 
-	private TodoItem saved(String text) {
-		return items.findFirstByTextIgnoreCase(text).orElseGet(() -> {
-			TodoItem i = new TodoItem();
-			i.setText(text);
-			i.setCreatedAt(LocalDateTime.now(zone));
-			return items.save(i);
-		});
+	private TodoItem saved(Role group, String text) {
+		return items.findAll().stream()
+			.filter(i -> (i.getRole() == null || i.getRole() == group) && i.getText().equalsIgnoreCase(text))
+			.findFirst().orElseGet(() -> {
+				TodoItem i = new TodoItem();
+				i.setText(text);
+				i.setRole(group);
+				i.setCreatedAt(LocalDateTime.now(zone));
+				return items.save(i);
+			});
 	}
 
 	private static void requireAssigner(User viewer) {
@@ -186,8 +213,10 @@ public class TodoService {
 	}
 
 	private TodoView view(TodoAssignment t) {
-		return new TodoView(t.getId(), t.getText(), t.getAssigneeId(), nameOf(t.getAssigneeId()), nameOf(t.getAssignedBy()),
-			t.getAssignedAt(), t.getCompletedAt());
+		User assignee = users.findById(t.getAssigneeId()).orElse(null);
+		return new TodoView(t.getId(), t.getText(), t.getAssigneeId(), assignee == null ? "Former employee" : name(assignee),
+			assignee == null ? null : assignee.getRoles().name(), nameOf(t.getAssignedBy()),
+			t.getAssignedAt(), t.getDueDate(), t.getCompletedAt());
 	}
 
 	private String nameOf(Long userId) {
