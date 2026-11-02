@@ -31,6 +31,7 @@ import com.grove.Repository.PushSubscriptionRepository;
 import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.TeamPostLikeRepository;
 import com.grove.Repository.TimeOffRequestRepository;
+import com.grove.Repository.TodoAssignmentRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VacationPayRequestRepository;
 import com.grove.Repository.VideoAssignmentRepository;
@@ -58,6 +59,7 @@ public class UserService {
 	private final ScheduleNoteRepository scheduleNoteRepo;
 	private final TeamPostLikeRepository teamLikeRepo;
 	private final PushSubscriptionRepository pushRepo;
+	private final TodoAssignmentRepository todoRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
@@ -66,7 +68,7 @@ public class UserService {
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
 			TimeOffRequestRepository timeOffRepo, VacationPayRequestRepository vacationPayRepo,
 			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
-			PushSubscriptionRepository pushRepo, PasswordEncoder passwordEncoder,
+			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -79,6 +81,7 @@ public class UserService {
 		this.scheduleNoteRepo = scheduleNoteRepo;
 		this.teamLikeRepo = teamLikeRepo;
 		this.pushRepo = pushRepo;
+		this.todoRepo = todoRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -244,6 +247,8 @@ public class UserService {
 		// Their posts and comments stay on the board, shown as a former employee.
 		teamLikeRepo.deleteByUserId(user.getUserId());
 		pushRepo.deleteByUserId(user.getUserId());
+		// To-dos they assigned stay on people's lists, shown as from a former employee.
+		todoRepo.deleteByAssigneeId(user.getUserId());
 		userRepo.delete(user);
 	}
 

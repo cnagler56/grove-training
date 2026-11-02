@@ -25,6 +25,9 @@ export const onSchedule = (r: UserRole | undefined) => !!r && r !== 'OWNER' && r
 
 export const canManageSite = (r: UserRole | undefined) => !!r && rank(r) >= rank('MANAGER');
 
+/** The To-do tab: managers and up assign to-dos; managers and receptionists get them. */
+export const hasTodos = (r: UserRole | undefined) => canManageSite(r) || r === 'RECEPTIONIST';
+
 /** You can change people ranked below you; an owner can change anyone. */
 export const canManage = (actor: UserRole, target: UserRole) => actor === 'OWNER' || rank(actor) > rank(target);
 

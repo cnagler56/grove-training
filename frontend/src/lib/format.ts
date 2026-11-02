@@ -11,6 +11,12 @@ export function formatDate(iso: string | null, withYear = true): string {
   return `${MONTHS[m - 1]} ${d}${withYear ? `, ${y}` : ''}`;
 }
 
+/** "2026-11-01T15:05:00" → "Nov 1, 3:05 PM". */
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 /** Birthdays show month and day only. */
 export function formatBirthday(iso: string | null): string {
   return formatDate(iso, false);

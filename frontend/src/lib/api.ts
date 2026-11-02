@@ -456,6 +456,41 @@ export interface ModelInput {
   lastVisit: string | null;
 }
 
+/** A number the business calls (the Contacts page, managers and up). */
+export interface BusinessContact {
+  id: number;
+  name: string;
+  phone: string;
+  /** Who they are: vendor, landlord... */
+  type: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface ContactInput {
+  name: string;
+  phone: string;
+  type: string | null;
+}
+
+/** One to-do on one person's list. Times are the salon's local time. */
+export interface Todo {
+  id: number;
+  text: string;
+  assigneeId: number;
+  assigneeName: string;
+  assignedByName: string;
+  assignedAt: string;
+  /** Null until they mark it done. */
+  completedAt: string | null;
+}
+
+/** What the assign form offers: who you can assign to, and items assigned before. */
+export interface TodoAssignOptions {
+  people: { userId: number; name: string; role: UserRole }[];
+  items: { id: number; text: string }[];
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -583,6 +618,19 @@ export const api = {
   createModel: (m: ModelInput) => send<HaircutModel>('/api/admin/models', 'POST', m),
   updateModel: (id: number, m: ModelInput) => send<HaircutModel>(`/api/admin/models/${id}`, 'PUT', m),
   deleteModel: (id: number) => send<void>(`/api/admin/models/${id}`, 'DELETE'),
+
+  myTodos: () => send<Todo[]>('/api/todos/mine'),
+  setTodoDone: (id: number, done: boolean) => send<Todo>(`/api/todos/${id}/${done ? 'done' : 'not-done'}`, 'PUT', {}),
+  assignedTodos: () => send<Todo[]>('/api/todos/assigned'),
+  todoAssignOptions: () => send<TodoAssignOptions>('/api/todos/assign-options'),
+  assignTodo: (text: string, userIds: number[]) => send<Todo[]>('/api/todos', 'POST', { text, userIds }),
+  removeTodo: (id: number) => send<void>(`/api/todos/${id}`, 'DELETE'),
+  removeSavedTodoItem: (id: number) => send<void>(`/api/todos/items/${id}`, 'DELETE'),
+
+  contacts: () => send<BusinessContact[]>('/api/admin/contacts'),
+  createContact: (c: ContactInput) => send<BusinessContact>('/api/admin/contacts', 'POST', c),
+  updateContact: (id: number, c: ContactInput) => send<BusinessContact>(`/api/admin/contacts/${id}`, 'PUT', c),
+  deleteContact: (id: number) => send<void>(`/api/admin/contacts/${id}`, 'DELETE'),
 
   team: () => send<TeamMember[]>('/api/admin/team'),
   member: (userId: number) => send<TeamMember>(`/api/admin/team/${userId}`),
