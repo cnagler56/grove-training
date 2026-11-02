@@ -10,18 +10,17 @@ import { useDialogs } from '@/src/components/Dialogs';
 import TodoChecklist, { TodoDue } from '@/src/components/TodoChecklist';
 
 const NEW_ITEM = 'new';
-const GROUP_ROLES: UserRole[] = ['GENERAL_MANAGER', 'MANAGER', 'RECEPTIONIST'];
-const GROUP_LABELS: Partial<Record<UserRole, string>> = {
-  GENERAL_MANAGER: 'General managers',
-  MANAGER: 'Managers',
-  RECEPTIONIST: 'Receptionists',
-};
+const GROUPS: { label: string; roles: UserRole[] }[] = [
+  { label: 'Managers', roles: ['GENERAL_MANAGER', 'MANAGER'] },
+  { label: 'Receptionists', roles: ['RECEPTIONIST'] },
+];
+const groupLabel = (role: UserRole) => GROUPS.find((g) => g.roles.includes(role))?.label ?? role;
 
 /**
  * Your own checklist, plus, for managers and up, assigning to-dos and seeing
- * when they were done. Owners assign to general managers, managers, and
- * receptionists; general managers to managers and receptionists; managers to
- * receptionists. The server enforces this. Each group has its own saved to-dos.
+ * when they were done. Owners assign to Managers (general managers included)
+ * and Receptionists; general managers to managers and receptionists; managers
+ * to receptionists. The server enforces this. Each group has its own saved to-dos.
  */
 export default function TodosPage() {
   const { user } = useUser();
@@ -56,14 +55,11 @@ export default function TodosPage() {
   const savedItem = group?.items.find((i) => String(i.id) === choice);
   // With nothing saved yet, the only way to pick is to type.
   const typing = choice === NEW_ITEM || group?.items.length === 0;
-  const showMine = (!!user && GROUP_ROLES.includes(user.roles)) || (mine?.length ?? 0) > 0;
-  const assignedElsewhere = (assigned ?? []).filter((t) => !t.assigneeRole || !GROUP_ROLES.includes(t.assigneeRole));
+  const showMine = (!!user && GROUPS.some((g) => g.roles.includes(user.roles))) || (mine?.length ?? 0) > 0;
+  const inGroup = (t: Todo, roles: UserRole[]) => !!t.assigneeRole && roles.includes(t.assigneeRole);
   const assignedSections = [
-    ...GROUP_ROLES.map((role) => ({
-      label: GROUP_LABELS[role] ?? role,
-      todos: (assigned ?? []).filter((t) => t.assigneeRole === role),
-    })),
-    { label: 'Others', todos: assignedElsewhere },
+    ...GROUPS.map((g) => ({ label: g.label, todos: (assigned ?? []).filter((t) => inGroup(t, g.roles)) })),
+    { label: 'Others', todos: (assigned ?? []).filter((t) => !GROUPS.some((g) => inGroup(t, g.roles))) },
   ].filter((s) => s.todos.length > 0);
 
   function togglePerson(id: number) {
@@ -173,7 +169,7 @@ export default function TodosPage() {
                   <span className="mb-1 block font-semibold opacity-80">Assign to</span>
                   <select className="input cursor-pointer" value={groupRole} onChange={(e) => chooseGroup(e.target.value)}>
                     <option value="">Choose a group</option>
-                    {options.groups.map((g) => <option key={g.role} value={g.role}>{GROUP_LABELS[g.role] ?? g.role}</option>)}
+                    {options.groups.map((g) => <option key={g.role} value={g.role}>{groupLabel(g.role)}</option>)}
                   </select>
                 </label>
               )}
@@ -211,7 +207,7 @@ export default function TodosPage() {
                   </div>
 
                   <fieldset className="text-sm">
-                    <legend className="mb-1 font-semibold opacity-80">{GROUP_LABELS[group.role] ?? group.role}</legend>
+                    <legend className="mb-1 font-semibold opacity-80">{groupLabel(group.role)}</legend>
                     {group.people.length === 0 ? (
                       <p className="opacity-60">There&apos;s no one in this group yet.</p>
                     ) : (

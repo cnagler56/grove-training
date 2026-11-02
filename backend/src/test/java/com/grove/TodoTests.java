@@ -67,7 +67,7 @@ class TodoTests {
 	}
 
 	@Test
-	void ownersAssignToGeneralManagersManagersAndReceptionists() throws Exception {
+	void ownersAssignToTheManagersGroupAndReceptionists() throws Exception {
 		assign(owner, "Review the books", status().isCreated(), "gm@grove.test");
 		assign(owner, "Order towels", status().isCreated(), "manny@grove.test");
 		assign(owner, "Fold towels", status().isCreated(), "rae@grove.test");
@@ -76,13 +76,14 @@ class TodoTests {
 		}
 		mvc.perform(get("/api/todos/mine").cookie(gm)).andExpect(jsonPath("$[0].text").value("Review the books"));
 		mvc.perform(get("/api/todos/assign-options").cookie(owner))
-			.andExpect(jsonPath("$.groups.length()").value(3))
-			.andExpect(jsonPath("$.groups[0].role").value("GENERAL_MANAGER"))
+			.andExpect(jsonPath("$.groups.length()").value(2))
+			.andExpect(jsonPath("$.groups[0].role").value("MANAGER"))
+			.andExpect(jsonPath("$.groups[0].people.length()").value(3))
 			.andExpect(jsonPath("$.groups[0].people[0].name").value("Gia Ray"))
-			.andExpect(jsonPath("$.groups[1].role").value("MANAGER"))
-			.andExpect(jsonPath("$.groups[1].people.length()").value(2))
-			.andExpect(jsonPath("$.groups[1].people[0].name").value("Manny Reed"))
-			.andExpect(jsonPath("$.groups[2].role").value("RECEPTIONIST"));
+			.andExpect(jsonPath("$.groups[0].people[1].name").value("Manny Reed"))
+			.andExpect(jsonPath("$.groups[1].role").value("RECEPTIONIST"));
+		// General managers and managers can get the same assignment.
+		assign(owner, "Staff meeting", status().isCreated(), "gm@grove.test", "manny@grove.test");
 	}
 
 	@Test
@@ -95,6 +96,8 @@ class TodoTests {
 		mvc.perform(get("/api/todos/assign-options").cookie(gm))
 			.andExpect(jsonPath("$.groups.length()").value(2))
 			.andExpect(jsonPath("$.groups[0].role").value("MANAGER"))
+			.andExpect(jsonPath("$.groups[0].people.length()").value(2))
+			.andExpect(jsonPath("$.groups[0].people[0].name").value("Manny Reed"))
 			.andExpect(jsonPath("$.groups[1].role").value("RECEPTIONIST"));
 	}
 
@@ -248,21 +251,34 @@ class TodoTests {
 		// The same words can be saved for two groups, and removing one leaves the other.
 		assign(owner, "Fold towels", status().isCreated(), "manny@grove.test");
 
+		// What a general manager was given is in the Managers list.
 		mvc.perform(get("/api/todos/assign-options").cookie(owner))
-			.andExpect(jsonPath("$.groups[0].items.length()").value(1))
-			.andExpect(jsonPath("$.groups[0].items[0].text").value("Review the books"))
-			.andExpect(jsonPath("$.groups[1].items.length()").value(2))
-			.andExpect(jsonPath("$.groups[1].items[0].text").value("Fold towels"))
-			.andExpect(jsonPath("$.groups[1].items[1].text").value("Order towels"))
-			.andExpect(jsonPath("$.groups[2].items.length()").value(1))
-			.andExpect(jsonPath("$.groups[2].items[0].text").value("Fold towels"));
+			.andExpect(jsonPath("$.groups[0].items.length()").value(3))
+			.andExpect(jsonPath("$.groups[0].items[0].text").value("Fold towels"))
+			.andExpect(jsonPath("$.groups[0].items[1].text").value("Order towels"))
+			.andExpect(jsonPath("$.groups[0].items[2].text").value("Review the books"))
+			.andExpect(jsonPath("$.groups[1].items.length()").value(1))
+			.andExpect(jsonPath("$.groups[1].items[0].text").value("Fold towels"));
 
 		long managersCopy = items.findAll().stream()
 			.filter(i -> i.getRole() == Role.MANAGER && i.getText().equals("Fold towels")).findFirst().orElseThrow().getId();
 		mvc.perform(delete("/api/todos/items/" + managersCopy).cookie(owner)).andExpect(status().isNoContent());
 		mvc.perform(get("/api/todos/assign-options").cookie(owner))
-			.andExpect(jsonPath("$.groups[1].items.length()").value(1))
-			.andExpect(jsonPath("$.groups[2].items[0].text").value("Fold towels"));
+			.andExpect(jsonPath("$.groups[0].items.length()").value(2))
+			.andExpect(jsonPath("$.groups[1].items[0].text").value("Fold towels"));
+	}
+
+	@Test
+	void itemsSavedForGeneralManagersBeforeTheGroupsMergedShowUnderManagers() throws Exception {
+		TodoItem old = new TodoItem();
+		old.setText("Older item");
+		old.setRole(Role.GENERAL_MANAGER);
+		items.save(old);
+		mvc.perform(get("/api/todos/assign-options").cookie(owner))
+			.andExpect(jsonPath("$.groups[0].items[0].text").value("Older item"))
+			.andExpect(jsonPath("$.groups[1].items.length()").value(0));
+		assign(owner, "older item", status().isCreated(), "manny@grove.test");
+		assertThat(items.findAll()).hasSize(1);
 	}
 
 	@Test
@@ -272,8 +288,7 @@ class TodoTests {
 		items.save(old);
 		mvc.perform(get("/api/todos/assign-options").cookie(owner))
 			.andExpect(jsonPath("$.groups[0].items[0].text").value("Older item"))
-			.andExpect(jsonPath("$.groups[1].items[0].text").value("Older item"))
-			.andExpect(jsonPath("$.groups[2].items[0].text").value("Older item"));
+			.andExpect(jsonPath("$.groups[1].items[0].text").value("Older item"));
 		assign(owner, "older ITEM", status().isCreated(), "rae@grove.test");
 		assertThat(items.findAll()).hasSize(1);
 		mvc.perform(get("/api/todos/mine").cookie(rae)).andExpect(jsonPath("$[0].text").value("Older item"));

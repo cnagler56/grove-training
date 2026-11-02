@@ -25,9 +25,10 @@ import com.grove.Repository.UserRepository;
 
 /**
  * To-do checklists. Owners assign to general managers, managers, and receptionists;
- * general managers to managers and receptionists; managers to receptionists. Each of
- * those groups keeps its own saved items. Each person checks off their own copy, and
- * whoever assigned it sees when it was done and by whom.
+ * general managers to managers and receptionists; managers to receptionists. Assigning
+ * is by group, Managers (general managers included) or Receptionists, and each group
+ * keeps its own saved items. Each person checks off their own copy, and whoever assigned
+ * it sees when it was done and by whom.
  */
 @Service
 public class TodoService {
@@ -39,7 +40,7 @@ public class TodoService {
 	private static final int MAX_TEXT = 200;
 
 	/** The groups to-dos are assigned to, in the order they're offered. */
-	private static final List<Role> GROUPS = List.of(Role.GENERAL_MANAGER, Role.MANAGER, Role.RECEPTIONIST);
+	private static final List<Role> GROUPS = List.of(Role.MANAGER, Role.RECEPTIONIST);
 
 	public record TodoView(Long id, String text, Long assigneeId, String assigneeName, String assigneeRole, String assignedByName,
 		LocalDateTime assignedAt, LocalDate dueDate, LocalDateTime completedAt) {}
@@ -72,11 +73,16 @@ public class TodoService {
 	/** Can {@code assigner} put something on {@code assignee}'s list? */
 	public static boolean canAssign(Role assigner, Role assignee) {
 		return switch (assigner) {
-			case OWNER -> GROUPS.contains(assignee);
-			case GENERAL_MANAGER -> assignee == Role.MANAGER || assignee == Role.RECEPTIONIST;
+			case OWNER -> assignee == Role.GENERAL_MANAGER || GROUPS.contains(assignee);
+			case GENERAL_MANAGER -> GROUPS.contains(assignee);
 			case MANAGER -> assignee == Role.RECEPTIONIST;
 			default -> false;
 		};
+	}
+
+	/** General managers are in the Managers group. */
+	private static Role groupOf(Role role) {
+		return role == Role.GENERAL_MANAGER ? Role.MANAGER : role;
 	}
 
 	/** The viewer's own list: what's left, soonest due first, then what they finished lately. */
@@ -110,12 +116,12 @@ public class TodoService {
 			.filter(group -> canAssign(viewer.getRoles(), group))
 			.map(group -> new AssignGroup(group.name(),
 				everyone.stream()
-					.filter(u -> u.isActive() && u.getRoles() == group)
+					.filter(u -> u.isActive() && groupOf(u.getRoles()) == group && canAssign(viewer.getRoles(), u.getRoles()))
 					.map(u -> new Person(u.getUserId(), name(u)))
 					.sorted(Comparator.comparing((Person p) -> p.name().toLowerCase()))
 					.toList(),
 				allItems.stream()
-					.filter(i -> i.getRole() == null || i.getRole() == group)
+					.filter(i -> i.getRole() == null || groupOf(i.getRole()) == group)
 					.map(i -> new SavedItem(i.getId(), i.getText()))
 					.sorted(Comparator.comparing((SavedItem i) -> i.text().toLowerCase()))
 					.toList()))
@@ -144,8 +150,8 @@ public class TodoService {
 			people.add(u);
 		}
 
-		Role group = people.get(0).getRoles();
-		if (people.stream().anyMatch(u -> u.getRoles() != group)) throw bad("Assign to one group at a time");
+		Role group = groupOf(people.get(0).getRoles());
+		if (people.stream().anyMatch(u -> groupOf(u.getRoles()) != group)) throw bad("Assign to one group at a time");
 
 		String text = saved(group, typed).getText();
 		LocalDateTime now = LocalDateTime.now(zone);
@@ -192,7 +198,7 @@ public class TodoService {
 
 	private TodoItem saved(Role group, String text) {
 		return items.findAll().stream()
-			.filter(i -> (i.getRole() == null || i.getRole() == group) && i.getText().equalsIgnoreCase(text))
+			.filter(i -> (i.getRole() == null || groupOf(i.getRole()) == group) && i.getText().equalsIgnoreCase(text))
 			.findFirst().orElseGet(() -> {
 				TodoItem i = new TodoItem();
 				i.setText(text);
