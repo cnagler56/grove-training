@@ -250,6 +250,27 @@ export interface TimeOffQueue {
   approved: TimeOffRequest[];
 }
 
+/** A request to be paid vacation hours. checkDate is "YYYY-MM-DD". */
+export interface VacationPayRequest {
+  id: number;
+  userId: number;
+  name: string;
+  hours: number;
+  checkDate: string;
+  status: 'PENDING' | 'APPROVED' | 'SENT_BACK';
+  responseNote: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  createdAt: string | null;
+}
+
+/** What an owner sees. */
+export interface VacationPayQueue {
+  waiting: VacationPayRequest[];
+  /** Approved requests whose check hasn't gone out yet. */
+  approved: VacationPayRequest[];
+}
+
 export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES';
 
 /** One permission on the owner's Settings page. */
@@ -532,6 +553,16 @@ export const api = {
   approveTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/approve`, 'PUT', {}),
   sendBackTimeOff: (id: number, message: string) =>
     send<TimeOffRequest>(`/api/time-off/${id}/send-back`, 'PUT', { message }),
+
+  vacationPayCheckDates: () => send<string[]>('/api/vacation-pay/check-dates'),
+  myVacationPay: () => send<VacationPayRequest[]>('/api/vacation-pay/mine'),
+  requestVacationPay: (r: { hours: number; checkDate: string }) =>
+    send<VacationPayRequest>('/api/vacation-pay', 'POST', r),
+  cancelVacationPay: (id: number) => send<void>(`/api/vacation-pay/${id}`, 'DELETE'),
+  vacationPayQueue: () => send<VacationPayQueue>('/api/vacation-pay/queue'),
+  approveVacationPay: (id: number) => send<VacationPayRequest>(`/api/vacation-pay/${id}/approve`, 'PUT', {}),
+  sendBackVacationPay: (id: number, message: string) =>
+    send<VacationPayRequest>(`/api/vacation-pay/${id}/send-back`, 'PUT', { message }),
 
   myPermissions: () => send<MyPermissions>('/api/me/permissions'),
   celebrations: () => send<Celebrations>('/api/celebrations'),

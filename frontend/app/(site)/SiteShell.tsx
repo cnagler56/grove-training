@@ -13,6 +13,7 @@ const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 /** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
 const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
+const VACATION_PAY_TABS = [{ href: '/vacation-pay', label: 'Vacation pay' }];
 const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
   { href: '/admin', label: 'Manage videos' },
@@ -44,6 +45,7 @@ function Header() {
     ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
     ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
     ...(onSchedule(user?.roles) || perms.approveTimeOff ? TIME_OFF_TABS : []),
+    ...(onSchedule(user?.roles) || isOwner ? VACATION_PAY_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -130,6 +132,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
+  const needsVacationPay = pathname.startsWith('/vacation-pay');
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');
@@ -139,6 +142,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || (needsStaff && user.roles === 'CUSTOMER')
     || (needsMyWeek && !hasMyWeek(user.roles))
     || (needsTimeOff && !onSchedule(user.roles) && !perms.approveTimeOff)
+    || (needsVacationPay && !onSchedule(user.roles) && user.roles !== 'OWNER')
     || (needsScheduleView && !seesSchedule(perms))
     || (needsScheduleEdit && !perms.editSchedule && !perms.approveSchedule));
 

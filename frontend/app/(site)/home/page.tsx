@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDuration, type Celebrations, type PendingWeek, type ShiftView, type TimeOffRequest, type VideoSummary } from '@/src/lib/api';
+import { api, formatDuration, type Celebrations, type PendingWeek, type ShiftView, type TimeOffRequest, type VacationPayRequest, type VideoSummary } from '@/src/lib/api';
 import { TodayCelebrations, UpcomingCelebrations } from '@/src/components/Celebrations';
 import { addDays, isRequestedOff, longDayLabel, shiftLabel, timeOffRange, todayIso, weekRangeLabel } from '@/src/lib/schedule';
 import { canManageSite, onSchedule, roleLabel } from '@/src/lib/roles';
@@ -35,6 +35,7 @@ export default function StaffHomePage() {
   const [celebrations, setCelebrations] = useState<Celebrations | null>(null);
   const [timeOffToAnswer, setTimeOffToAnswer] = useState<TimeOffRequest[]>([]);
   const [myTimeOff, setMyTimeOff] = useState<TimeOffRequest[]>([]);
+  const [vacationPayToAnswer, setVacationPayToAnswer] = useState<VacationPayRequest[]>([]);
 
   useEffect(() => {
     if (isStaff) api.listVideos().then(setVideos).catch(() => setVideos([]));
@@ -48,6 +49,10 @@ export default function StaffHomePage() {
   useEffect(() => {
     if (perms.approveTimeOff) api.timeOffQueue().then((q) => setTimeOffToAnswer(q.waiting)).catch(() => {});
   }, [perms.approveTimeOff]);
+
+  useEffect(() => {
+    if (isOwner) api.vacationPayQueue().then((q) => setVacationPayToAnswer(q.waiting)).catch(() => {});
+  }, [isOwner]);
 
   const asksForTimeOff = onSchedule(user?.roles);
   useEffect(() => {
@@ -116,6 +121,20 @@ export default function StaffHomePage() {
           <ul className="mt-2 space-y-1 text-sm">
             {timeOffToAnswer.map((r) => (
               <li key={r.id}><b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {vacationPayToAnswer.length > 0 && (
+        <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-extrabold">Vacation pay waiting for your answer</h2>
+            <Link href="/vacation-pay" className="btn shrink-0">Review</Link>
+          </div>
+          <ul className="mt-2 space-y-1 text-sm">
+            {vacationPayToAnswer.map((r) => (
+              <li key={r.id}><b>{r.name}</b> · {r.hours} {r.hours === 1 ? 'hour' : 'hours'} · check date {longDayLabel(r.checkDate)}</li>
             ))}
           </ul>
         </section>

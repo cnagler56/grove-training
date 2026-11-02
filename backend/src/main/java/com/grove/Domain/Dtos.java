@@ -237,6 +237,25 @@ public final class Dtos {
 	/** What an approver sees: requests waiting on them, and approved time off still to come. */
 	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}
 
+	/** What an employee sends to ask for vacation pay. */
+	public record VacationPayInput(BigDecimal hours, LocalDate checkDate) {}
+
+	/** A vacation pay request. {@code status} is PENDING, APPROVED, or SENT_BACK. */
+	public record VacationPayView(
+		Long id,
+		Long userId,
+		String name,
+		BigDecimal hours,
+		LocalDate checkDate,
+		String status,
+		String responseNote,
+		String decidedByName,
+		LocalDateTime decidedAt,
+		LocalDateTime createdAt) {}
+
+	/** What an owner sees: requests waiting on them, and approved ones not yet paid. */
+	public record VacationPayQueue(List<VacationPayView> waiting, List<VacationPayView> approved) {}
+
 	/** A day someone is approved off, on the week it falls in. */
 	public record TimeOffDay(Long userId, String name, LocalDate date) {}
 

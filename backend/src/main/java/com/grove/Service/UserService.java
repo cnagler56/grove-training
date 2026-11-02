@@ -32,6 +32,7 @@ import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.TeamPostLikeRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserSessionRepository;
+import com.grove.Repository.VacationPayRequestRepository;
 import com.grove.Repository.VideoAssignmentRepository;
 import com.grove.Repository.VideoCompletionRepository;
 
@@ -53,6 +54,7 @@ public class UserService {
 	private final ShiftRepository shiftRepo;
 	private final VideoAssignmentRepository assignmentRepo;
 	private final TimeOffRequestRepository timeOffRepo;
+	private final VacationPayRequestRepository vacationPayRepo;
 	private final ScheduleNoteRepository scheduleNoteRepo;
 	private final TeamPostLikeRepository teamLikeRepo;
 	private final PushSubscriptionRepository pushRepo;
@@ -62,7 +64,8 @@ public class UserService {
 
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
-			TimeOffRequestRepository timeOffRepo, ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
+			TimeOffRequestRepository timeOffRepo, VacationPayRequestRepository vacationPayRepo,
+			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
 			PushSubscriptionRepository pushRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
@@ -72,6 +75,7 @@ public class UserService {
 		this.shiftRepo = shiftRepo;
 		this.assignmentRepo = assignmentRepo;
 		this.timeOffRepo = timeOffRepo;
+		this.vacationPayRepo = vacationPayRepo;
 		this.scheduleNoteRepo = scheduleNoteRepo;
 		this.teamLikeRepo = teamLikeRepo;
 		this.pushRepo = pushRepo;
@@ -235,6 +239,7 @@ public class UserService {
 		shiftRepo.deleteByUserId(user.getUserId());
 		assignmentRepo.deleteByUserId(user.getUserId());
 		timeOffRepo.deleteByUserId(user.getUserId());
+		vacationPayRepo.deleteByUserId(user.getUserId());
 		scheduleNoteRepo.deleteByUserId(user.getUserId());
 		// Their posts and comments stay on the board, shown as a former employee.
 		teamLikeRepo.deleteByUserId(user.getUserId());
