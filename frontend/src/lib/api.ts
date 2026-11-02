@@ -501,8 +501,8 @@ export interface TodoAssignOptions {
 
 export type ContestMetric = 'TREATMENTS' | 'COLORS' | 'WAXES';
 
-/** HOURS: fewer hours worked, more points per service. RATE: a lower usual rate per guest, more points. */
-export type ContestHandicap = 'NONE' | 'HOURS' | 'RATE';
+/** HOURS: fewer hours worked, more points per service. RATE: a lower usual rate per guest, more points. BOTH: the two together. */
+export type ContestHandicap = 'NONE' | 'HOURS' | 'RATE' | 'BOTH';
 
 /** A contest as everyone on staff sees it. Places are null until the first check; tied people share one. */
 export interface Contest {

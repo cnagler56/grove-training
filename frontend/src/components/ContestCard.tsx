@@ -55,7 +55,8 @@ export default function ContestCard({ contest: c, viewerId, actions }: {
         </p>
         {handicapped && (
           <p className="mt-1 text-sm">
-            <b>Handicap:</b> {c.handicap === 'HOURS' ? 'hours worked' : `usual ${c.metricLabel} per guest`}.
+            <b>Handicap:</b> {c.handicap === 'HOURS' ? 'hours worked'
+              : c.handicap === 'RATE' ? `usual ${c.metricLabel} per guest` : `hours worked and usual ${c.metricLabel} per guest`}.
             {' '}Places go by points: each person&apos;s services are worth 100 to 200 points.
           </p>
         )}

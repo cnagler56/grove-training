@@ -25,6 +25,10 @@ const HANDICAPS: { value: ContestHandicap; label: string; help: string }[] = [
     value: 'RATE', label: 'Usual rate per guest',
     help: 'Each service is worth 100 points for anyone who usually does the group\'s average or more per guest, and more for people who usually do fewer, up to 200.',
   },
+  {
+    value: 'BOTH', label: 'Hours and usual rate',
+    help: 'Both handicaps together: working fewer hours and usually doing fewer per guest each add to what a service is worth, still from 100 up to 200.',
+  },
 ];
 
 type Form = {

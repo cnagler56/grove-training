@@ -49,8 +49,9 @@ public class Contest {
 	/**
 	 * How much each person's service is worth. NONE: 1 each. HOURS: more for people
 	 * who work fewer hours. RATE: more for people who usually do fewer per guest.
+	 * BOTH: the two together.
 	 */
-	public enum Handicap { NONE, HOURS, RATE }
+	public enum Handicap { NONE, HOURS, RATE, BOTH }
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -373,6 +373,46 @@ class ContestTests {
 	}
 
 	@Test
+	void bothHandicapsTogetherMultiplyTheBoostsWithinTheCap() throws Exception {
+		LocalDate startWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		for (int w = 1; w <= 4; w++) {
+			week("Ava Stone", startWeek.minusWeeks(w), 40, 100, 10);
+			week("Mia Cruz", startWeek.minusWeeks(w), 24, 100, 8);
+			week("Lee Moss", startWeek.minusWeeks(w), 16, 100, 2);
+		}
+		long id = create(manager, with(contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(leeId, null)),
+			"handicap", "BOTH"));
+		report("Ava Stone", 1, "Mia Cruz", 1, "Lee Moss", 1);
+		// Hours average 26.7, rate average 0.067. Ava: above both, 100.
+		// Mia: 26.7/24 = 1.11 for hours, rate above average, so 1.11: 110.
+		// Lee: 1.67 for hours times 3.33 for rate is over the cap: 200.
+		check(id)
+			.andExpect(jsonPath("$.handicap").value("BOTH"))
+			.andExpect(jsonPath("$.standings[0].name").value("Lee Moss"))
+			.andExpect(jsonPath("$.standings[0].worth").value(200))
+			.andExpect(jsonPath("$.standings[1].name").value("Mia Cruz"))
+			.andExpect(jsonPath("$.standings[1].worth").value(110))
+			.andExpect(jsonPath("$.standings[2].name").value("Ava Stone"))
+			.andExpect(jsonPath("$.standings[2].worth").value(100));
+	}
+
+	@Test
+	void bothBoostsBelowTheCapMultiply() throws Exception {
+		LocalDate startWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		for (int w = 1; w <= 4; w++) {
+			week("Ava Stone", startWeek.minusWeeks(w), 40, 100, 10);
+			week("Mia Cruz", startWeek.minusWeeks(w), 24, 100, 7);
+		}
+		long id = create(manager, with(contest("Blitz", List.of(), person(avaId, null), person(miaId, null)), "handicap", "BOTH"));
+		report("Ava Stone", 1, "Mia Cruz", 1);
+		// Mia: 32/24 = 1.33 for hours times 0.085/0.07 = 1.21 for rate is 1.62: 160.
+		check(id)
+			.andExpect(jsonPath("$.standings[0].name").value("Mia Cruz"))
+			.andExpect(jsonPath("$.standings[0].worth").value(160))
+			.andExpect(jsonPath("$.standings[1].worth").value(100));
+	}
+
+	@Test
 	void deletingAnAccountTakesThemOutOfContests() throws Exception {
 		create(manager, contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(leeId, null)));
 		mvc.perform(delete("/api/admin/team/" + leeId).cookie(owner)).andExpect(status().is2xxSuccessful());

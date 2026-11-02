@@ -315,8 +315,12 @@ public class ContestService {
 		List<String> lines = new ArrayList<>();
 		lines.add(c.getName() + " results (" + c.getStartDate().format(SHORT_DATE) + " to " + c.getEndDate().format(SHORT_DATE) + ")");
 		if (handicapped(c)) {
-			lines.add(c.getHandicap() == Handicap.HOURS
-				? "With a handicap for hours worked." : "With a handicap for how many " + c.getMetric().plural() + " each person usually does.");
+			String usually = "how many " + c.getMetric().plural() + " each person usually does";
+			lines.add("With a handicap for " + switch (c.getHandicap()) {
+				case HOURS -> "hours worked";
+				case RATE -> usually;
+				default -> "hours worked and " + usually;
+			} + ".");
 		}
 		lines.add("");
 		list.stream().sorted(standingOrder(people)).forEach(e -> lines.add(place(e, list) + ": " + nameOf(people, e.getUserId()) + ", "
@@ -471,14 +475,16 @@ public class ContestService {
 	 * With a handicap, give everyone who doesn't have one yet their points per service,
 	 * from the {@link #HISTORY_WEEKS} finished weeks before the contest started. Compared
 	 * with the average of everyone in it: average or better is {@link #BASE_WORTH}, fewer
-	 * hours (or a lower usual rate) is worth more, up to {@link #MAX_WORTH}. Once set it
-	 * stays for the contest, so a slow week mid-contest doesn't change it.
+	 * hours (or a lower usual rate) is worth more, up to {@link #MAX_WORTH}. BOTH multiplies
+	 * the two boosts, still within that cap. Once set it stays for the contest, so a slow
+	 * week mid-contest doesn't change it.
 	 */
 	private void lockWorth(Contest c, List<ContestEntry> list, Map<Long, User> people) {
 		if (!handicapped(c) || list.stream().allMatch(e -> e.getWorth() != null)) return;
 		LocalDate startWeek = c.getStartDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
 		LocalDate firstWeek = startWeek.minusWeeks(HISTORY_WEEKS);
-		Map<Long, Double> usual = new HashMap<>();
+		Map<Long, Double> hours = new HashMap<>();
+		Map<Long, Double> rate = new HashMap<>();
 		for (ContestEntry e : list) {
 			User u = people.get(e.getUserId());
 			if (u == null || u.getSalonUltimateName() == null) continue;
@@ -486,27 +492,45 @@ public class ContestService {
 				.filter(w -> !w.getWeekStart().isBefore(firstWeek) && w.getWeekStart().isBefore(startWeek))
 				.toList();
 			if (weeks.isEmpty()) continue;
-			if (c.getHandicap() == Handicap.HOURS) {
-				double hours = weeks.stream().mapToDouble(w -> w.getFloorHours() == null ? 0 : w.getFloorHours().doubleValue()).sum();
-				if (hours > 0) usual.put(e.getUserId(), hours / weeks.size());
-			} else {
-				int guests = weeks.stream().mapToInt(w -> w.getClients() == null ? 0 : w.getClients()).sum();
-				int done = weeks.stream().mapToInt(w -> value(w, c.getMetric())).sum();
-				if (guests > 0) usual.put(e.getUserId(), (double) done / guests);
-			}
+			double floorHours = weeks.stream().mapToDouble(w -> w.getFloorHours() == null ? 0 : w.getFloorHours().doubleValue()).sum();
+			if (floorHours > 0) hours.put(e.getUserId(), floorHours / weeks.size());
+			int guests = weeks.stream().mapToInt(w -> w.getClients() == null ? 0 : w.getClients()).sum();
+			int done = weeks.stream().mapToInt(w -> value(w, c.getMetric())).sum();
+			if (guests > 0) rate.put(e.getUserId(), (double) done / guests);
 		}
-		double average = usual.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+		double averageHours = average(hours);
+		double averageRate = average(rate);
 		for (ContestEntry e : list) {
-			if (e.getWorth() == null) e.setWorth(worth(average, usual.get(e.getUserId())));
+			if (e.getWorth() != null) continue;
+			double hoursBoost = boost(averageHours, hours.get(e.getUserId()));
+			double rateBoost = boost(averageRate, rate.get(e.getUserId()));
+			e.setWorth(toWorth(switch (c.getHandicap()) {
+				case HOURS -> hoursBoost;
+				case RATE -> rateBoost;
+				default -> hoursBoost * rateBoost;
+			}));
 		}
 	}
 
 	/** Points per service: 100 at the average or better, more below it (to the nearest 5), up to 200. No history: 100. */
 	public static int worth(double average, Double mine) {
-		if (mine == null || average <= 0) return BASE_WORTH;
-		if (mine <= 0) return MAX_WORTH;
-		int rounded = (int) Math.round(BASE_WORTH * average / mine / 5) * 5;
+		return toWorth(boost(average, mine));
+	}
+
+	/** How many times more someone's service is worth: 1 at the average or better or with no history, the most at none. */
+	static double boost(double average, Double mine) {
+		if (mine == null || average <= 0) return 1;
+		if (mine <= 0) return (double) MAX_WORTH / BASE_WORTH;
+		return Math.max(1, average / mine);
+	}
+
+	private static int toWorth(double boost) {
+		int rounded = (int) Math.round(BASE_WORTH * boost / 5) * 5;
 		return Math.max(BASE_WORTH, Math.min(MAX_WORTH, rounded));
+	}
+
+	private static double average(Map<Long, Double> values) {
+		return values.values().stream().mapToDouble(Double::doubleValue).average().orElse(0);
 	}
 
 	private static boolean handicapped(Contest c) {
