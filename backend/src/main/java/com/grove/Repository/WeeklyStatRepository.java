@@ -35,9 +35,14 @@ public interface WeeklyStatRepository extends JpaRepository<WeeklyStat, Long> {
 		Long getWaxes();
 	}
 
-	/** Team totals for every week, newest first. Totals are null for weeks pulled before these were saved. */
+	/**
+	 * Team totals for every week, newest first, leaving out anyone linked to a
+	 * receptionist. Totals are null for weeks pulled before these were saved.
+	 */
 	@Query("select s.weekStart as weekStart, sum(s.colors) as colors, sum(s.treatments) as treatments, sum(s.waxes) as waxes"
-		+ " from WeeklyStat s group by s.weekStart order by s.weekStart desc")
+		+ " from WeeklyStat s where not exists (select 1 from User u where lower(u.salonUltimateName) = lower(s.suName)"
+		+ " and u.roles = com.grove.Domain.Role.RECEPTIONIST)"
+		+ " group by s.weekStart order by s.weekStart desc")
 	List<TeamServices> teamServices();
 
 	@Modifying

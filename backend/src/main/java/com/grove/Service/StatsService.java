@@ -29,6 +29,7 @@ import com.grove.Domain.Dtos.StatsImportView;
 import com.grove.Domain.Dtos.TeamServiceWeek;
 import com.grove.Domain.Dtos.TeamStatRow;
 import com.grove.Domain.Dtos.TeamStats;
+import com.grove.Domain.Role;
 import com.grove.Domain.StatsImport;
 import com.grove.Domain.StatsImport.Status;
 import com.grove.Domain.User;
@@ -212,7 +213,8 @@ public class StatsService {
 		List<TeamStatRow> rows = stats.findByWeekStart(shown).stream()
 			.map(s -> {
 				User u = linked.get(s.getSuName().toLowerCase());
-				return new TeamStatRow(s.getSuName(), u == null ? null : u.getUserId(), u == null ? s.getSuName() : name(u), line(s, null));
+				StatLine numbers = u != null && u.getRoles() == Role.RECEPTIONIST ? withoutServiceTypes(line(s, null)) : line(s, null);
+				return new TeamStatRow(s.getSuName(), u == null ? null : u.getUserId(), u == null ? s.getSuName() : name(u), numbers);
 			})
 			.sorted(Comparator.comparing((TeamStatRow r) -> r.stats().serviceSales()).reversed())
 			.toList();
@@ -318,6 +320,13 @@ public class StatsService {
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
 			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate,
 			null, null, null, s.getServices(), s.getClients(), s.getColors(), s.getTreatments(), s.getWaxes());
+	}
+
+	/** Receptionists don't count toward colors, treatments, and waxes: left blank, so they stay off those boards and totals. */
+	private static StatLine withoutServiceTypes(StatLine l) {
+		return new StatLine(l.weekStart(), l.serviceSales(), l.netServiceSales(), l.retailSales(), l.productPerGuest(), l.floorHours(),
+			l.offFloorHours(), l.serviceSalesPerHour(), l.pph(), l.payRate(), l.tips(), l.tipsPerHour(), l.totalPerHour(),
+			l.services(), l.clients(), null, null, null);
 	}
 
 	private static BigDecimal zeroIfNull(BigDecimal n) {

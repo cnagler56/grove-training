@@ -34,6 +34,7 @@ this app only stores titles, categories, who's watched what, and accounts.
   timecard is still open, Salon Ultimate refuses the report and Leaderboards says
   which one to close. Colors, treatments, and waxes come from the store's "Detailed
   Service" report, separated by employee, with whole-team totals by week and month.
+  Anyone linked to a receptionist account is left out of those three counts.
   Weeks pulled before these were saved stay blank until **Pull again**.
 - **Tracking:** each video page shows managers who has watched it. The Team
   page shows how many videos each person has watched.

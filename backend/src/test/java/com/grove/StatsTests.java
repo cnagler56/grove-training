@@ -186,6 +186,27 @@ class StatsTests {
 	}
 
 	@Test
+	void receptionistsAreLeftOutOfColorsTreatmentsAndWaxes() throws Exception {
+		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
+		signUp("ava@grove.test", "Ava", "Stone");
+		mvc.perform(post("/api/stats/import").param("week", statsService.latestCompleteWeek().toString()).cookie(owner))
+			.andExpect(jsonPath("$.status").value("OK"));
+		setRole("ava@grove.test", Role.RECEPTIONIST);
+
+		// Her other numbers stay; only the three counts go, from her row and the team's totals.
+		mvc.perform(get("/api/stats/team").cookie(owner))
+			.andExpect(jsonPath("$.rows[0].suName").value("Ava Stone"))
+			.andExpect(jsonPath("$.rows[0].stats.services").value(44))
+			.andExpect(jsonPath("$.rows[0].stats.colors").doesNotExist())
+			.andExpect(jsonPath("$.rows[0].stats.treatments").doesNotExist())
+			.andExpect(jsonPath("$.rows[0].stats.waxes").doesNotExist())
+			.andExpect(jsonPath("$.rows[1].stats.treatments").value(6))
+			.andExpect(jsonPath("$.teamWeeks[0].colors").value(0))
+			.andExpect(jsonPath("$.teamWeeks[0].treatments").value(6))
+			.andExpect(jsonPath("$.teamWeeks[0].waxes").value(0));
+	}
+
+	@Test
 	void aFailedDetailedServiceStillSavesTheWeek() throws Exception {
 		Cookie owner = signUp("owner@grove.test", "Owner", "Person");
 		Cookie ava = signUp("ava@grove.test", "Ava", "Stone");
