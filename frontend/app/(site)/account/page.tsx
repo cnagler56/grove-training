@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api } from '@/src/lib/api';
+import NotificationsCard from '@/src/components/NotificationsCard';
 
 /** Anyone on staff changes their own password here. Linked from the site header. */
 export default function AccountPage() {
@@ -51,6 +52,11 @@ export default function AccountPage() {
           {busy ? 'Please wait…' : 'Change password'}
         </button>
       </form>
+
+      <section className="card mt-6 space-y-3 p-5">
+        <h2 className="text-lg font-bold">Notifications on this device</h2>
+        <NotificationsCard always />
+      </section>
     </div>
   );
 }

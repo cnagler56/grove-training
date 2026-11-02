@@ -13,8 +13,9 @@ type State = 'checking' | 'hidden' | 'off' | 'on' | 'denied' | 'needs-install';
  * has to tap once, because phones only ask permission after a tap. Hidden when
  * the server has no push keys, the browser can't do it, or after "Not now".
  */
-export default function NotificationsCard() {
+export default function NotificationsCard({ always = false }: { always?: boolean }) {
   const [state, setState] = useState<State>('checking');
+  const [unavailable, setUnavailable] = useState('');
   const [publicKey, setPublicKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export default function NotificationsCard() {
       let next: State;
       if (!key || support === 'unsupported') {
         next = 'hidden';
+        setUnavailable(!key ? 'Notifications aren\'t set up on the server yet.' : 'This browser can\'t receive notifications.');
       } else if (support === 'needs-install') {
         next = 'needs-install';
       } else if (Notification.permission === 'denied') {
@@ -48,14 +50,19 @@ export default function NotificationsCard() {
       }
       let dismissed = false;
       try { dismissed = localStorage.getItem(DISMISSED_KEY) === '1'; } catch { /* private mode: just show it */ }
-      if (dismissed && next !== 'on') next = 'hidden';
+      if (dismissed && !always && next !== 'on') next = 'hidden';
       if (!cancelled) {
         setPublicKey(key);
         setState(next);
       }
-    })().catch(() => { if (!cancelled) setState('hidden'); });
+    })().catch(() => {
+      if (!cancelled) {
+        setUnavailable('Couldn\'t check notifications on this device. Reload the page to try again.');
+        setState('hidden');
+      }
+    });
     return () => { cancelled = true; };
-  }, []);
+  }, [always]);
 
   function notNow() {
     try { localStorage.setItem(DISMISSED_KEY, '1'); } catch { /* it just shows again next time */ }
@@ -110,11 +117,15 @@ export default function NotificationsCard() {
     }
   }
 
-  if (state === 'checking' || state === 'hidden') return null;
+  if (state === 'checking') return null;
+  if (state === 'hidden') {
+    // A "Not now" on Home never hides this on My account, so there's always a way back.
+    return always ? <p className="text-sm opacity-70">{unavailable}</p> : null;
+  }
 
   if (state === 'on') {
     return (
-      <div className="text-right text-xs md:col-span-2">
+      <div className={`${always ? 'text-sm' : 'text-right text-xs'} md:col-span-2`}>
         <p className="opacity-70">
           Notifications are on for this device.{' '}
           <button className="font-semibold underline" onClick={() => void sendTest()} disabled={busy}>{busy ? 'Working…' : 'Send a test'}</button>{' '}
@@ -127,12 +138,12 @@ export default function NotificationsCard() {
   }
 
   return (
-    <section className="card flex flex-wrap items-center justify-between gap-3 p-4 md:col-span-2">
+    <section className={`flex flex-wrap items-center justify-between gap-3 md:col-span-2 ${always ? '' : 'card p-4'}`}>
       <div className="min-w-0 text-sm">
-        <div className="font-bold">Get notifications on this device</div>
+        {!always && <div className="font-bold">Get notifications on this device</div>}
         <div className="opacity-70">
           {state === 'off' && 'Hear about new schedules, time off answers, team board posts, and videos assigned to you.'}
-          {state === 'needs-install' && 'On iPhone and iPad, add this site to your Home Screen first, open it from there, and then turn them on. The steps are on this page.'}
+          {state === 'needs-install' && 'On iPhone and iPad, add this site to your Home Screen first, open it from there, and then turn them on. The steps are on the Home page.'}
           {state === 'denied' && 'Notifications are blocked for this site. Allow them in your device or browser settings, then reload this page.'}
         </div>
         {error && <div className="mt-1 text-[var(--danger)]">{error}</div>}
@@ -141,7 +152,7 @@ export default function NotificationsCard() {
         {state === 'off' && (
           <button className="btn" onClick={() => void turnOn()} disabled={busy}>{busy ? 'Turning on…' : 'Turn on notifications'}</button>
         )}
-        <button className="text-sm font-semibold opacity-60 hover:opacity-100" onClick={notNow}>Not now</button>
+        {!always && <button className="text-sm font-semibold opacity-60 hover:opacity-100" onClick={notNow}>Not now</button>}
       </div>
     </section>
   );
