@@ -104,6 +104,8 @@ public final class Dtos {
 
 	public record PasswordReset(String password) {}
 
+	public record PasswordChange(String currentPassword, String newPassword) {}
+
 	/** What the public /apply form sends. {@code website} is a honeypot: real people leave it empty. */
 	public record ApplicationRequest(
 		String firstName,

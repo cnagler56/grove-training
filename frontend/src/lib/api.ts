@@ -467,6 +467,8 @@ export const api = {
   login: (c: Credentials) => send<User>('/login', 'POST', c),
   register: (c: Credentials) => send<User>('/register', 'POST', c),
   logout: () => send<void>('/logout', 'POST'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    send<void>('/api/account/password', 'POST', { currentPassword, newPassword }),
 
   listVideos: () => send<VideoSummary[]>('/api/videos'),
   getVideo: (id: number) => send<VideoDetail>(`/api/videos/${id}`),

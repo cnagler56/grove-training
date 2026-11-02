@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.grove.Domain.Dtos.PasswordChange;
 import com.grove.Domain.LoginDTO;
 import com.grove.Domain.User;
 import com.grove.Service.SessionService;
@@ -71,6 +72,14 @@ public class AuthenticationController {
 		return ResponseEntity.noContent()
 			.header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
 			.build();
+	}
+
+	/** Under /api because next.config.ts only forwards /api/* and the sign-in paths to this backend. */
+	@PostMapping("/api/account/password")
+	public ResponseEntity<Void> changePassword(@RequestBody PasswordChange body,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		userService.changeOwnPassword(sessionService.requireUser(token), token, body);
+		return ResponseEntity.noContent().build();
 	}
 
 	private ResponseCookie cookie(String value, Duration maxAge) {

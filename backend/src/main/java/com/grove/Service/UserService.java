@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.Dtos.EmployeeDetails;
 import com.grove.Domain.Dtos.NewEmployee;
+import com.grove.Domain.Dtos.PasswordChange;
 import com.grove.Domain.Dtos.TeamMember;
 import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.LoginDTO;
@@ -248,6 +249,27 @@ public class UserService {
 		if (!user.getUserId().equals(actor.getUserId())) requireCanManage(actor, user);
 		user.setPassword(passwordEncoder.encode(newPassword));
 		userRepo.save(user);
+	}
+
+	/**
+	 * Staff change their own password. Signs them out everywhere but this session,
+	 * so an old password left signed in on a shared or lost phone stops working.
+	 */
+	@Transactional
+	public void changeOwnPassword(User user, String sessionToken, PasswordChange change) {
+		if (!user.getRoles().isStaff()) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only staff can change a password here");
+		}
+		if (change.currentPassword() == null || !passwordEncoder.matches(change.currentPassword(), user.getPassword())) {
+			throw new ResponseStatusException(HttpStatus.FORBIDDEN, "That isn't your current password");
+		}
+		validatePassword(change.newPassword());
+		if (passwordEncoder.matches(change.newPassword(), user.getPassword())) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Your new password has to be different from your current one");
+		}
+		user.setPassword(passwordEncoder.encode(change.newPassword()));
+		userRepo.save(user);
+		sessionRepo.deleteOtherSessions(user.getUserId(), sessionToken);
 	}
 
 	/** Lower-cased, valid, and not used by another account (currentEmail = this account's own). */

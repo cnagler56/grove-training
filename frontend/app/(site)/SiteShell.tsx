@@ -65,6 +65,11 @@ function Header() {
           {user && (
             <div className="flex items-center gap-3 text-sm">
               <span className="hidden font-semibold sm:inline">{user.firstName || user.email}</span>
+              {user.roles !== 'CUSTOMER' && (
+                <Link href="/account" className="whitespace-nowrap rounded-full bg-white/25 px-3.5 py-1.5 font-semibold hover:bg-white/35">
+                  My account
+                </Link>
+              )}
               <button
                 onClick={() => void logout()}
                 className="rounded-full bg-white/25 px-3.5 py-1.5 font-semibold hover:bg-white/35"
@@ -122,7 +127,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   // Applicants, adding accounts, and Settings are for owners only.
   const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new'
     || pathname.startsWith('/admin/settings');
-  const needsStaff = pathname.startsWith('/videos');
+  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
   // Schedule access follows the owner's Settings.
