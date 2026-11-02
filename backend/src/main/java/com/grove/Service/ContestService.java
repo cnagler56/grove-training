@@ -84,6 +84,11 @@ public class ContestService {
 	/** Someone who can be in a contest: on staff and linked to a Salon Ultimate name. */
 	public record Eligible(Long userId, String name) {}
 
+	/** What the form sends to see people's values before a contest starts. A missing start date means today. */
+	public record WorthPreviewInput(Metric metric, Handicap handicap, LocalDate startDate, List<Long> userIds) {}
+
+	public record WorthView(Long userId, int worth) {}
+
 	private final ContestRepository contests;
 	private final ContestEntryRepository entries;
 	private final ContestTeamRepository teams;
@@ -481,35 +486,59 @@ public class ContestService {
 	 */
 	private void lockWorth(Contest c, List<ContestEntry> list, Map<Long, User> people) {
 		if (!handicapped(c) || list.stream().allMatch(e -> e.getWorth() != null)) return;
-		LocalDate startWeek = c.getStartDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		Map<Long, Integer> worths = worths(c.getMetric(), c.getHandicap(), c.getStartDate(),
+			list.stream().map(e -> people.get(e.getUserId())).filter(u -> u != null).toList());
+		for (ContestEntry e : list) {
+			if (e.getWorth() == null) e.setWorth(worths.getOrDefault(e.getUserId(), BASE_WORTH));
+		}
+	}
+
+	/**
+	 * What each person's service would be worth in a contest starting on {@code start}, for
+	 * the contest form while teams are being picked. The same numbers the first check locks
+	 * in, as long as the stats and the people in it don't change before then.
+	 */
+	public List<WorthView> previewWorth(User manager, WorthPreviewInput input) {
+		requireManager(manager);
+		if (input == null || input.metric() == null) throw bad("Pick what's counted");
+		Handicap handicap = input.handicap() == null ? Handicap.NONE : input.handicap();
+		LocalDate start = input.startDate() == null ? today() : input.startDate();
+		List<User> group = input.userIds() == null ? List.of() : users.findAllById(input.userIds()).stream().filter(this::canEnter).toList();
+		Map<Long, Integer> worths = handicap == Handicap.NONE ? Map.of() : worths(input.metric(), handicap, start, group);
+		return group.stream().map(u -> new WorthView(u.getUserId(), worths.getOrDefault(u.getUserId(), BASE_WORTH))).toList();
+	}
+
+	/** Each person's points per service against the average of this group, from the weeks before {@code start}. */
+	private Map<Long, Integer> worths(Metric metric, Handicap handicap, LocalDate start, List<User> group) {
+		LocalDate startWeek = start.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
 		LocalDate firstWeek = startWeek.minusWeeks(HISTORY_WEEKS);
 		Map<Long, Double> hours = new HashMap<>();
 		Map<Long, Double> rate = new HashMap<>();
-		for (ContestEntry e : list) {
-			User u = people.get(e.getUserId());
-			if (u == null || u.getSalonUltimateName() == null) continue;
+		for (User u : group) {
+			if (u.getSalonUltimateName() == null) continue;
 			List<WeeklyStat> weeks = stats.findBySuNameIgnoreCaseOrderByWeekStartDesc(u.getSalonUltimateName()).stream()
 				.filter(w -> !w.getWeekStart().isBefore(firstWeek) && w.getWeekStart().isBefore(startWeek))
 				.toList();
 			if (weeks.isEmpty()) continue;
 			double floorHours = weeks.stream().mapToDouble(w -> w.getFloorHours() == null ? 0 : w.getFloorHours().doubleValue()).sum();
-			if (floorHours > 0) hours.put(e.getUserId(), floorHours / weeks.size());
+			if (floorHours > 0) hours.put(u.getUserId(), floorHours / weeks.size());
 			int guests = weeks.stream().mapToInt(w -> w.getClients() == null ? 0 : w.getClients()).sum();
-			int done = weeks.stream().mapToInt(w -> value(w, c.getMetric())).sum();
-			if (guests > 0) rate.put(e.getUserId(), (double) done / guests);
+			int done = weeks.stream().mapToInt(w -> value(w, metric)).sum();
+			if (guests > 0) rate.put(u.getUserId(), (double) done / guests);
 		}
 		double averageHours = average(hours);
 		double averageRate = average(rate);
-		for (ContestEntry e : list) {
-			if (e.getWorth() != null) continue;
-			double hoursBoost = boost(averageHours, hours.get(e.getUserId()));
-			double rateBoost = boost(averageRate, rate.get(e.getUserId()));
-			e.setWorth(toWorth(switch (c.getHandicap()) {
+		Map<Long, Integer> out = new HashMap<>();
+		for (User u : group) {
+			double hoursBoost = boost(averageHours, hours.get(u.getUserId()));
+			double rateBoost = boost(averageRate, rate.get(u.getUserId()));
+			out.put(u.getUserId(), toWorth(switch (handicap) {
 				case HOURS -> hoursBoost;
 				case RATE -> rateBoost;
 				default -> hoursBoost * rateBoost;
 			}));
 		}
+		return out;
 	}
 
 	/** Points per service: 100 at the average or better, more below it (to the nearest 5), up to 200. No history: 100. */

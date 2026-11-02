@@ -42,11 +42,18 @@ type Form = {
   teamNames: string[];
   /** Who's in, and their team (null without teams). */
   picked: Record<number, number | null>;
+  /** Values already set by the contest's first check, which stay for the contest. */
+  locked: Record<number, number>;
+  /** The handicap, what's counted, and first day those locked values are for; changing any starts over. */
+  lockedFor: string | null;
 };
+
+const lockKey = (f: { handicap: ContestHandicap; metric: ContestMetric; startDate: string | null }) =>
+  `${f.handicap}|${f.metric}|${f.startDate}`;
 
 const empty = (): Form => ({
   name: '', metric: 'TREATMENTS', handicap: 'NONE', startDate: null, endDate: null, prize: '',
-  useTeams: false, teamNames: ['Team 1', 'Team 2'], picked: {},
+  useTeams: false, teamNames: ['Team 1', 'Team 2'], picked: {}, locked: {}, lockedFor: null,
 });
 
 function fromContest(c: Contest): Form {
@@ -60,6 +67,8 @@ function fromContest(c: Contest): Form {
     useTeams: c.teams.length > 0,
     teamNames: c.teams.length > 0 ? c.teams.map((t) => t.name) : ['Team 1', 'Team 2'],
     picked: Object.fromEntries(c.standings.map((s) => [s.userId, s.team])),
+    locked: Object.fromEntries(c.standings.filter((s) => s.worth !== null).map((s) => [s.userId, s.worth as number])),
+    lockedFor: lockKey(c),
   };
 }
 
@@ -215,6 +224,26 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
   const pickedIds = Object.keys(form.picked).map(Number)
     .filter((id) => people === null || people.some((p) => p.userId === id));
 
+  // Each picked person's value with this handicap, from their last 4 weeks, to help balance teams.
+  const handicapped = form.handicap !== 'NONE';
+  const [previewed, setPreviewed] = useState<Record<number, number>>({});
+  const previewKey = handicapped ? JSON.stringify([form.metric, form.handicap, form.startDate, [...pickedIds].sort()]) : '';
+  useEffect(() => {
+    if (!previewKey) return;
+    const [metric, handicap, startDate, userIds] = JSON.parse(previewKey);
+    if (userIds.length === 0) return;
+    // A short wait so ticking several people asks once.
+    const t = setTimeout(() => {
+      api.previewContestWorth({ metric, handicap, startDate, userIds })
+        .then((list) => setPreviewed(Object.fromEntries(list.map((w) => [w.userId, w.worth]))))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [previewKey]);
+  // Values the first check set stay; anyone else is shown what they'd get now.
+  const sameAsLocked = form.lockedFor === lockKey(form);
+  const worthOf = (id: number) => (sameAsLocked && form.locked[id] !== undefined ? form.locked[id] : previewed[id]);
+
   function toggle(userId: number) {
     const next = { ...form.picked };
     if (userId in next) delete next[userId];
@@ -315,6 +344,23 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
                 Split evenly at random
               </button>
             </div>
+            {pickedIds.length > 0 && (
+              <ul className="space-y-0.5 rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                {form.teamNames.map((t, i) => {
+                  const members = pickedIds.filter((id) => (form.picked[id] ?? 0) === i);
+                  const value = members.reduce((sum, id) => sum + (worthOf(id) ?? 100), 0);
+                  return (
+                    <li key={i}>
+                      <b>{t || `Team ${i + 1}`}</b>: {members.length} {members.length === 1 ? 'person' : 'people'}
+                      {handicapped && `, combined value ${value}`}
+                    </li>
+                  );
+                })}
+                {handicapped && (
+                  <li className="pt-1 text-xs opacity-70">Combined value is what one service from each person on the team adds up to.</li>
+                )}
+              </ul>
+            )}
           </div>
         )}
       </fieldset>
@@ -348,6 +394,11 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
                   <label className="flex min-w-0 cursor-pointer items-center gap-2">
                     <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--accent)]" checked={inIt} onChange={() => toggle(p.userId)} />
                     <span className="break-words font-semibold">{p.name}</span>
+                    {inIt && handicapped && worthOf(p.userId) !== undefined && (
+                      <span className="whitespace-nowrap rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-bold text-[var(--accent-strong)]">
+                        worth {worthOf(p.userId)}
+                      </span>
+                    )}
                   </label>
                   {inIt && form.useTeams && (
                     <select className="input w-auto cursor-pointer py-1" aria-label={`${p.name}'s team`}
@@ -362,6 +413,11 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
           </ul>
         )}
         <p className="mt-2 text-xs opacity-60">Only people linked to their Salon Ultimate name can be in a contest. Receptionists aren&apos;t included.</p>
+        {handicapped && (
+          <p className="mt-1 text-xs opacity-60">
+            Values compare everyone picked, so they can shift as people are added or removed. They&apos;re set for good at the first check.
+          </p>
+        )}
       </fieldset>
 
       <div className="flex flex-wrap gap-2">

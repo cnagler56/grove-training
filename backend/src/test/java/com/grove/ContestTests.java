@@ -413,6 +413,38 @@ class ContestTests {
 	}
 
 	@Test
+	void managersCanSeeEachPersonsValueBeforeTheContestStarts() throws Exception {
+		LocalDate startWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		for (int w = 1; w <= 4; w++) {
+			week("Ava Stone", startWeek.minusWeeks(w), 40, 50, 0);
+			week("Mia Cruz", startWeek.minusWeeks(w), 20, 25, 0);
+		}
+		Map<String, Object> body = new HashMap<>();
+		body.put("metric", "TREATMENTS");
+		body.put("handicap", "HOURS");
+		body.put("startDate", today.toString());
+		body.put("userIds", List.of(avaId, miaId, leeId, raeId));
+		// Receptionists are left out; Lee has no weeks yet, so 100.
+		mvc.perform(post("/api/contests/worth-preview").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content(json.writeValueAsString(body)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.length()").value(3))
+			.andExpect(jsonPath("$[?(@.userId == " + avaId + ")].worth").value(100))
+			.andExpect(jsonPath("$[?(@.userId == " + miaId + ")].worth").value(150))
+			.andExpect(jsonPath("$[?(@.userId == " + leeId + ")].worth").value(100));
+
+		// It matches what the first check locks in.
+		long id = create(manager, with(contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(leeId, null)), "handicap", "HOURS"));
+		check(id).andExpect(jsonPath("$.standings[?(@.name == 'Mia Cruz')].worth").value(150));
+
+		send(ava, post("/api/contests/worth-preview"), body, status().isForbidden());
+		body.put("handicap", "NONE");
+		mvc.perform(post("/api/contests/worth-preview").cookie(manager).contentType(MediaType.APPLICATION_JSON)
+				.content(json.writeValueAsString(body)))
+			.andExpect(jsonPath("$[?(@.userId == " + miaId + ")].worth").value(100));
+	}
+
+	@Test
 	void deletingAnAccountTakesThemOutOfContests() throws Exception {
 		create(manager, contest("Blitz", List.of(), person(avaId, null), person(miaId, null), person(leeId, null)));
 		mvc.perform(delete("/api/admin/team/" + leeId).cookie(owner)).andExpect(status().is2xxSuccessful());

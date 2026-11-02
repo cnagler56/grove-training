@@ -18,6 +18,8 @@ import com.grove.Service.ContestService;
 import com.grove.Service.ContestService.ContestInput;
 import com.grove.Service.ContestService.ContestView;
 import com.grove.Service.ContestService.Eligible;
+import com.grove.Service.ContestService.WorthPreviewInput;
+import com.grove.Service.ContestService.WorthView;
 import com.grove.Service.SessionService;
 
 /** The Contests tab: everyone on staff sees the standings; managers and up run contests. */
@@ -41,6 +43,13 @@ public class ContestController {
 	@GetMapping("/people")
 	public List<Eligible> people(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		return contests.eligible(sessions.requireUser(token));
+	}
+
+	/** What each person's service would be worth with a handicap, while setting a contest up. */
+	@PostMapping("/worth-preview")
+	public List<WorthView> previewWorth(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestBody WorthPreviewInput body) {
+		return contests.previewWorth(sessions.requireUser(token), body);
 	}
 
 	@PostMapping

@@ -686,6 +686,9 @@ export const api = {
   updateContest: (id: number, c: ContestInput) => send<Contest>(`/api/contests/${id}`, 'PUT', c),
   deleteContest: (id: number) => send<void>(`/api/contests/${id}`, 'DELETE'),
   checkContest: (id: number) => send<Contest>(`/api/contests/${id}/check`, 'POST', {}),
+  /** What each person's service would be worth with this handicap (100 for anyone at the average or better). */
+  previewContestWorth: (p: { metric: ContestMetric; handicap: ContestHandicap; startDate: string | null; userIds: number[] }) =>
+    send<{ userId: number; worth: number }[]>('/api/contests/worth-preview', 'POST', p),
 
   contacts: () => send<BusinessContact[]>('/api/admin/contacts'),
   createContact: (c: ContactInput) => send<BusinessContact>('/api/admin/contacts', 'POST', c),
