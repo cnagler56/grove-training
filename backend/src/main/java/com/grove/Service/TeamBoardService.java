@@ -117,6 +117,18 @@ public class TeamBoardService {
 		return id;
 	}
 
+	/**
+	 * A post the app writes for someone, like a contest's final results. No permission
+	 * check or notification: they didn't type it, and the people in it are told separately.
+	 */
+	public Long announce(User author, String body) {
+		TeamPost p = new TeamPost();
+		p.setAuthorId(author.getUserId());
+		p.setBody(body.length() <= MAX_BODY ? body : body.substring(0, MAX_BODY));
+		p.setCreatedAt(LocalDateTime.now(zone));
+		return posts.save(p).getId();
+	}
+
 	/** Add one photo to your own post. Only JPEGs: the browser converts and shrinks them first. */
 	public void addImage(User author, Long postId, byte[] data) {
 		TeamPost p = find(postId);

@@ -10,7 +10,7 @@ import TodoPopup from '@/src/components/TodoPopup';
 
 const TABS = [{ href: '/home', label: 'Home' }];
 const TODO_TABS = [{ href: '/todos', label: 'To-do' }];
-const STAFF_TABS = [{ href: '/videos', label: 'Videos' }];
+const STAFF_TABS = [{ href: '/videos', label: 'Videos' }, { href: '/contests', label: 'Contests' }];
 const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 /** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
@@ -133,7 +133,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   // Applicants, adding accounts, and Settings are for owners only.
   const needsOwner = pathname.startsWith('/admin/applicants') || pathname === '/admin/team/new'
     || pathname.startsWith('/admin/settings');
-  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account');
+  const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account') || pathname.startsWith('/contests');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
   const needsVacationPay = pathname.startsWith('/paid-time-off');

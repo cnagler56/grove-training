@@ -25,6 +25,7 @@ import com.grove.Domain.Dtos.TeamMemberUpdate;
 import com.grove.Domain.LoginDTO;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
+import com.grove.Repository.ContestEntryRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.PushSubscriptionRepository;
@@ -60,6 +61,7 @@ public class UserService {
 	private final TeamPostLikeRepository teamLikeRepo;
 	private final PushSubscriptionRepository pushRepo;
 	private final TodoAssignmentRepository todoRepo;
+	private final ContestEntryRepository contestEntryRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
@@ -68,7 +70,8 @@ public class UserService {
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
 			TimeOffRequestRepository timeOffRepo, VacationPayRequestRepository vacationPayRepo,
 			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
-			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, PasswordEncoder passwordEncoder,
+			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, ContestEntryRepository contestEntryRepo,
+			PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -82,6 +85,7 @@ public class UserService {
 		this.teamLikeRepo = teamLikeRepo;
 		this.pushRepo = pushRepo;
 		this.todoRepo = todoRepo;
+		this.contestEntryRepo = contestEntryRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -249,6 +253,8 @@ public class UserService {
 		pushRepo.deleteByUserId(user.getUserId());
 		// To-dos they assigned stay on people's lists, shown as from a former employee.
 		todoRepo.deleteByAssigneeId(user.getUserId());
+		// Their contest entries go; contests they made stay.
+		contestEntryRepo.deleteByUserId(user.getUserId());
 		userRepo.delete(user);
 	}
 

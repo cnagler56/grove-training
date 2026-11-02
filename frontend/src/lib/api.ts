@@ -499,6 +499,40 @@ export interface TodoAssignOptions {
   groups: TodoAssignGroup[];
 }
 
+export type ContestMetric = 'TREATMENTS' | 'COLORS' | 'WAXES';
+
+/** A contest as everyone on staff sees it. Places are null until the first check; tied people share one. */
+export interface Contest {
+  id: number;
+  name: string;
+  metric: ContestMetric;
+  /** "treatments", "colors", "waxes". */
+  metricLabel: string;
+  startDate: string;
+  endDate: string;
+  prize: string | null;
+  /** ENDED: the last day is over and the final check hasn't run yet. */
+  status: 'UPCOMING' | 'LIVE' | 'ENDED' | 'FINISHED';
+  lastCheckedAt: string | null;
+  /** Why the last Salon Ultimate check failed. Managers only. */
+  checkProblem: string | null;
+  createdByName: string;
+  teams: { position: number; name: string; total: number; rank: number | null; members: number }[];
+  standings: { userId: number; name: string; count: number | null; rank: number | null; team: number | null }[];
+}
+
+export interface ContestInput {
+  name: string;
+  metric: ContestMetric;
+  startDate: string | null;
+  endDate: string | null;
+  prize: string | null;
+  /** Empty for everyone for themselves. */
+  teams: string[];
+  /** `team` is a position in `teams`. */
+  people: { userId: number; team: number | null }[];
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -635,6 +669,13 @@ export const api = {
     send<Todo[]>('/api/todos', 'POST', { text, userIds, dueDate }),
   removeTodo: (id: number) => send<void>(`/api/todos/${id}`, 'DELETE'),
   removeSavedTodoItem: (id: number) => send<void>(`/api/todos/items/${id}`, 'DELETE'),
+
+  contests: () => send<Contest[]>('/api/contests'),
+  contestPeople: () => send<{ userId: number; name: string }[]>('/api/contests/people'),
+  createContest: (c: ContestInput) => send<Contest>('/api/contests', 'POST', c),
+  updateContest: (id: number, c: ContestInput) => send<Contest>(`/api/contests/${id}`, 'PUT', c),
+  deleteContest: (id: number) => send<void>(`/api/contests/${id}`, 'DELETE'),
+  checkContest: (id: number) => send<Contest>(`/api/contests/${id}/check`, 'POST', {}),
 
   contacts: () => send<BusinessContact[]>('/api/admin/contacts'),
   createContact: (c: ContactInput) => send<BusinessContact>('/api/admin/contacts', 'POST', c),

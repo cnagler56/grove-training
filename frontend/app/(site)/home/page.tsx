@@ -12,6 +12,7 @@ import VideoCard from '@/src/components/VideoCard';
 import InstallAppCard from '@/src/components/InstallAppCard';
 import TeamBoard from '@/src/components/TeamBoard';
 import NotificationsCard from '@/src/components/NotificationsCard';
+import ContestHomeCard from '@/src/components/ContestHomeCard';
 import CelebrationMoment from '@/src/components/CelebrationMoment';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -160,6 +161,7 @@ export default function StaffHomePage() {
         </section>
       )}
 
+      {isStaff && <ContestHomeCard userId={user.userId} />}
       {isStaff && <NotificationsCard />}
       {isStaff && <TeamBoard />}
 
