@@ -110,12 +110,27 @@ public class VacationPayService {
 		return view(saved);
 	}
 
-	/** Take back your own request while it's still waiting. */
+	/**
+	 * Take back your own request while it's waiting, or after it's approved as long as
+	 * the check hasn't gone out. Owners are told about an approved one, since they may
+	 * already be counting those hours.
+	 */
 	public void cancel(User employee, Long id) {
 		VacationPayRequest r = find(id);
 		if (!r.getUserId().equals(employee.getUserId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found");
-		if (r.getStatus() != Status.PENDING) throw bad("Only a request that's still waiting can be cancelled");
+		if (r.getStatus() == Status.SENT_BACK) throw bad("This request was already sent back");
+		boolean wasApproved = r.getStatus() == Status.APPROVED;
+		if (wasApproved && !r.getCheckDate().isAfter(LocalDate.now(zone))) throw bad("That check has already gone out");
 		requests.delete(r);
+		if (!wasApproved) return;
+
+		List<User> owners = users.findAll().stream().filter(u -> u.isActive() && u.getRoles() == Role.OWNER).toList();
+		push.notify(owners.stream().map(User::getUserId).toList(), "Approved paid time off cancelled",
+			name(employee) + ": " + summary(r), "/paid-time-off");
+		mailer.send(owners.stream().map(User::getEmail).toList(), "Approved paid time off cancelled: " + name(employee), String.join("\n",
+			name(employee) + " cancelled their approved paid time off: " + summary(r) + ".",
+			"",
+			mailer.link("/paid-time-off")));
 	}
 
 	/** What an owner sees: waiting requests, and approved ones whose check hasn't gone out yet. */

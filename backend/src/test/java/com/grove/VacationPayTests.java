@@ -1,6 +1,12 @@
 package com.grove;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 import jakarta.servlet.http.Cookie;
@@ -19,15 +26,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.MediaType;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.grove.Domain.Role;
+import com.grove.Domain.VacationPayRequest;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
 import com.grove.Repository.VacationPayRequestRepository;
+import com.grove.Service.Mailer;
 import com.grove.Service.SessionService;
 import com.grove.Service.VacationPayService;
 
@@ -42,6 +52,7 @@ class VacationPayTests {
 	@Autowired VacationPayRequestRepository requests;
 	@Autowired VacationPayService service;
 	@MockBean JavaMailSender mailSender;
+	@SpyBean Mailer mailer;
 
 	private Cookie owner;
 	private Cookie ava;
@@ -139,9 +150,48 @@ class VacationPayTests {
 		mvc.perform(delete("/api/vacation-pay/" + id).cookie(ava)).andExpect(status().isNoContent());
 		long again = request(ava, "4", firstCheck);
 		mvc.perform(put("/api/vacation-pay/" + again + "/approve").cookie(owner)).andExpect(status().isOk());
-		// Answered requests can't be cancelled, and an approved one still blocks a second.
-		mvc.perform(delete("/api/vacation-pay/" + again).cookie(ava)).andExpect(status().isBadRequest());
+		// An approved one still blocks a second.
 		send(ava, "4", firstCheck, status().isConflict());
+	}
+
+	@Test
+	void anApprovedRequestCanBeCancelledUntilTheCheckGoesOut() throws Exception {
+		long id = request(ava, "8", firstCheck);
+		mvc.perform(put("/api/vacation-pay/" + id + "/approve").cookie(owner)).andExpect(status().isOk());
+		// Only by the person who asked.
+		mvc.perform(delete("/api/vacation-pay/" + id).cookie(owner)).andExpect(status().isNotFound());
+		mvc.perform(delete("/api/vacation-pay/" + id).cookie(ava)).andExpect(status().isNoContent());
+		mvc.perform(get("/api/vacation-pay/mine").cookie(ava)).andExpect(jsonPath("$.length()").value(0));
+		mvc.perform(get("/api/vacation-pay/queue").cookie(owner)).andExpect(jsonPath("$.approved.length()").value(0));
+		// Owners are told it came off, and it can be asked for again.
+		verify(mailer).send(eq(List.of("owner@grove.test")), contains("Approved paid time off cancelled"), contains("Ava Stone"));
+		request(ava, "8", firstCheck);
+	}
+
+	@Test
+	void cancellingAWaitingRequestDoesNotBotherOwnersWithACancelNotice() throws Exception {
+		long id = request(ava, "8", firstCheck);
+		mvc.perform(delete("/api/vacation-pay/" + id).cookie(ava)).andExpect(status().isNoContent());
+		verify(mailer, never()).send(anyList(), contains("cancelled"), anyString());
+	}
+
+	@Test
+	void onceTheCheckIsOutOrItWasSentBackItCannotBeCancelled() throws Exception {
+		long id = request(ava, "8", firstCheck);
+		mvc.perform(put("/api/vacation-pay/" + id + "/approve").cookie(owner)).andExpect(status().isOk());
+		for (LocalDate gone : List.of(LocalDate.now(ZoneId.of("America/Chicago")), LocalDate.now(ZoneId.of("America/Chicago")).minusDays(14))) {
+			VacationPayRequest r = requests.findById(id).orElseThrow();
+			r.setCheckDate(gone);
+			requests.save(r);
+			mvc.perform(delete("/api/vacation-pay/" + id).cookie(ava)).andExpect(status().isBadRequest());
+		}
+		assertThat(requests.findById(id)).isPresent();
+
+		long sentBack = request(ava, "8", firstCheck);
+		mvc.perform(put("/api/vacation-pay/" + sentBack + "/send-back").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"No\"}"))
+			.andExpect(status().isOk());
+		mvc.perform(delete("/api/vacation-pay/" + sentBack).cookie(ava)).andExpect(status().isBadRequest());
 	}
 
 	@Test

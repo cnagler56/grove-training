@@ -14,6 +14,7 @@ const STATUS: Record<VacationPayRequest['status'], [string, string]> = {
 };
 
 const hoursLabel = (h: number) => `${h} ${h === 1 ? 'hour' : 'hours'}`;
+const today = () => new Date().toLocaleDateString('en-CA');
 
 /**
  * Employees ask for paid time off hours on a check date and see what happened
@@ -79,6 +80,17 @@ export default function PaidTimeOffPage() {
       confirmLabel: undoing ? 'Undo approval' : 'Send back',
     });
     if (message) void run(() => api.sendBackVacationPay(r.id, message), `Sent back to ${r.name}.`);
+  }
+
+  async function cancelApproved(r: VacationPayRequest) {
+    if (!(await dialogs.confirm({
+      title: 'Cancel your approved paid time off?',
+      message: `${hoursLabel(r.hours)} on the ${longDayLabel(r.checkDate)} check. The owners will be told.`,
+      confirmLabel: 'Cancel it',
+      cancelLabel: 'Keep it',
+      danger: true,
+    }))) return;
+    void run(() => api.cancelVacationPay(r.id), 'Approved paid time off cancelled. The owners have been told.');
   }
 
   return (
@@ -167,6 +179,10 @@ export default function PaidTimeOffPage() {
                     {r.status === 'PENDING' && (
                       <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
                         onClick={() => void run(() => api.cancelVacationPay(r.id), 'Request cancelled.')}>Cancel</button>
+                    )}
+                    {r.status === 'APPROVED' && r.checkDate > today() && (
+                      <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
+                        onClick={() => void cancelApproved(r)}>Cancel</button>
                     )}
                   </div>
                 </li>
