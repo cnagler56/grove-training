@@ -127,10 +127,45 @@ function ScheduleEditor() {
     setNotice(null);
   }
 
-  function openCell(userId: number, date: string) {
+  /** The most stylists on at once that day, with one person's shift swapped for the given times. */
+  function peakOn(date: string, userId: number, shift: { start: string; end: string } | null) {
+    const others = (staff ?? []).filter((m) => m.role !== 'RECEPTIONIST' && m.userId !== userId).flatMap((m) => {
+      const c = cells[key(m.userId, date)];
+      return c && !c.off ? [{ start: c.start, end: c.end }] : [];
+    });
+    return maxAtOnce(shift ? [...others, shift] : others);
+  }
+
+  /**
+   * Before a shift goes in: if it would add to the most stylists on at once and
+   * pass the number of stations, ask first. Receptionists don't use a station.
+   */
+  async function roomFor(userId: number, date: string, shift: { start: string; end: string }) {
+    const person = (staff ?? []).find((m) => m.userId === userId);
+    if (!person || person.role === 'RECEPTIONIST') return true;
+    const existing = cells[key(userId, date)];
+    const before = peakOn(date, userId, existing && !existing.off ? existing : null);
+    const after = peakOn(date, userId, shift);
+    if (after <= SALON.stations || after <= before) return true;
+    return dialogs.confirm({
+      title: `That's ${after} stylists at once`,
+      message: `${person.name} from ${shiftLabel(shift.start, shift.end)} would put ${after} stylists on at the same time on ${longDayLabel(date)}, and there are only ${SALON.stations} stations.`,
+      confirmLabel: 'Assign anyway',
+      cancelLabel: 'Keep it as it was',
+      danger: true,
+    });
+  }
+
+  /** Change a shift's times, once any over-the-stations question is answered. */
+  async function setShift(userId: number, date: string, c: Cell) {
+    if (await roomFor(userId, date, c)) update(key(userId, date), c);
+  }
+
+  async function openCell(userId: number, date: string) {
     const k = key(userId, date);
     if (!cells[k]) {
       const [open, close] = SALON.openClose[weekday(date)];
+      if (!(await roomFor(userId, date, { start: open, end: close }))) return;
       update(k, { start: open, end: close, note: '' });
     }
     setEditing(k);
@@ -422,9 +457,9 @@ function ScheduleEditor() {
                             ) : (
                               <>
                                 <TimeSelect label="Start" value={c.start} choices={startChoices}
-                                  onChange={(v) => update(k, { ...c, start: v, end: c.end > v ? c.end : close })} />
+                                  onChange={(v) => void setShift(m.userId, d, { ...c, start: v, end: c.end > v ? c.end : close })} />
                                 <TimeSelect label="End" value={c.end} choices={endChoices}
-                                  onChange={(end) => update(k, { ...c, end })} />
+                                  onChange={(end) => void setShift(m.userId, d, { ...c, end })} />
                               </>
                             )}
                             <input className="input px-2 py-1 text-xs" value={c.note} placeholder="Note" maxLength={100}
@@ -434,7 +469,7 @@ function ScheduleEditor() {
                             <div className="flex gap-1">
                               {c.off ? (
                                 <button className="flex-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs font-bold"
-                                  onClick={() => update(k, { ...c, off: false, start: open, end: close })}>Times</button>
+                                  onClick={() => void setShift(m.userId, d, { ...c, off: false, start: open, end: close })}>Times</button>
                               ) : (
                                 <button className="flex-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-[var(--warn)]"
                                   onClick={() => { update(k, { ...c, off: true }); setEditing(null); }}>RO</button>
@@ -450,7 +485,7 @@ function ScheduleEditor() {
                     return (
                       <td key={d} className="px-1 py-0.5 align-top">
                         <button
-                          onClick={() => { if (!readOnly) openCell(m.userId, d); }}
+                          onClick={() => { if (!readOnly) void openCell(m.userId, d); }}
                           disabled={readOnly}
                           className={`w-full rounded-lg px-2 py-1 text-left hover:brightness-95 ${
                             c ? (c.off ? 'bg-amber-100 text-[var(--warn)]' : invalid ? 'bg-red-50 text-[var(--danger)]' : shiftShade(d, c.start, c.end)) : 'hover:bg-[var(--surface-2)]'
