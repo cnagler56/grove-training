@@ -10,6 +10,8 @@ export const SALON = {
 
   /** e.g. "(555) 555-0100". Shown as a tap-to-call button. */
   phone: '(763) 391-6664',
+  /** Stylist stations: the most stylists who can work at once. */
+  stations: 8,
   /** Street address, one line per entry. */
   address: ['9859 Maple Grove Pkwy', 'Maple Grove, MN 55369'] as string[],
   /** e.g. [["Mon–Fri", "9am–8pm"], ["Sat", "9am–6pm"], ["Sun", "10am–5pm"]] */

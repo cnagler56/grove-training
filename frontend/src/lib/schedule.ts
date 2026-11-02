@@ -104,6 +104,24 @@ export function dayCoverage(
   };
 }
 
+/**
+ * The most shifts running at the same moment. Back-to-back shifts don't overlap:
+ * one ending at 2:00 and one starting at 2:00 count as one at a time.
+ */
+export function maxAtOnce(shifts: { start: string; end: string }[]) {
+  const changes = shifts.flatMap((s) => [
+    { at: hhmm(s.start), by: 1 },
+    { at: hhmm(s.end), by: -1 },
+  ]).sort((a, b) => a.at.localeCompare(b.at) || a.by - b.by); // At the same time, ends come first.
+  let now = 0;
+  let most = 0;
+  for (const c of changes) {
+    now += c.by;
+    most = Math.max(most, now);
+  }
+  return most;
+}
+
 /** Minutes between choices in the schedule editor's time dropdowns: every half hour. */
 export const TIME_STEP_MINUTES = 30;
 

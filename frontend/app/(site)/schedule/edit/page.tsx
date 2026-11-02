@@ -10,7 +10,7 @@ import { useUser } from '@/src/lib/UserContext';
 import { useDialogs } from '@/src/components/Dialogs';
 import { confirmLeave, useUnsavedChangesGuard } from '@/src/lib/leaveGuard';
 import {
-  addDays, addMinutes, dayLabel, hhmm, hoursLabel, shiftHours, shiftLabel, startsReceptionists, TIME_STEP_MINUTES, timeLabel,
+  addDays, addMinutes, dayLabel, maxAtOnce, hhmm, hoursLabel, shiftHours, shiftLabel, startsReceptionists, TIME_STEP_MINUTES, timeLabel,
   longDayLabel, timeOptions, todayIso, weekDates, weekRangeLabel, weekStartOf, weekday,
 } from '@/src/lib/schedule';
 
@@ -259,6 +259,14 @@ function ScheduleEditor() {
     POSTED: ['Posted', 'bg-[var(--success-soft)] text-[var(--success)]'],
   } as const;
   const [badgeText, badgeClass] = STATE_BADGE[week.state];
+  // Days with more stylists on at once than there are stations.
+  const overStations = days.flatMap((d) => {
+    const most = maxAtOnce(staff.filter((m) => m.role !== 'RECEPTIONIST').flatMap((m) => {
+      const c = cells[key(m.userId, d)];
+      return c && !c.off ? [{ start: c.start, end: c.end }] : [];
+    }));
+    return most > SALON.stations ? [`${longDayLabel(d)} (${most})`] : [];
+  });
   const conflicts = (week.timeOff ?? []).filter((d) => {
     const c = cells[key(d.userId, d.date)];
     return c && !c.off;
@@ -295,6 +303,12 @@ function ScheduleEditor() {
       ) : week.published && readOnly ? (
         <Banner tone="muted">This week is posted. Only someone who can approve the schedule can change it now.</Banner>
       ) : null}
+
+      {overStations.length > 0 && (
+        <Banner tone="warn">
+          <b>More stylists than the {SALON.stations} stations:</b> {overStations.join(', ')}.
+        </Banner>
+      )}
 
       {conflicts.length > 0 && (
         <Banner tone="warn">
@@ -479,7 +493,7 @@ function ScheduleEditor() {
             days={days}
             shiftsOn={(d) => staff.flatMap((m) => {
               const c = cells[key(m.userId, d)];
-              return c && !c.off ? [{ name: m.name, start: c.start, end: c.end }] : [];
+              return c && !c.off ? [{ name: m.name, role: m.role, start: c.start, end: c.end }] : [];
             })}
           />
         </table>
