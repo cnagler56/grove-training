@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grove.Domain.Dtos.PushSubscribeInput;
+import com.grove.Domain.Dtos.PushTestResult;
 import com.grove.Domain.PushSubscription;
 import com.grove.Domain.User;
 import com.grove.Repository.PushSubscriptionRepository;
@@ -42,6 +43,8 @@ public class PushService {
 	/** How long the push service keeps trying a phone that's off: a day. */
 	private static final int TTL_SECONDS = 24 * 60 * 60;
 	private static final Duration VAPID_LIFETIME = Duration.ofHours(12);
+	/** How much of a push service's answer to show on a test. */
+	private static final int MAX_ANSWER = 200;
 
 	private final PushSubscriptionRepository subscriptions;
 	private final UserRepository users;
@@ -102,12 +105,28 @@ public class PushService {
 		if (targets.isEmpty()) return;
 		byte[] message;
 		try {
-			message = json.writeValueAsBytes(java.util.Map.of("title", title, "body", body == null ? "" : body, "url", url));
+			message = message(title, body, url);
 		} catch (JsonProcessingException e) {
 			log.warn("Couldn't build a notification", e);
 			return;
 		}
 		CompletableFuture.runAsync(() -> targets.forEach(t -> deliver(t, message)));
+	}
+
+	/** Send a test to this person's devices now and report what each push service answered. */
+	public List<PushTestResult> test(User user) {
+		if (!isConfigured()) return List.of();
+		byte[] message;
+		try {
+			message = message("Grove Salons", "Test notification: this device is working.", "/home");
+		} catch (JsonProcessingException e) {
+			throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Couldn't build the test notification");
+		}
+		return subscriptions.findByUserIdIn(Set.of(user.getUserId())).stream().map(t -> deliver(t, message)).toList();
+	}
+
+	private byte[] message(String title, String body, String url) throws JsonProcessingException {
+		return json.writeValueAsBytes(java.util.Map.of("title", title, "body", body == null ? "" : body, "url", url));
 	}
 
 	/** Everyone on staff, minus {@code except}. */
@@ -117,7 +136,9 @@ public class PushService {
 			.map(User::getUserId).collect(Collectors.toSet());
 	}
 
-	private void deliver(PushSubscription target, byte[] message) {
+	/** Send one message; a status of 0 means the push service couldn't be reached. */
+	private PushTestResult deliver(PushSubscription target, byte[] message) {
+		String service = serviceName(target.getEndpoint());
 		try {
 			URI endpoint = URI.create(target.getEndpoint());
 			String audience = endpoint.getScheme() + "://" + endpoint.getRawAuthority();
@@ -125,6 +146,8 @@ public class PushService {
 			HttpRequest request = HttpRequest.newBuilder(endpoint)
 				.timeout(Duration.ofSeconds(20))
 				.header("TTL", String.valueOf(TTL_SECONDS))
+				// Otherwise a phone that's idle can hold these back for a long time.
+				.header("Urgency", "high")
 				.header("Content-Encoding", "aes128gcm")
 				.header("Content-Type", "application/octet-stream")
 				.header("Authorization", WebPushCrypto.vapidHeader(audience, subject, expires, publicKey, privateKey))
@@ -138,11 +161,23 @@ public class PushService {
 			} else if (status >= 300) {
 				log.warn("Push service answered {}: {}", status, response.body());
 			}
+			String answer = response.body() == null ? "" : response.body();
+			return new PushTestResult(service, status, answer.substring(0, Math.min(answer.length(), MAX_ANSWER)));
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+			return new PushTestResult(service, 0, "Interrupted");
 		} catch (Exception e) {
 			log.warn("Couldn't send a notification: {}", e.getMessage());
+			return new PushTestResult(service, 0, e.getMessage());
 		}
+	}
+
+	private static String serviceName(String endpoint) {
+		if (endpoint.contains("push.apple.com")) return "Apple";
+		if (endpoint.contains("googleapis.com")) return "Google";
+		if (endpoint.contains("mozilla.com")) return "Mozilla";
+		if (endpoint.contains("windows.com")) return "Microsoft";
+		return "The push service";
 	}
 
 	private static boolean blank(String s) {

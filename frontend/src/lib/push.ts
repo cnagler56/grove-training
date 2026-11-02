@@ -28,6 +28,15 @@ export async function currentSubscription() {
   return registration ? registration.pushManager.getSubscription() : null;
 }
 
+/** Whether a subscription was made with this server key. One made with an old key can never receive anything. */
+export function usesKey(subscription: PushSubscription, publicKey: string) {
+  const current = subscription.options.applicationServerKey;
+  if (!current) return true;
+  const a = new Uint8Array(current);
+  const b = keyBytes(publicKey);
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 /** Tell the server about this device, under whoever is signed in now. */
 export async function saveSubscription(subscription: PushSubscription) {
   const keys = subscription.toJSON().keys ?? {};

@@ -1,5 +1,6 @@
 package com.grove.Controller;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.grove.Domain.Dtos.PushSubscribeInput;
+import com.grove.Domain.Dtos.PushTestResult;
 import com.grove.Domain.Dtos.PushUnsubscribeInput;
 import com.grove.Service.PushService;
 import com.grove.Service.SessionService;
@@ -40,6 +42,12 @@ public class PushController {
 			@RequestBody PushSubscribeInput input) {
 		push.subscribe(sessions.requireUser(token), input);
 		return ResponseEntity.noContent().build();
+	}
+
+	/** Send a test to the signed-in person's devices and say how each push service answered. */
+	@PostMapping("/test")
+	public List<PushTestResult> test(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		return push.test(sessions.requireUser(token));
 	}
 
 	/** Knowing the device's secret address is what proves it's yours. */

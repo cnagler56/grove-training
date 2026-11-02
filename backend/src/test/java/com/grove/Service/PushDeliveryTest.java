@@ -55,7 +55,8 @@ class PushDeliveryTest {
 			received.put(path, Map.of(
 				"auth", exchange.getRequestHeaders().getFirst("Authorization"),
 				"encoding", exchange.getRequestHeaders().getFirst("Content-Encoding"),
-				"ttl", exchange.getRequestHeaders().getFirst("TTL")));
+				"ttl", exchange.getRequestHeaders().getFirst("TTL"),
+				"urgency", exchange.getRequestHeaders().getFirst("Urgency")));
 			bodySizes.add(exchange.getRequestBody().readAllBytes().length);
 			exchange.sendResponseHeaders(path.contains("gone") ? 410 : 201, -1);
 			exchange.close();
@@ -91,6 +92,18 @@ class PushDeliveryTest {
 		// A disabled account gets nothing; a working device stays saved.
 		assertThat(received).doesNotContainKey("/disabled");
 		assertThat(subscriptions.findByEndpoint(base() + "/live")).isPresent();
+	}
+
+	@Test
+	void aTestReportsWhatEachPushServiceAnswered() {
+		User ava = user("ava@grove.test", true);
+		device(ava, "/live");
+		device(ava, "/gone");
+
+		assertThat(push.test(ava)).extracting(r -> r.status()).containsExactlyInAnyOrder(201, 410);
+		assertThat(received.get("/live").get("urgency")).isEqualTo("high");
+		assertThat(subscriptions.findByEndpoint(base() + "/gone")).isEmpty();
+		assertThat(push.test(user("new@grove.test", true))).isEmpty();
 	}
 
 	private String base() {

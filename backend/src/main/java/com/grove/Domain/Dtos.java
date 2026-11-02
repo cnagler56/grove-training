@@ -191,6 +191,9 @@ public final class Dtos {
 
 	public record PushUnsubscribeInput(String endpoint) {}
 
+	/** What a push service answered to a test: status 0 means it couldn't be reached. */
+	public record PushTestResult(String service, int status, String answer) {}
+
 	public record TeamPinInput(boolean pinned) {}
 
 	public record TeamCommentView(Long id, String authorName, String body, LocalDateTime createdAt, boolean canDelete) {}

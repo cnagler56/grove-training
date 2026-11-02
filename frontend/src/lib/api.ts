@@ -499,6 +499,7 @@ export const api = {
   pushKey: () => send<{ publicKey: string }>('/api/push/key'),
   pushSubscribe: (s: { endpoint: string; p256dh: string; auth: string }) => send<void>('/api/push/subscribe', 'POST', s),
   pushUnsubscribe: (endpoint: string) => send<void>('/api/push/unsubscribe', 'POST', { endpoint }),
+  pushTest: () => send<{ service: string; status: number; answer: string }[]>('/api/push/test', 'POST'),
 
   teamBoard: (page: number) => send<TeamFeed>(`/api/team-board?page=${page}`),
   createTeamPost: (p: { body: string; withPhotos: boolean }) => send<{ id: number }>('/api/team-board', 'POST', p),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/src/lib/api';
-import { currentSubscription, pushSupport, saveSubscription, turnOffPush, turnOnPush } from '@/src/lib/push';
+import { currentSubscription, pushSupport, saveSubscription, turnOffPush, turnOnPush, usesKey } from '@/src/lib/push';
 
 const DISMISSED_KEY = 'grove.notifications.dismissed';
 
@@ -18,6 +18,7 @@ export default function NotificationsCard() {
   const [publicKey, setPublicKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +34,11 @@ export default function NotificationsCard() {
         next = 'denied';
       } else {
         const existing = await currentSubscription();
-        if (existing) {
+        if (existing && !usesKey(existing, key)) {
+          // Made with an old key, so it can't receive anything; the next turn-on makes a new one.
+          await turnOffPush();
+          next = 'off';
+        } else if (existing && Notification.permission === 'granted') {
           // Keeps the device tied to whoever is signed in now.
           await saveSubscription(existing);
           next = 'on';
@@ -69,9 +74,32 @@ export default function NotificationsCard() {
     }
   }
 
+  /** Send a test and say plainly what the push service answered. */
+  async function sendTest() {
+    setBusy(true);
+    setError(null);
+    setTestResult(null);
+    try {
+      const results = await api.pushTest();
+      setTestResult(results.length === 0
+        ? 'The server has no device saved for you. Turn notifications off and on again.'
+        : results.map((r) => {
+          if (r.status >= 200 && r.status < 300) return `${r.service} accepted it. It should appear within a few seconds. If it doesn't, your phone is holding it back: check this app's notification settings and Focus or Do Not Disturb.`;
+          if (r.status === 404 || r.status === 410) return `${r.service} says this device's address has expired. Turn notifications off and on again.`;
+          if (r.status === 0) return `The server couldn't reach ${r.service}: ${r.answer}`;
+          return `${r.service} refused it (${r.status}): ${r.answer}`;
+        }).join(' '));
+    } catch {
+      setError('The test didn\'t go through. Try again in a moment.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function turnOff() {
     setBusy(true);
     setError(null);
+    setTestResult(null);
     try {
       await turnOffPush();
       setState('off');
@@ -86,11 +114,15 @@ export default function NotificationsCard() {
 
   if (state === 'on') {
     return (
-      <p className="text-right text-xs opacity-70 md:col-span-2">
-        Notifications are on for this device.{' '}
-        <button className="font-semibold underline" onClick={() => void turnOff()} disabled={busy}>Turn off</button>
-        {error && <span className="ml-2 text-[var(--danger)]">{error}</span>}
-      </p>
+      <div className="text-right text-xs md:col-span-2">
+        <p className="opacity-70">
+          Notifications are on for this device.{' '}
+          <button className="font-semibold underline" onClick={() => void sendTest()} disabled={busy}>{busy ? 'Working…' : 'Send a test'}</button>{' '}
+          <button className="font-semibold underline" onClick={() => void turnOff()} disabled={busy}>Turn off</button>
+        </p>
+        {testResult && <p className="mt-1">{testResult}</p>}
+        {error && <p className="mt-1 text-[var(--danger)]">{error}</p>}
+      </div>
     );
   }
 
