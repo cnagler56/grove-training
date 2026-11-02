@@ -123,14 +123,14 @@ export default function TeamBoard() {
   async function removePost(p: TeamPost) {
     if (await dialogs.confirm({
       title: 'Delete this post?',
-      message: 'Its photos, comments, and likes go with it. This can\'t be undone.',
+      message: 'Its photos, responses, and likes go with it. This can\'t be undone.',
       confirmLabel: 'Delete post',
       danger: true,
     })) void act(() => api.deleteTeamPost(p.id));
   }
 
   async function removeComment(id: number) {
-    if (await dialogs.confirm({ title: 'Delete this comment?', message: 'This can\'t be undone.', confirmLabel: 'Delete', danger: true })) {
+    if (await dialogs.confirm({ title: 'Delete this response?', message: 'This can\'t be undone.', confirmLabel: 'Delete', danger: true })) {
       void act(() => api.deleteTeamComment(id));
     }
   }
@@ -226,14 +226,14 @@ function PostCard({ post, canPin, onLike, onPin, onDelete, onComment, onDeleteCo
   return (
     <article className={`card p-4 ${post.pinned ? 'border-2 border-[var(--accent)]' : ''}`}>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className="font-bold">{post.authorName}</span>
-        <span className="text-xs opacity-60">{when(post.createdAt)}</span>
+        <span className="text-lg font-bold">{post.authorName}</span>
+        <span className="text-sm opacity-70">{when(post.createdAt)}</span>
         {post.pinned && (
           <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs font-bold text-[var(--accent-strong)]">Pinned</span>
         )}
       </div>
 
-      {post.body && <p className="mt-1 whitespace-pre-line break-words text-sm"><Linked text={post.body} /></p>}
+      {post.body && <p className="mt-1 whitespace-pre-line break-words text-base leading-relaxed"><Linked text={post.body} /></p>}
 
       {post.imageIds.length > 0 && (
         <div className={`mt-2 grid gap-1.5 ${single ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-3'}`}>
@@ -252,7 +252,7 @@ function PostCard({ post, canPin, onLike, onPin, onDelete, onComment, onDeleteCo
         </div>
       )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-base">
         <button
           className={`font-semibold hover:underline ${post.likedByMe ? 'text-[var(--accent-strong)]' : 'opacity-70'}`}
           aria-pressed={post.likedByMe}
@@ -262,38 +262,51 @@ function PostCard({ post, canPin, onLike, onPin, onDelete, onComment, onDeleteCo
         </button>
         <span className="flex-1" />
         {canPin && (
-          <button className="text-xs font-semibold opacity-70 hover:underline" onClick={onPin}>{post.pinned ? 'Unpin' : 'Pin to top'}</button>
+          <button className="text-sm font-semibold opacity-70 hover:underline" onClick={onPin}>{post.pinned ? 'Unpin' : 'Pin to top'}</button>
         )}
         {post.canDelete && (
-          <button className="text-xs font-semibold text-[var(--danger)] hover:underline" onClick={onDelete}>Delete</button>
+          <button className="text-sm font-semibold text-[var(--danger)] hover:underline" onClick={onDelete}>Delete</button>
         )}
       </div>
 
-      {post.comments.length > 0 && (
-        <ul className="mt-2 space-y-1.5 border-t border-[var(--border)] pt-2 text-sm">
-          {post.comments.map((c) => (
-            <li key={c.id}>
-              <b>{c.authorName}</b> <span className="whitespace-pre-line break-words"><Linked text={c.body} /></span>
-              <span className="ml-2 text-xs opacity-50">{when(c.createdAt)}</span>
-              {c.canDelete && (
-                <button className="ml-2 text-xs font-semibold text-[var(--danger)] hover:underline" onClick={() => onDeleteComment(c.id)}>Delete</button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* Set in from the post with a line down the side, so they read as answers to it. */}
+      <div className="ml-2 mt-3 border-l-2 border-[var(--border)] pl-3 sm:ml-4 sm:pl-4">
+        {post.comments.length > 0 && (
+          <>
+            <h3 className="mb-2 text-sm font-bold opacity-70">
+              {post.comments.length} {post.comments.length === 1 ? 'response' : 'responses'}
+            </h3>
+            <ul className="mb-3 space-y-2.5">
+              {post.comments.map((c) => (
+                <li key={c.id}>
+                  <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
+                    <div className="font-bold">{c.authorName}</div>
+                    <div className="whitespace-pre-line break-words text-base"><Linked text={c.body} /></div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 px-3 text-sm">
+                    <span className="opacity-70">{when(c.createdAt)}</span>
+                    {c.canDelete && (
+                      <button className="font-semibold text-[var(--danger)] hover:underline" onClick={() => onDeleteComment(c.id)}>Delete</button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
-      <form onSubmit={send} className="mt-2 flex gap-2">
-        <input
-          className="input py-1.5 text-sm"
-          placeholder="Write a comment"
-          aria-label={`Comment on ${post.authorName}'s post`}
-          maxLength={1000}
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <button type="submit" className="btn-ghost shrink-0" disabled={sending || !comment.trim()}>Send</button>
-      </form>
+        <form onSubmit={send} className="flex gap-2">
+          <input
+            className="input py-1.5 text-base"
+            placeholder="Write a response"
+            aria-label={`Respond to ${post.authorName}'s post`}
+            maxLength={1000}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+          <button type="submit" className="btn-ghost shrink-0" disabled={sending || !comment.trim()}>Send</button>
+        </form>
+      </div>
     </article>
   );
 }
