@@ -276,6 +276,31 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
     setForm({ ...form, picked: Object.fromEntries(shuffled.map((id, i) => [id, i % form.teamNames.length])) });
   }
 
+  /**
+   * Teams as close in combined value as possible, sizes still within one of each other:
+   * the most valuable first, each onto the team with the lowest total that has room.
+   * People worth the same are shuffled, so pressing again can give a different mix.
+   */
+  function balanceByValue() {
+    const teamCount = form.teamNames.length;
+    const room = Math.ceil(pickedIds.length / teamCount);
+    const totals = Array(teamCount).fill(0);
+    const sizes = Array(teamCount).fill(0);
+    const order = [...pickedIds].sort(() => Math.random() - 0.5).sort((a, b) => (worthOf(b) ?? 100) - (worthOf(a) ?? 100));
+    const picked: Record<number, number> = {};
+    for (const id of order) {
+      let best = -1;
+      for (let t = 0; t < teamCount; t++) {
+        if (sizes[t] >= room) continue;
+        if (best < 0 || totals[t] < totals[best] || (totals[t] === totals[best] && sizes[t] < sizes[best])) best = t;
+      }
+      picked[id] = best;
+      totals[best] += worthOf(id) ?? 100;
+      sizes[best] += 1;
+    }
+    setForm({ ...form, picked });
+  }
+
   return (
     <form onSubmit={onSubmit} className="card space-y-5 p-5">
       <h2 className="text-lg font-extrabold">{isNew ? 'Start a contest' : `Change ${form.name || 'contest'}`}</h2>
@@ -343,7 +368,17 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
               <button type="button" className="btn-ghost" disabled={pickedIds.length < 2} onClick={splitEvenly}>
                 Split evenly at random
               </button>
+              {handicapped && (
+                <button type="button" className="btn-ghost" disabled={pickedIds.length < 2} onClick={balanceByValue}>
+                  Balance by value
+                </button>
+              )}
             </div>
+            <p className="text-xs opacity-70">
+              {handicapped
+                ? 'Split at random, balance the teams by value, or pick each person\'s team in the list below.'
+                : 'Split at random, or pick each person\'s team in the list below.'}
+            </p>
             {pickedIds.length > 0 && (
               <ul className="space-y-0.5 rounded-lg bg-[var(--surface-2)] px-3 py-2">
                 {form.teamNames.map((t, i) => {
