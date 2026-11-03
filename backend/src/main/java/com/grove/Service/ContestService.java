@@ -553,7 +553,7 @@ public class ContestService {
 		return Math.max(1, average / mine);
 	}
 
-	private static int toWorth(double boost) {
+	static int toWorth(double boost) {
 		int rounded = (int) Math.round(BASE_WORTH * boost / 5) * 5;
 		return Math.max(BASE_WORTH, Math.min(MAX_WORTH, rounded));
 	}

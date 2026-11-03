@@ -14,6 +14,9 @@ const NOTIFICATION_TABS = [{ href: '/notifications', label: 'Notifications' }];
 const TODO_TABS = [{ href: '/todos', label: 'To-do' }];
 const STAFF_TABS = [{ href: '/videos', label: 'Videos' }, { href: '/contests', label: 'Contests' }];
 const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
+/** The Grove Trail game: for people who do services, so not receptionists. */
+const TRAIL_TABS = [{ href: '/trail', label: 'Trail' }];
+const playsTrail = (r: string | undefined) => !!r && r !== 'CUSTOMER' && r !== 'RECEPTIONIST';
 /** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
 const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
@@ -50,6 +53,7 @@ function Header() {
     ...(isStaff ? NOTIFICATION_TABS : []),
     ...(hasTodos(user?.roles) ? TODO_TABS : []),
     ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
+    ...(playsTrail(user?.roles) ? TRAIL_TABS : []),
     ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
     ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
     ...(onSchedule(user?.roles) || perms.approveTimeOff ? TIME_OFF_TABS : []),
@@ -168,6 +172,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsStaff = pathname.startsWith('/videos') || pathname.startsWith('/account') || pathname.startsWith('/contests')
     || pathname.startsWith('/notifications');
   const needsMyWeek = pathname.startsWith('/my-week');
+  const needsTrail = pathname.startsWith('/trail');
   const needsTimeOff = pathname.startsWith('/time-off');
   const needsVacationPay = pathname.startsWith('/paid-time-off');
   const needsTodos = pathname.startsWith('/todos');
@@ -179,6 +184,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || (needsOwner && user.roles !== 'OWNER')
     || (needsStaff && user.roles === 'CUSTOMER')
     || (needsMyWeek && !hasMyWeek(user.roles))
+    || (needsTrail && !playsTrail(user.roles))
     || (needsTimeOff && !onSchedule(user.roles) && !perms.approveTimeOff)
     || (needsVacationPay && !onSchedule(user.roles) && user.roles !== 'OWNER')
     || (needsTodos && !hasTodos(user.roles))

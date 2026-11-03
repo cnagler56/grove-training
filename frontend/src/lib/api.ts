@@ -558,6 +558,114 @@ export interface AdminStatus {
   signupOpen: boolean;
 }
 
+export type TrailItem = 'FOOD' | 'DONKEY' | 'HORSE' | 'WAGON' | 'REPAIR' | 'SPARE_WHEEL' | 'HORSESHOES' | 'CARROTS' | 'PLAYLIST';
+export type TrailPace = 'LEISURELY' | 'STEADY' | 'GRUELING';
+export type TrailMount = 'WALK' | 'DONKEY' | 'HORSE';
+
+export interface TrailParty {
+  id: number;
+  miles: number;
+  /** The last landmark passed. */
+  at: string;
+  arrivedTurn: number | null;
+  /** Null before the first turn. */
+  place: number | null;
+  travel: string;
+  wagonBroken: boolean;
+  members: { userId: number; name: string; mount: string; labels: string[] }[];
+}
+
+export interface TrailChoice {
+  id: number;
+  kind: 'INVITE' | 'SKIM' | 'MEET' | 'GET_EVEN' | 'VOTE_OUT';
+  title: string;
+  text: string;
+  options: { value: string; label: string }[];
+  /** Meetings: what the party picked so far, and who picked it. */
+  answer: string | null;
+  answeredByName: string | null;
+  expiresTurn: number;
+}
+
+export interface TrailLogLine {
+  turn: number;
+  kind: string;
+  body: string;
+  coins: number | null;
+}
+
+/** The viewer's own place in a game, when they're playing. */
+export interface TrailMe {
+  userId: number;
+  coins: number;
+  mount: TrailMount;
+  shoeThrown: boolean;
+  noJoinUntil: number;
+  party: {
+    id: number;
+    food: number;
+    pace: TrailPace;
+    hangry: boolean;
+    wagon: boolean;
+    wagonBroken: boolean;
+    spareWheels: number;
+    horseshoes: number;
+    carrots: number;
+    playlists: number;
+    puppy: boolean;
+    members: { userId: number; name: string; coins: number; mount: TrailMount; shoeThrown: boolean }[];
+  };
+  /** This turn's scenario; null at the coast or before the game starts. */
+  scenario: {
+    key: string;
+    text: string;
+    options: { index: number; label: string; good: string; bad: string | null; isDefault: boolean; available: boolean }[];
+    chosen: number | null;
+    chosenByName: string | null;
+  } | null;
+  choices: TrailChoice[];
+  canInvite: { userId: number; name: string; miles: number }[];
+  purchases: TrailLogLine[];
+}
+
+export interface TrailGame {
+  id: number;
+  name: string;
+  status: 'UPCOMING' | 'LIVE' | 'FINISHED';
+  turn: number;
+  turns: number;
+  startDate: string;
+  prize: string | null;
+  handicap: ContestHandicap;
+  bonusTreatment: number;
+  bonusColor: number;
+  bonusWax: number;
+  lastCheckedAt: string | null;
+  /** Managers only: why coins couldn't be read at the last turn. */
+  checkProblem: string | null;
+  createdByName: string;
+  trailMiles: number;
+  landmarks: { name: string; miles: number }[];
+  /** Standings order. */
+  parties: TrailParty[];
+  me: TrailMe | null;
+  shop: { item: TrailItem; label: string; price: number; help: string }[];
+  log: TrailLogLine[];
+}
+
+export interface TrailGameInput {
+  name: string;
+  startDate: string | null;
+  turns: number;
+  prize: string | null;
+  handicap: ContestHandicap;
+  userIds: number[];
+  bonusTreatment: number;
+  bonusColor: number;
+  bonusWax: number;
+}
+
+
 /**
  * Every call goes to this site's own address (forwarded to the backend by
  * next.config.ts) and sends the session cookie. Errors surface the server's
@@ -705,6 +813,22 @@ export const api = {
   /** What each person's service would be worth with this handicap (100 for anyone at the average or better). */
   previewContestWorth: (p: { metric: ContestMetric; handicap: ContestHandicap; startDate: string | null; userIds: number[] }) =>
     send<{ userId: number; worth: number }[]>('/api/contests/worth-preview', 'POST', p),
+
+  trailGames: () => send<TrailGame[]>('/api/trail'),
+  trailGame: (id: number) => send<TrailGame>(`/api/trail/${id}`),
+  trailPeople: () => send<{ userId: number; name: string }[]>('/api/trail/people'),
+  createTrailGame: (g: TrailGameInput) => send<TrailGame>('/api/trail', 'POST', g),
+  deleteTrailGame: (id: number) => send<void>(`/api/trail/${id}`, 'DELETE'),
+  trailTurn: (id: number) => send<TrailGame>(`/api/trail/${id}/turn`, 'POST', {}),
+  trailChoose: (id: number, option: number) => send<TrailGame>(`/api/trail/${id}/choose`, 'POST', { option }),
+  trailBuy: (id: number, item: TrailItem, quantity: number, split: boolean) =>
+    send<TrailGame>(`/api/trail/${id}/buy`, 'POST', { item, quantity, split }),
+  trailPace: (id: number, pace: TrailPace) => send<TrailGame>(`/api/trail/${id}/pace`, 'POST', { pace }),
+  trailInvite: (id: number, userId: number) => send<TrailGame>(`/api/trail/${id}/invite`, 'POST', { userId }),
+  trailAnswer: (id: number, choiceId: number, answer: string) =>
+    send<TrailGame>(`/api/trail/${id}/choices/${choiceId}`, 'POST', { answer }),
+  trailLeave: (id: number) => send<TrailGame>(`/api/trail/${id}/leave`, 'POST', {}),
+  trailAbandonWagon: (id: number) => send<TrailGame>(`/api/trail/${id}/abandon-wagon`, 'POST', {}),
 
   contacts: () => send<BusinessContact[]>('/api/admin/contacts'),
   createContact: (c: ContactInput) => send<BusinessContact>('/api/admin/contacts', 'POST', c),
