@@ -605,7 +605,8 @@ export interface TrailMe {
   party: {
     id: number;
     food: number;
-    hangry: boolean;
+    /** How bad going without food has gotten ("Starving: ..."), or null when fed. */
+    hunger: string | null;
     wagon: boolean;
     wagonBroken: boolean;
     spareWheels: number;
@@ -636,6 +637,8 @@ export interface TrailGame {
   id: number;
   name: string;
   status: 'UPCOMING' | 'LIVE' | 'FINISHED';
+  /** The server is in practice mode: turns don't wait and everyone starts with 2,000 coins. */
+  practice: boolean;
   /** Turns unlocked so far. */
   turn: number;
   turns: number;

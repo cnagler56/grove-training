@@ -27,11 +27,15 @@ nothing preselected. Go stays off until you pick one.
 
 1. Your pick plays out: roll the option's odds (moved by the rubber band) and apply the good or bad outcome.
    Only now do you see what happened. In a party, whoever presses Go decides for everyone.
-2. Everyone eats 1 provision. Out of provisions = hungry: half speed until you find a trading post.
+2. Everyone eats 1 provision. Going without gets worse every turn until there's food: 1 turn hungry (half
+   speed), 2 to 3 weak (half speed, 10 points worse luck), 4 to 5 starving (a quarter speed, 20 points worse
+   luck), 6 or more too weak to travel at all. A traveling trader, a lucky scenario, or a kind stranger who
+   shares provisions is the way out.
 3. Move west: speed of the party's travel mode, minus any delays.
 4. Passing a fort with a trading post opens it until your next turn. Otherwise a traveling trader turns
    up 15% of the time. There is nowhere else to buy (a wheelwright for a broken wagon can be sent for anywhere).
-5. The next turn is dealt: usually a scenario (no repeats until you've seen them all); sometimes a meeting
+5. The next turn is dealt: usually a scenario where all four choices work for you right now (no selling or
+   throwing provisions you don't have; no repeats until you've seen them all); sometimes a meeting
    with someone on the same stretch of trail (see Meeting someone).
 6. Landmarks: a line in your log. The first party to each landmark, and everyone who reaches the Pacific,
    is posted on the Team Board. Only the Pacific gets a push notification.
@@ -196,7 +200,7 @@ Outcomes are in `TrailScenarios.java`.
 - **A buffalo herd stretches to the horizon.** Hunt one [50%] / Wait for them to pass [90%] (safe) / Ride straight through [35%] / Trade with buffalo hunters, 30 coins [80%]
 - **Smoke on the horizon. A prairie fire is heading your way.** Outrun it [45%] / Set a backfire [60%] / Shelter in a creek bed [90%] (safe) / Pray [30%]
 - **A rattlesnake is coiled in your bedroll.** Shoot it [60%] / Wait for it to leave [85%] (safe) / Grab it by the tail [20%] / Burn the bedroll [always]
-- **Black clouds, then hail the size of hen's eggs.** Push on [40%] / Circle up and wait [90%] (safe) / Hide under the wagon bed [70%] / Race for the trees [55%]
+- **Black clouds, then hail the size of hen's eggs.** Push on [40%] / Hunker down and wait [90%] (safe) / Shelter under a rocky ledge [70%] / Race for the trees [55%]
 - **The trail markers have vanished. There is no road out here.** Follow the sun west [60%] / Follow the river [85%] (safe) / Climb a hill and look [70%] / Trust your gut [40%]
 - **A fur trader offers to sell you a map of a shortcut.** Buy the map, 60 coins [45%] / Haggle him down, 20 coins [50%] / Trade him a haircut [65%] / Ignore him [always] (safe)
 - **A medicine show rolls into camp selling Dr. Pettibone's Miracle Hair Tonic.** Buy a bottle, 50 coins [35%] / Heckle the doctor [60%] / Offer to be his barber for a day [65%] / Keep walking [always] (safe)
@@ -208,7 +212,7 @@ Outcomes are in `TrailScenarios.java`.
 - **Prospectors say there's gold in a creek nearby.** Pan for a day [30%] / Sell them 2 provisions [65%] / Cut their hair for gold dust [60%] / Ignore it [always] (safe)
 - **A row of fresh graves by the trail. The markers all say "Drank the water."** Read every marker [always] / Hurry past [80%] (safe) / Sing a hymn for them [70%] / Test the water yourself [20%]
 - **Horse thieves are said to be working this stretch.** Stand watch all night [80%] (safe) / Hide your coin in your boot [70%] / Set a trap [45%] / Travel by night instead [50%]
-- **Another wagon party offers to trade.** Buy provisions, 40 coins [90%] (safe) / Sell 2 provisions [80%] / Offer haircuts for provisions [70%] / Swap stories by the fire [always]
+- **Another party of emigrants offers to trade.** Buy provisions, 40 coins [90%] (safe) / Sell 2 provisions [80%] / Offer haircuts for provisions [70%] / Swap stories by the fire [always]
 - **A dust storm blots out the sun.** Wait it out [90%] (safe) / Rope everyone together and walk [50%] / Navigate by compass [60%] / Sing loudly [35%]
 - **An emigrant family asks for help with a broken wheel.** Help them fix it [65%] / Sell them your tools [70%] / Take their spare wheel "for safekeeping" [40%] / Point them toward the fort [always] (safe)
 - **Everyone in camp has lice.** Shave every head in camp [70%] / Kerosene wash [60%] / Ignore it [80%] (safe) / Sell your fine-tooth comb [75%]

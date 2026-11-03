@@ -53,6 +53,11 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
           <span className={`text-sm font-bold ${g.status === 'LIVE' ? 'text-[var(--success)]' : 'opacity-70'}`}>{status}</span>
         </div>
         {g.prize && <p className="mt-1 text-sm"><b>Prize:</b> {g.prize}</p>}
+        {g.practice && (
+          <p className="mt-2 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm font-semibold">
+            Practice mode: turns don&apos;t wait for Salon Ultimate checks, and everyone started with 2,000 coins.
+          </p>
+        )}
         {g.checkProblem && <p className="mt-2 text-sm text-[var(--danger)]">Coins couldn&apos;t be counted: {g.checkProblem}</p>}
         {isManager && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -283,7 +288,7 @@ function MyTurn({ game: g, me, party, busy, act }: {
     <div className="space-y-4">
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         <span><b>{me.coins.toLocaleString('en-US')}</b> coins</span>
-        <span><b>{p.food}</b> provisions{p.hangry && <b className="text-[var(--danger)]"> (hungry: half speed)</b>}</span>
+        <span><b>{p.food}</b> provisions{p.hunger && <b className="text-[var(--danger)]"> ({p.hunger})</b>}</span>
         <span>{party.travel}</span>
         {together && <span>With {p.members.filter((m) => m.userId !== me.userId).map((m) => m.name).join(', ')}</span>}
       </p>

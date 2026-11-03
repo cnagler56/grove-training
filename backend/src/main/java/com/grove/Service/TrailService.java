@@ -91,7 +91,8 @@ public class TrailService {
 
 	public record MyMember(Long userId, String name, int coins, String mount, boolean shoeThrown) {}
 
-	public record MyParty(Long id, int food, boolean hangry, boolean wagon, boolean wagonBroken, int spareWheels,
+	/** {@code hunger}: how bad going without food has gotten, or null when fed. */
+	public record MyParty(Long id, int food, String hunger, boolean wagon, boolean wagonBroken, int spareWheels,
 		int horseshoes, int carrots, int playlists, boolean puppy, List<MyMember> members) {}
 
 	/** One of the four choices. No odds or outcomes: you find out when you press Go. */
@@ -115,8 +116,11 @@ public class TrailService {
 		boolean ready, MyParty party, TurnView turn, StoreView store, int repairPrice, List<ChoiceView> choices,
 		List<String> lastResult, List<LogView> purchases) {}
 
-	/** {@code status}: UPCOMING, LIVE, or FINISHED. {@code turn} is how many turns have unlocked. */
-	public record GameView(Long id, String name, String status, int turn, int turns, LocalDate startDate, String prize,
+	/**
+	 * {@code status}: UPCOMING, LIVE, or FINISHED. {@code turn} is how many turns have unlocked.
+	 * {@code practice}: the server is in practice mode (turns don't wait, 2,000 coins to start).
+	 */
+	public record GameView(Long id, String name, String status, boolean practice, int turn, int turns, LocalDate startDate, String prize,
 		String handicap, int bonusTreatment, int bonusColor, int bonusWax, LocalDateTime lastCheckedAt, String checkProblem,
 		String createdByName, int trailMiles, List<LandmarkView> landmarks, List<PartyView> parties, MeView me,
 		List<LogView> log) {}
@@ -134,12 +138,14 @@ public class TrailService {
 	private final PushService push;
 	private final TeamBoardService teamBoard;
 	private final ZoneId zone;
+	/** Practice mode: turns don't wait for checks and everyone starts with more coins. Off for real games. */
+	private boolean practice;
 	private Random random = new Random();
 
 	public TrailService(TrailGameRepository games, TrailPartyRepository parties, TrailPlayerRepository players,
 			TrailChoiceRepository choices, TrailLogRepository logs, UserRepository users, WeeklyStatRepository stats,
 			SalonUltimateClient salonUltimate, PushService push, TeamBoardService teamBoard,
-			@Value("${app.time-zone:America/Chicago}") String zone) {
+			@Value("${app.time-zone:America/Chicago}") String zone, @Value("${app.trail.practice:false}") boolean practice) {
 		this.games = games;
 		this.parties = parties;
 		this.players = players;
@@ -151,6 +157,12 @@ public class TrailService {
 		this.push = push;
 		this.teamBoard = teamBoard;
 		this.zone = ZoneId.of(zone);
+		this.practice = practice;
+	}
+
+	/** For tests: practice mode on or off. */
+	void setPractice(boolean practice) {
+		this.practice = practice;
 	}
 
 	/** For tests: dice that roll the same way every time. */
@@ -243,12 +255,17 @@ public class TrailService {
 			pl.setGameId(g.getId());
 			pl.setUserId(u.getUserId());
 			pl.setPartyId(p.getId());
-			pl.setCoins(TrailOdds.STARTING_COINS);
+			pl.setCoins(practice ? TrailOdds.PRACTICE_COINS : TrailOdds.STARTING_COINS);
 			pl.setWorth(worths.getOrDefault(u.getUserId(), ContestService.BASE_WORTH));
 			players.save(pl);
 		}
+		// Everyone sees their first four choices right away; a game starting today starts now, at turn 1.
+		Turn first = new Turn(g);
+		for (TrailParty p : first.onTrail()) deal(first, p);
+		first.save();
+		if (start.equals(today())) unlock(g);
 		push.notify(group.stream().map(User::getUserId).toList(), name,
-			"You're on the Grove Trail, starting " + (start.equals(today()) ? "today" : start.format(SHORT_DATE))
+			"You're on the Grove Trail, starting " + (start.equals(today()) ? "now" : start.format(SHORT_DATE))
 				+ ". Pack provisions.", PAGE);
 		return view(g, manager);
 	}
@@ -354,7 +371,8 @@ public class TrailService {
 		int bonus(TrailParty p) {
 			List<TrailPlayer> m = members(p);
 			int karma = (int) Math.round(m.stream().mapToInt(pl -> karmaNow(pl, t)).average().orElse(0));
-			return karma + TrailOdds.paceLuck(p.getPace()) + p.getLuck() + (p.isPuppy() ? TrailOdds.PUPPY_LUCK : 0);
+			return karma + TrailOdds.paceLuck(p.getPace()) + p.getLuck() + (p.isPuppy() ? TrailOdds.PUPPY_LUCK : 0)
+				+ TrailOdds.hungerLuck(p.getHungryTurns());
 		}
 
 		void story(TrailParty p, TrailLog.Kind kind, String body) {
@@ -407,7 +425,17 @@ public class TrailService {
 		Turn turn = new Turn(g);
 		TrailParty p = turn.partyById.get(mine.getPartyId());
 		if (p.getArrivedTurn() != null) throw bad("You've already reached the Pacific");
-		if (p.getTurnsPlayed() >= g.getTurn()) throw bad("Your next turn unlocks at the next Salon Ultimate check");
+		if (practice && p.getTurnsPlayed() >= g.getTurn() && g.getTurn() < g.getTurns()) {
+			// Practice: no waiting for the next check.
+			g.setTurn(g.getTurn() + 1);
+			games.save(g);
+			turn = new Turn(g);
+			p = turn.partyById.get(mine.getPartyId());
+		}
+		if (p.getTurnsPlayed() >= g.getTurn()) {
+			throw bad(p.getTurnsPlayed() >= g.getTurns() ? "You've played every turn. The game ends at the next check."
+				: "Your next turn unlocks at the next Salon Ultimate check");
+		}
 		playTurn(turn, p, input == null ? new PlayInput(null, null) : input, viewer.getUserId());
 		turn.save();
 		if (turn.onTrail().isEmpty()) finish(turn);
@@ -566,7 +594,10 @@ public class TrailService {
 		return " The wagon is broken down until it's repaired.";
 	}
 
-	/** Out of food: Hangry, at half speed, until there's food again. */
+	/**
+	 * Everyone eats. Without enough, it gets worse every turn: hungry (half speed), weak (worse luck),
+	 * starving (a quarter speed, much worse luck), then too weak to travel at all until there's food.
+	 */
 	private void eat(Turn turn, TrailParty p) {
 		int need = turn.members(p).size() * TrailOdds.paceFood(p.getPace()) + (p.isPuppy() ? 1 : 0);
 		if (p.getFood() >= need) {
@@ -575,8 +606,17 @@ public class TrailService {
 			return;
 		}
 		p.setFood(0);
-		if (!p.isHangry()) turn.story(p, TrailLog.Kind.STORY, "Out of provisions. Everyone is hungry: half speed until you find a trading post.");
 		p.setHangry(true);
+		p.setHungryTurns(p.getHungryTurns() + 1);
+		int n = p.getHungryTurns();
+		String text = switch (n) {
+			case 1 -> "Out of provisions. Everyone is hungry: half speed until you find food.";
+			case 2 -> "A second turn without food. Everyone is weak, and luck is turning against you.";
+			case 4 -> "Starving. A quarter speed now, and everything is harder.";
+			default -> n >= 6 ? "Too weak to travel. You lie by the trail and hope for a trader, a hunt, or a kind stranger." : null;
+		};
+		if (text != null) turn.story(p, TrailLog.Kind.STORY, text);
+		if (n == 4 || n == 6) push.notify(turn.ids(p), turn.game.getName(), text, PAGE);
 	}
 
 	/** Move west; passing a fort opens its trading post, and now and then a traveling trader turns up. */
@@ -584,11 +624,11 @@ public class TrailService {
 		List<TrailPlayer> members = turn.members(p);
 		fixShoes(p, members);
 		int before = p.getMiles();
-		if (!p.isWagonBroken()) {
+		if (!p.isWagonBroken() && TrailOdds.hungerSpeed(p.getHungryTurns()) > 0) {
 			int base = p.isWagon() ? TrailOdds.WAGON_SPEED
 				: members.stream().mapToInt(pl -> TrailOdds.speed(pl.getMount(), pl.isShoeThrown())).min().orElse(TrailOdds.WALK_SPEED);
 			double miles = base * TrailOdds.lengthScale(turn.game.getTurns()) * TrailOdds.paceSpeed(p.getPace())
-				* (p.isHangry() ? TrailOdds.HANGRY_SPEED : 1) * turn.move.getOrDefault(p.getId(), 1.0)
+				* TrailOdds.hungerSpeed(p.getHungryTurns()) * turn.move.getOrDefault(p.getId(), 1.0)
 				+ turn.extra.getOrDefault(p.getId(), 0);
 			p.setMiles(Math.max(0, Math.min(TrailOdds.TRAIL_MILES, before + (int) Math.round(miles))));
 		}
@@ -677,10 +717,14 @@ public class TrailService {
 			case HORSE -> Who.HORSE;
 		}));
 		Set<String> seen = new HashSet<>(p.getSeen() == null || p.getSeen().isBlank() ? List.of() : List.of(p.getSeen().split(",")));
-		List<Scenario> options = TrailScenarios.ALL.stream().filter(s -> fits.contains(s.who()) && !seen.contains(s.key())).toList();
+		// Only scenarios where all four choices work right now: no selling provisions you don't have.
+		List<Scenario> usable = TrailScenarios.ALL.stream()
+			.filter(s -> fits.contains(s.who()) && s.options().stream().allMatch(o -> available(o, p)))
+			.toList();
+		List<Scenario> options = usable.stream().filter(s -> !seen.contains(s.key())).toList();
 		if (options.isEmpty()) {
 			seen.clear();
-			options = TrailScenarios.ALL.stream().filter(s -> fits.contains(s.who())).toList();
+			options = usable.isEmpty() ? TrailScenarios.ALL.stream().filter(s -> s.who() == Who.ANY).toList() : usable;
 		}
 		Scenario sc = options.get(random.nextInt(options.size()));
 		seen.add(sc.key());
@@ -719,24 +763,22 @@ public class TrailService {
 	// Meetings: helping, robbing, or traveling together.
 
 	/**
-	 * The four things a party can do about someone it ran into: ride on (the default), share
-	 * provisions, rob them, and one more: travel together when that's on offer, help mend a
-	 * broken wagon, or lend coin.
+	 * The four things a party can do about someone it ran into, first four that make sense of: ride on
+	 * (the default), share provisions (if you have any), rob them, travel together (when on offer),
+	 * help mend their broken wagon, lend coin (if you have any), raid their provisions.
 	 */
 	private List<OptionView> meetingOptions(Turn turn, TrailParty p) {
 		TrailParty them = p.getEncounterPartyId() == null ? null : turn.partyById.get(p.getEncounterPartyId());
+		boolean coins = turn.members(p).stream().anyMatch(pl -> pl.getCoins() > 0);
 		List<OptionView> out = new ArrayList<>();
 		out.add(new OptionView("WAVE", "Tip your hat and ride on", true));
-		out.add(new OptionView("HELP_FOOD", "Share your provisions", true));
+		if (p.getFood() > 0) out.add(new OptionView("HELP_FOOD", "Share your provisions", true));
 		out.add(new OptionView("STEAL_COINS", "Rob them in the night", true));
-		if (them != null && p.isEncounterJoin() && canTravelTogether(turn, p, them)) {
-			out.add(new OptionView("JOIN", "Ask them to travel together", true));
-		} else if (them != null && them.isWagonBroken()) {
-			out.add(new OptionView("HELP_WAGON", "Help mend their wagon", true));
-		} else {
-			out.add(new OptionView("HELP_COINS", "Lend them some coin", true));
-		}
-		return out;
+		if (them != null && p.isEncounterJoin() && canTravelTogether(turn, p, them)) out.add(new OptionView("JOIN", "Ask them to travel together", true));
+		if (them != null && them.isWagonBroken()) out.add(new OptionView("HELP_WAGON", "Help mend their wagon", true));
+		if (coins) out.add(new OptionView("HELP_COINS", "Lend them some coin", true));
+		out.add(new OptionView("STEAL_FOOD", "Raid their provisions", true));
+		return out.subList(0, Math.min(4, out.size()));
 	}
 
 	private void settleMeeting(Turn turn, TrailParty p, String answer, TrailPlayer me) {
@@ -1331,6 +1373,7 @@ public class TrailService {
 	}
 
 	private static boolean available(Option op, TrailParty p) {
+		if (p.getFood() < op.foodNeeded) return false;
 		return switch (op.needs) {
 			case NOTHING -> true;
 			case WAGON -> p.isWagon();
@@ -1340,7 +1383,7 @@ public class TrailService {
 	}
 
 	private static String unavailable(Option op) {
-		return op.needs == Needs.WAGON ? "You need a wagon for that" : op.needs == Needs.CARROTS ? "You don't have any carrots"
+		return op.foodNeeded > 0 ? "You don't have the provisions for that" : op.needs == Needs.WAGON ? "You need a wagon for that" : op.needs == Needs.CARROTS ? "You don't have any carrots"
 			: op.needs == Needs.PLAYLIST ? "You don't have the Playlist" : "You can't pick that";
 	}
 
@@ -1456,7 +1499,7 @@ public class TrailService {
 		List<LandmarkView> landmarks = TrailOdds.LANDMARKS.stream()
 			.map(l -> new LandmarkView(l.name(), l.miles(), l.lon(), l.lat(), l.store())).toList();
 		String status = g.getFinishedAt() != null ? "FINISHED" : g.getTurn() == 0 ? "UPCOMING" : "LIVE";
-		return new GameView(g.getId(), g.getName(), status, g.getTurn(), g.getTurns(), g.getStartDate(), g.getPrize(),
+		return new GameView(g.getId(), g.getName(), status, practice, g.getTurn(), g.getTurns(), g.getStartDate(), g.getPrize(),
 			g.getHandicap().name(), g.getBonusTreatment(), g.getBonusColor(), g.getBonusWax(), g.getLastCheckedAt(),
 			viewer.isAdmin() ? g.getCheckProblem() : null,
 			users.findById(g.getCreatedBy()).map(TrailService::name).orElse("Former employee"),
@@ -1467,11 +1510,12 @@ public class TrailService {
 		TrailGame g = turn.game;
 		TrailParty p = turn.partyById.get(me.getPartyId());
 		List<TrailPlayer> members = turn.members(p);
-		MyParty party = new MyParty(p.getId(), p.getFood(), p.isHangry(), p.isWagon(), p.isWagonBroken(),
+		MyParty party = new MyParty(p.getId(), p.getFood(), TrailOdds.hungerLabel(p.getHungryTurns()), p.isWagon(), p.isWagonBroken(),
 			p.getSpareWheels(), p.getHorseshoes(), p.getCarrots(), p.getPlaylists(), p.isPuppy(),
 			members.stream().map(pl -> new MyMember(pl.getUserId(), turn.nameOf(pl.getUserId()), pl.getCoins(), pl.getMount().name(), pl.isShoeThrown()))
 				.sorted(Comparator.comparing(m -> m.name().toLowerCase())).toList());
-		boolean ready = g.getFinishedAt() == null && p.getArrivedTurn() == null && p.getTurnsPlayed() < g.getTurn();
+		boolean ready = g.getFinishedAt() == null && p.getArrivedTurn() == null
+			&& p.getTurnsPlayed() < (practice && g.getTurn() > 0 ? g.getTurns() : g.getTurn());
 
 		TurnView next = null;
 		if (p.getArrivedTurn() == null && g.getFinishedAt() == null) {

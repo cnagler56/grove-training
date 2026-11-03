@@ -56,6 +56,8 @@ public final class TrailScenarios {
 		public final Fx good, bad;
 		public boolean isDefault;
 		public Needs needs = Needs.NOTHING;
+		/** Provisions this option uses up front (selling them, throwing bacon). It isn't offered without them. */
+		public int foodNeeded;
 		public int cost;
 		public boolean costEach;
 
@@ -68,6 +70,7 @@ public final class TrailScenarios {
 
 		Option def() { isDefault = true; return this; }
 		Option needs(Needs n) { needs = n; return this; }
+		Option usesFood(int n) { foodNeeded = n; return this; }
 		Option cost(int n) { cost = n; return this; }
 		Option costEach(int n) { cost = n; costEach = true; return this; }
 
@@ -128,9 +131,9 @@ public final class TrailScenarios {
 			o("Grab it by the tail", 20, fx("It's impressed. +20 miles of bragging.").miles(20), fx("Bitten. Lose a turn.").move(0)),
 			sure("Burn the bedroll", fx("A cold night. -10 miles.").miles(-10))),
 		s("hail", Who.ANY, "Black clouds, then hail the size of hen's eggs.",
-			o("Push on", 40, fx("+20 miles.").miles(20), fx("Battered. Wagons break down; everyone else loses a turn.").move(0).breakWagon()),
-			o("Circle up and wait", 90, fx("Lose half a turn.").move(0.5), fx("Lose a turn.").move(0)).def(),
-			o("Hide under the wagon bed", 70, fx("Lose a quarter turn.").move(0.75), fx("It blows over. Wagons break down; everyone else loses a turn.").move(0).breakWagon()),
+			o("Push on", 40, fx("+20 miles.").miles(20), fx("Battered and bruised. Lose a turn, and any wagon breaks down.").move(0).breakWagon()),
+			o("Hunker down and wait", 90, fx("Lose half a turn.").move(0.5), fx("Lose a turn.").move(0)).def(),
+			o("Shelter under a rocky ledge", 70, fx("Lose a quarter turn.").move(0.75), fx("The ledge leaks hail. Lose a turn, and any wagon breaks down.").move(0).breakWagon()),
 			o("Race for the trees", 55, fx("+10 miles.").miles(10), fx("Lose half a turn and a provision.").move(0.5).food(-1))),
 		s("lost", Who.ANY, "The trail markers have vanished. There is no road out here.",
 			o("Follow the sun west", 60, fx("+20 miles.").miles(20), fx("The sun moves. Who knew. -30 miles.").miles(-30)),
@@ -143,19 +146,19 @@ public final class TrailScenarios {
 			o("Trade him a haircut", 65, fx("He's a new man and draws you a better map. +40 miles.").miles(40), fx("He hates it and storms off. -20 miles.").miles(-20)),
 			sure("Ignore him", NOTHING).def()),
 		s("tonic", Who.ANY, "A medicine show rolls into camp selling Dr. Pettibone's Miracle Hair Tonic.",
-			o("Buy a bottle, 50 coins", 35, fx("Your oxen have never looked better. Double miles.").move(2), fx("It's turpentine.")).cost(50),
+			o("Buy a bottle, 50 coins", 35, fx("You have never looked better, and it shows in your stride. Double miles.").move(2), fx("It's turpentine.")).cost(50),
 			o("Heckle the doctor", 60, fx("The crowd tips you 30 coins.").coins(30), fx("He sets his dog on you. Lose half a turn.").move(0.5)),
 			o("Offer to be his barber for a day", 65, fx("Lose a turn, but earn 150 coins.").move(0).coins(150), fx("Lose a turn for 40 coins.").move(0).coins(40)),
 			sure("Keep walking", NOTHING).def()),
 		s("soldiers", Who.ANY, "A company of soldiers is camped by the trail. Their hair is a disgrace.",
 			o("Cut the whole company", 70, fx("Lose a turn, earn 250 coins.").move(0).coins(250), fx("Lose a turn, earn 80 coins.").move(0).coins(80)),
 			o("Just the captain", 85, fx("+60 coins.").coins(60), fx("He wanted a trim, not a removal. -20 coins.").coins(-20)),
-			o("Sell them 2 provisions", 60, fx("+80 coins.").food(-2).coins(80), fx("They haggle hard. +20 coins.").food(-2).coins(20)),
+			o("Sell them 2 provisions", 60, fx("+80 coins.").food(-2).coins(80), fx("They haggle hard. +20 coins.").food(-2).coins(20)).usesFood(2),
 			sure("Move on", NOTHING).def()),
 		s("wolves", Who.ANY, "Wolves circle camp after dark.",
 			o("Keep the fire high all night", 85, fx("They give up by dawn."), fx("They make off with 2 provisions.").food(-2)).def(),
 			o("Fire into the dark", 55, fx("They scatter."), fx("You hit the coffee pot. -1 provision.").food(-1)),
-			o("Throw them some bacon", 75, fx("They take it and go. -1 provision.").food(-1), fx("They want more. -3 provisions.").food(-3)),
+			o("Throw them some bacon", 75, fx("They take it and go. -1 provision.").food(-1), fx("They want more. -3 provisions.").food(-3)).usesFood(1),
 			o("Howl back", 25, fx("They're confused and leave. +10 miles of confidence.").miles(10), fx("They are not confused. -3 provisions.").food(-3))),
 		s("dysentery", Who.ANY, "You have dysentery.",
 			o("Rest a day", 85, fx("Lose half a turn.").move(0.5), fx("Lose a turn.").move(0)).def(),
@@ -174,7 +177,7 @@ public final class TrailScenarios {
 			o("Buy netting from a trader, 20 coins", 90, fx("+10 miles in comfort.").miles(10), NOTHING).cost(20)),
 		s("gold", Who.ANY, "Prospectors say there's gold in a creek nearby.",
 			o("Pan for a day", 30, fx("Gold! Lose a turn, gain 300 coins.").move(0).coins(300), fx("Fool's gold. Lose a turn, gain 5 coins.").move(0).coins(5)),
-			o("Sell them 2 provisions", 65, fx("+100 coins.").food(-2).coins(100), fx("+30 coins.").food(-2).coins(30)),
+			o("Sell them 2 provisions", 65, fx("+100 coins.").food(-2).coins(100), fx("+30 coins.").food(-2).coins(30)).usesFood(2),
 			o("Cut their hair for gold dust", 60, fx("Lose half a turn, gain 120 coins.").move(0.5).coins(120), fx("Lose half a turn, gain 30 coins.").move(0.5).coins(30)),
 			sure("Ignore it", fx("+5 miles of good sense.").miles(5)).def()),
 		s("graves", Who.ANY, "A row of fresh graves by the trail. The markers all say \"Drank the water.\"",
@@ -187,9 +190,9 @@ public final class TrailScenarios {
 			o("Hide your coin in your boot", 70, NOTHING, fx("They check boots. -60 coins.").coins(-60)),
 			o("Set a trap", 45, fx("You catch one. The reward is 150 coins.").coins(150), fx("You catch yourself. Lose half a turn.").move(0.5)),
 			o("Travel by night instead", 50, fx("+30 miles.").miles(30), fx("You stumble into a gully. Lose half a turn and a provision.").move(0.5).food(-1))),
-		s("trade", Who.ANY, "Another wagon party offers to trade.",
+		s("trade", Who.ANY, "Another party of emigrants offers to trade.",
 			o("Buy provisions, 40 coins", 90, fx("+4 provisions.").food(4), fx("+2 provisions.").food(2)).cost(40).def(),
-			o("Sell 2 provisions", 80, fx("+60 coins.").food(-2).coins(60), fx("+20 coins.").food(-2).coins(20)),
+			o("Sell 2 provisions", 80, fx("+60 coins.").food(-2).coins(60), fx("+20 coins.").food(-2).coins(20)).usesFood(2),
 			o("Offer haircuts for provisions", 70, fx("Lose half a turn, gain 5 provisions.").move(0.5).food(5), fx("Lose half a turn, gain 1 provision.").move(0.5).food(1)),
 			sure("Swap stories by the fire", fx("+10 miles of good cheer.").miles(10))),
 		s("duststorm", Who.ANY, "A dust storm blots out the sun.",
@@ -209,8 +212,8 @@ public final class TrailScenarios {
 			o("Sell your fine-tooth comb", 75, fx("+40 coins.").coins(40), fx("+10 coins.").coins(10))),
 		s("wetgoods", Who.ANY, "Half your supplies got soaked crossing a creek.",
 			o("Dry everything out", 90, fx("Lose a quarter turn.").move(0.75), fx("Lose half a turn.").move(0.5)).def(),
-			o("Eat the wet stuff first", 70, NOTHING, fx("You're sick. Lose half a turn.").move(0.5)),
-			o("Sell it cheap at the next camp", 60, fx("+30 coins.").food(-2).coins(30), fx("+5 coins.").food(-2).coins(5)),
+			o("Eat the wet stuff first", 70, NOTHING, fx("You're sick. Lose half a turn.").move(0.5)).usesFood(1),
+			o("Sell it cheap at the next camp", 60, fx("+30 coins.").food(-2).coins(30), fx("+5 coins.").food(-2).coins(5)).usesFood(2),
 			sure("Leave it and travel light", fx("-2 provisions, +10 miles.").food(-2).miles(10))),
 		s("fourth", Who.ANY, "Independence Day. A camp of emigrants is celebrating.",
 			o("Join the dance", 70, fx("A grand time. Next turn more likely to go well.").luck(15), fx("You step on the judge. Lose half a turn.").move(0.5)),
@@ -224,7 +227,7 @@ public final class TrailScenarios {
 			sure("Decline", NOTHING).def()),
 		s("rain", Who.ANY, "It rains for three days straight.",
 			o("Wait it out", 90, fx("Lose half a turn.").move(0.5), fx("Lose a turn.").move(0)).def(),
-			o("Push through the mud", 45, fx("+10 miles.").miles(10), fx("Stuck to the axles. Lose a turn.").move(0)),
+			o("Push through the mud", 45, fx("+10 miles.").miles(10), fx("Stuck in the mud to your knees. Lose a turn.").move(0)),
 			o("Build a proper shelter", 70, fx("Lose a quarter turn.").move(0.75), fx("It leaks. Lose half a turn.").move(0.5)),
 			sure("Wash everyone's hair in it", fx("Everyone feels human again. Next turn more likely to go well. Lose half a turn.").luck(15).move(0.5))),
 		s("grasshoppers", Who.ANY, "A swarm of grasshoppers descends on camp.",
@@ -241,12 +244,12 @@ public final class TrailScenarios {
 			o("Back away slowly", 85, fx("Lose a quarter turn.").move(0.75), fx("Lose half a turn.").move(0.5)).def(),
 			o("Make yourself big", 55, fx("It leaves."), fx("It doesn't. Lose 3 provisions.").food(-3)),
 			o("Play dead", 45, NOTHING, fx("It plays along for hours. Lose a turn.").move(0)),
-			o("Throw it the bacon", 75, fx("It takes it. -2 provisions.").food(-2), fx("It wants all of it. -4 provisions.").food(-4))),
+			o("Throw it the bacon", 75, fx("It takes it. -2 provisions.").food(-2), fx("It wants all of it. -4 provisions.").food(-4)).usesFood(2)),
 		s("dog", Who.ANY, "A stray dog has been following you for miles.",
 			o("Adopt it", 80, fx("A loyal companion. Better luck the rest of the way. It eats a provision a turn.").puppy(), fx("It runs off with a provision.").food(-1)),
 			o("Shoo it away", 90, NOTHING, fx("It takes it personally. -10 miles.").miles(-10)).def(),
 			o("Give it a trim", 60, fx("It looks dashing. A settler pays 40 coins for it.").coins(40), fx("It bites. Lose a quarter turn.").move(0.75)),
-			sure("Feed it once", fx("-1 provision. It wanders off happy.").food(-1))),
+			sure("Feed it once", fx("-1 provision. It wanders off happy.").food(-1)).usesFood(1)),
 
 		// Only for one way of getting around.
 		s("boots", Who.WALK, "Your boots have worn clean through.",
@@ -287,8 +290,8 @@ public final class TrailScenarios {
 		s("axle", Who.WAGON, "A terrible creaking from the wagon axle.",
 			o("Stop and tighten it", 85, fx("Lose a quarter turn.").move(0.75), fx("It breaks anyway.").breakWagon()).def(),
 			o("Ignore it", 40, fx("It goes away."), fx("The axle snaps. The wagon breaks down.").breakWagon()),
-			o("Lighten the load, dump 2 provisions", 75, fx("The creak stops. -2 provisions.").food(-2), fx("It breaks anyway, and you're 2 provisions lighter.").food(-2).breakWagon()),
-			o("Grease it with bacon fat", 60, fx("Smooth as butter. -1 provision.").food(-1), fx("Now it creaks and smells. -1 provision.").food(-1))),
+			o("Lighten the load, dump 2 provisions", 75, fx("The creak stops. -2 provisions.").food(-2), fx("It breaks anyway, and you're 2 provisions lighter.").food(-2).breakWagon()).usesFood(2),
+			o("Grease it with bacon fat", 60, fx("Smooth as butter. -1 provision.").food(-1), fx("Now it creaks and smells. -1 provision.").food(-1)).usesFood(1)),
 		s("crossing", Who.WAGON, "A deep, fast river. The wagon will have to cross.",
 			o("Ford it", 55, fx("Across, for free."), fx("You lose 3 provisions to the river.").food(-3)),
 			o("Caulk the wagon and float it", 60, fx("+20 miles.").miles(20), fx("It sinks halfway. The wagon breaks down.").breakWagon()),
@@ -311,11 +314,11 @@ public final class TrailScenarios {
 			o("Everyone chips in, 10 coins each", 90, fx("+3 provisions from the next camp.").food(3), fx("+1 provision.").food(1)).costEach(10).def(),
 			o("Brew chicory root", 55, fx("Close enough. +10 miles.").miles(10), fx("Not close enough. -10 miles.").miles(-10)),
 			sure("Go without", fx("Everyone is grim. -10 miles.").miles(-10))),
-		s("bacon", Who.PARTY, "Somebody ate the last of the bacon.",
+		s("bacon", Who.PARTY, "Somebody ate most of the bacon.",
 			o("Investigate", 50, fx("The culprit confesses and buys 3 provisions.").food(3), fx("Everyone is a suspect. -1 provision, -20 miles.").food(-1).miles(-20)),
 			o("Let it go", 90, fx("-1 provision.").food(-1), fx("-1 provision and a lot of feelings.").food(-1).miles(-5)).def(),
 			o("Accuse the dog", 60, fx("Everyone agrees. Peace."), fx("There is no dog. -10 miles.").miles(-10)),
-			o("Ration everything from now on", 70, fx("+2 provisions saved.").food(2), fx("Mutiny. Lose half a turn.").move(0.5))),
+			o("Ration everything from now on", 70, fx("+2 provisions saved.").food(2), fx("Mutiny. Lose half a turn.").move(0.5)).usesFood(1)),
 		s("trims", Who.PARTY, "Everyone trims each other's hair by the campfire.",
 			o("Everyone trims everyone", 60, fx("You look amazing. +30 miles.").miles(30), fx("One part is crooked and nobody will say whose. -20 miles.").miles(-20)),
 			o("Just a little off the ends", 90, fx("+10 miles.").miles(10), fx("-5 miles.").miles(-5)).def(),

@@ -111,6 +111,7 @@ class TrailTests {
 		dice.roll = 0;
 		dice.chance = 0.99;
 		service.setRandom(dice);
+		service.setPractice(false);
 	}
 
 	@Test
@@ -118,13 +119,15 @@ class TrailTests {
 		long id = create(game("Grove Trail", 40, avaId, miaId));
 		mvc.perform(get("/api/trail").cookie(rae))
 			.andExpect(jsonPath("$[0].name").value("Grove Trail"))
-			.andExpect(jsonPath("$[0].status").value("UPCOMING"))
+			.andExpect(jsonPath("$[0].status").value("LIVE"))
+			.andExpect(jsonPath("$[0].turn").value(1))
 			.andExpect(jsonPath("$[0].parties.length()").value(2))
 			.andExpect(jsonPath("$[0].me").doesNotExist());
 		mvc.perform(get("/api/trail/" + id).cookie(ava))
 			.andExpect(jsonPath("$.me.coins").value(200))
 			.andExpect(jsonPath("$.me.party.food").value(5))
-			.andExpect(jsonPath("$.me.ready").value(false))
+			.andExpect(jsonPath("$.me.ready").value(true))
+			.andExpect(jsonPath("$.me.turn.options.length()").value(4))
 			.andExpect(jsonPath("$.me.store.name").value("Maple Grove, Minnesota Territory"))
 			.andExpect(jsonPath("$.landmarks[19].name").value("The Pacific at Haystack Rock"))
 			.andExpect(jsonPath("$.landmarks[0].lon").value(-93.46));
@@ -136,6 +139,60 @@ class TrailTests {
 		mvc.perform(get("/api/trail/people").cookie(manager))
 			.andExpect(jsonPath("$.length()").value(3))
 			.andExpect(jsonPath("$[?(@.name == 'Rae Hill')]").isEmpty());
+	}
+
+	@Test
+	void aGameStartingLaterShowsTheFirstChoicesButWaitsToStart() throws Exception {
+		Map<String, Object> later = game("Later", 40, avaId, miaId);
+		later.put("startDate", today.plusDays(3).toString());
+		long id = create(later);
+		JsonNode g = view(ava, id);
+		assertThat(g.get("status").asText()).isEqualTo("UPCOMING");
+		assertThat(g.at("/me/ready").asBoolean()).isFalse();
+		assertThat(g.at("/me/turn/options").size()).isEqualTo(4);
+		send(ava, post("/api/trail/" + id + "/play"), Map.of("option", 0), status().isBadRequest());
+	}
+
+	@Test
+	void practiceModeLetsYouPlayTurnAfterTurnWithMoreCoins() throws Exception {
+		service.setPractice(true);
+		long id = create(game("Practice", 30, avaId, miaId));
+		JsonNode g = view(ava, id);
+		assertThat(g.get("practice").asBoolean()).isTrue();
+		assertThat(g.at("/me/coins").asInt()).isEqualTo(2000);
+		for (int i = 0; i < 5; i++) go(ava, id, Map.of("option", 0));
+		JsonNode after = view(ava, id);
+		assertThat(after.at("/me/turnsPlayed").asInt()).isEqualTo(5);
+		assertThat(after.at("/me/ready").asBoolean()).isTrue();
+		// Turns still stop at the game's length.
+		for (int i = 5; i < 30 && view(ava, id).at("/me/ready").asBoolean(); i++) go(ava, id, Map.of("option", 0));
+		send(ava, post("/api/trail/" + id + "/play"), Map.of("option", 0), status().isBadRequest());
+	}
+
+	@Test
+	void goingWithoutFoodGetsWorseUntilYouCantTravelAndNothingNeedsFoodYouDontHave() throws Exception {
+		service.setPractice(true);
+		long id = create(game("Hungry", 40, avaId, miaId));
+		List<String> stages = new java.util.ArrayList<>();
+		for (int i = 0; i < 11; i++) {
+			JsonNode g = view(ava, id);
+			// Every choice offered actually works: no selling or throwing provisions you don't have.
+			for (JsonNode o : g.at("/me/turn/options")) assertThat(o.get("available").asBoolean()).as(o.get("label").asText()).isTrue();
+			if (g.at("/me/party/food").asInt() == 0) {
+				assertThat(g.at("/me/turn/options").findValuesAsText("label")).noneMatch(l -> l.contains("provisions") && l.startsWith("Sell"));
+			}
+			go(ava, id, Map.of());
+			stages.add(view(ava, id).at("/me/party/hunger").asText(""));
+		}
+		// 5 provisions last 5 turns, then hungry, weak, starving, and finally too weak to travel.
+		assertThat(stages).contains("Hungry: half speed");
+		assertThat(stages).anyMatch(s -> s.startsWith("Weak with hunger"));
+		assertThat(stages).anyMatch(s -> s.startsWith("Starving"));
+		assertThat(stages.get(stages.size() - 1)).startsWith("Too weak to travel");
+		int miles = party(view(ava, id), avaId).get("miles").asInt();
+		go(ava, id, Map.of());
+		assertThat(party(view(ava, id), avaId).get("miles").asInt()).isEqualTo(miles);
+		assertThat(bodies(view(ava, id))).anyMatch(b -> b.startsWith("Too weak to travel"));
 	}
 
 	@Test
@@ -169,9 +226,8 @@ class TrailTests {
 
 	@Test
 	void goPlaysYourTurnRightAwayAndTheNextWaitsForTheNextCheck() throws Exception {
+		// A game starting today starts at turn 1.
 		long id = create(game("Grove Trail", 40, avaId, miaId));
-		send(ava, post("/api/trail/" + id + "/play"), Map.of("option", 0), status().isBadRequest());
-		unlock(id);
 		JsonNode g = view(ava, id);
 		assertThat(g.at("/me/ready").asBoolean()).isTrue();
 		assertThat(g.at("/me/turn/kind").asText()).isEqualTo("SCENARIO");
@@ -199,6 +255,12 @@ class TrailTests {
 			assertThat(sc.options()).as(sc.key()).hasSize(4);
 			assertThat(sc.options().stream().filter(o -> o.isDefault).count()).as(sc.key()).isEqualTo(1);
 			assertThat(sc.options().get(sc.defaultOption()).needs).as(sc.key()).isEqualTo(TrailScenarios.Needs.NOTHING);
+			// Only wagon scenarios talk about your wagon: people on foot or horseback get these too.
+			if (sc.who() != TrailScenarios.Who.WAGON) {
+				for (TrailScenarios.Option o : sc.options()) {
+					assertThat(o.label.toLowerCase()).as(sc.key()).doesNotContain("wagon bed", "the wagon", "your wagon", "axle", "oxen");
+				}
+			}
 		}
 	}
 
@@ -293,7 +355,8 @@ class TrailTests {
 		go(mia, id, Map.of("answer", "STEAL_COINS"));
 		assertThat(player(id, avaId).getCoins()).isLessThan(before);
 		assertThat(bodies(view(ava, id))).anyMatch(b -> b.startsWith("Mia Cruz robbed Ava Stone of"));
-		send(mia, post("/api/trail/" + id + "/play"), Map.of("answer", "STEAL_COINS"), status().isBadRequest());
+		// One meeting, one chance: the next turn is an ordinary scenario.
+		assertThat(view(mia, id).at("/me/turn/kind").asText()).isEqualTo("SCENARIO");
 	}
 
 	@Test
@@ -315,7 +378,7 @@ class TrailTests {
 		JsonNode g = view(mia, id);
 		assertThat(g.at("/me/party/members").size()).isEqualTo(1);
 		assertThat(g.at("/me/party/food").asInt()).isEqualTo(food / 2);
-		assertThat(g.at("/me/noJoinUntil").asInt()).isEqualTo(2 + 4);
+		assertThat(g.at("/me/noJoinUntil").asInt()).isEqualTo(3 + 4);
 		assertThat(bodies(g)).anyMatch(b -> b.contains("Mia Cruz left their party"));
 	}
 
@@ -355,7 +418,7 @@ class TrailTests {
 		JsonNode a = view(ava, id);
 		assertThat(a.at("/me/party/members").size()).isEqualTo(1);
 		assertThat(a.at("/me/party/food").asInt()).isZero();
-		assertThat(a.at("/me/noJoinUntil").asInt()).isEqualTo(5 + 8);
+		assertThat(a.at("/me/noJoinUntil").asInt()).isEqualTo(6 + 8);
 		assertThat(party(a, avaId).toString()).contains("Sticky Fingers");
 	}
 
@@ -363,7 +426,7 @@ class TrailTests {
 	void afterTheLastTurnUnplayedTurnsTakeTheSafeChoiceAndTheStandingsArePosted() throws Exception {
 		long id = create(game("Grove Trail", 30, avaId, miaId));
 		long postsBefore = posts.count();
-		for (int i = 0; i < 30; i++) unlock(id);
+		for (int i = 0; i < 29; i++) unlock(id);
 		assertThat(view(ava, id).get("status").asText()).isEqualTo("LIVE");
 		unlock(id);
 		JsonNode g = view(ava, id);

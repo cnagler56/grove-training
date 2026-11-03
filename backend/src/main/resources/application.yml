@@ -59,6 +59,10 @@ app:
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
   # true in production (HTTPS): the sign-in cookie is only ever sent over HTTPS.
   cookie-secure: ${COOKIE_SECURE:false}
+  # The Grove Trail. Practice mode is for trying a game in one sitting: turns don't wait
+  # for Salon Ultimate checks and everyone starts with 2,000 coins. Leave it off for real games.
+  trail:
+    practice: ${TRAIL_PRACTICE:false}
   # Salon Ultimate sign-in for pulling each employee's weekly numbers (Saturday mornings).
   # Blank username/password = off.
   salon-ultimate:

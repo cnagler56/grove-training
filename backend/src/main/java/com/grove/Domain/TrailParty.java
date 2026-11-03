@@ -63,9 +63,13 @@ public class TrailParty {
 	@Column(nullable = false)
 	private boolean puppy;
 
-	/** Ran out of food: half speed until they have some again. */
+	/** Ran out of food. See {@code hungryTurns} for how bad it has gotten. */
 	@Column(nullable = false)
 	private boolean hangry;
+
+	/** Turns in a row without provisions; the longer it goes, the worse it gets. 0 once fed. */
+	@Column(name = "hungry_turns", nullable = false)
+	private int hungryTurns;
 
 	/** Points added to the next scenario's odds, then cleared. */
 	@Column(nullable = false)
@@ -134,7 +138,14 @@ public class TrailParty {
 	public void setPuppy(boolean puppy) { this.puppy = puppy; }
 
 	public boolean isHangry() { return hangry; }
-	public void setHangry(boolean hangry) { this.hangry = hangry; }
+	/** Fed again (false) also ends the hungry streak. */
+	public void setHangry(boolean hangry) {
+		this.hangry = hangry;
+		if (!hangry) hungryTurns = 0;
+	}
+
+	public int getHungryTurns() { return hungryTurns; }
+	public void setHungryTurns(int hungryTurns) { this.hungryTurns = hungryTurns; }
 
 	public int getLuck() { return luck; }
 	public void setLuck(int luck) { this.luck = luck; }

@@ -56,6 +56,8 @@ public final class TrailOdds {
 	public static final int MAX_TURNS = 50;
 	public static final int DEFAULT_TURNS = 40;
 	public static final int STARTING_COINS = 200;
+	/** In practice mode, enough to try the shop and wagons without waiting for sales. */
+	public static final int PRACTICE_COINS = 2000;
 	public static final int STARTING_FOOD = 5;
 	public static final int MAX_PARTY = 4;
 	public static final int DEFAULT_BONUS_TREATMENT = 25;
@@ -104,8 +106,26 @@ public final class TrailOdds {
 		};
 	}
 
-	/** Out of food: this much of the usual speed. */
-	public static final double HANGRY_SPEED = 0.5;
+	// Hunger: the longer without provisions, the worse it gets.
+
+	/** Speed after this many turns in a row without food: 1 hungry, 2-3 weak, 4-5 starving, 6+ too weak to travel. */
+	public static double hungerSpeed(int turns) {
+		return turns <= 0 ? 1 : turns <= 3 ? 0.5 : turns <= 5 ? 0.25 : 0;
+	}
+
+	/** Odds points lost to hunger: none at first, then worse. */
+	public static int hungerLuck(int turns) {
+		return turns <= 1 ? 0 : turns <= 3 ? -10 : -20;
+	}
+
+	/** What the party sees, or null when fed. */
+	public static String hungerLabel(int turns) {
+		if (turns <= 0) return null;
+		if (turns == 1) return "Hungry: half speed";
+		if (turns <= 3) return "Weak with hunger: half speed, and luck is turning";
+		if (turns <= 5) return "Starving: a quarter speed, and everything is harder";
+		return "Too weak to travel until you find food";
+	}
 
 	/** A wagon breaks down on its own this often each turn (doubled on Grueling), on top of risky scenario choices. */
 	public static final double WAGON_BREAKDOWN = 0.02;
