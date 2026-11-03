@@ -1,17 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { api, type TrailGame, type TrailItem, type TrailMe, type TrailPace, type TrailParty } from '@/src/lib/api';
-import { formatDate, formatDateTime, ordinal } from '@/src/lib/format';
+import { api, type TrailGame, type TrailItem, type TrailMe, type TrailParty } from '@/src/lib/api';
+import { formatDate, ordinal } from '@/src/lib/format';
 import { useDialogs } from '@/src/components/Dialogs';
-
-const PACES: { value: TrailPace; label: string; help: string }[] = [
-  { value: 'LEISURELY', label: 'Leisurely', help: 'Slower, and things go wrong less often. Self care.' },
-  { value: 'STEADY', label: 'Steady', help: 'The usual.' },
-  { value: 'GRUELING', label: 'Grueling', help: 'A quarter faster, but you eat double and luck gets worse.' },
-];
-
-const MOUNTS: Record<string, string> = { WALK: 'On foot', DONKEY: 'Donkey', HORSE: 'Horse' };
 
 /** Party members' names: "Ava Stone", "Ava Stone and Mia Cruz", "Ava, Mia, and Lee". */
 function names(p: TrailParty): string {
@@ -20,7 +12,12 @@ function names(p: TrailParty): string {
   return `${n.slice(0, -1).join(', ')}, and ${n[n.length - 1]}`;
 }
 
-/** One game: status, the map, the viewer's own party and decisions, standings, and the log. */
+/** "The Crow River" reads as "the Crow River" mid-sentence. */
+const inSentence = (place: string) => place.replace(/^The /, 'the ');
+
+const firstNames = (p: TrailParty) => p.members.map((m) => m.name.split(' ')[0]).join(' and ');
+
+/** One game: the map, then the viewer's turn. Standings and the log are tucked away below. */
 export default function TrailGameCard({ game: g, viewerId, isManager, onChange, onDelete }: {
   game: TrailGame;
   viewerId: number | undefined;
@@ -55,42 +52,37 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
           <h2 className="text-xl font-extrabold">{g.name}</h2>
           <span className={`text-sm font-bold ${g.status === 'LIVE' ? 'text-[var(--success)]' : 'opacity-70'}`}>{status}</span>
         </div>
-        <p className="mt-1 text-sm opacity-80">
-          {g.turns} turns from {formatDate(g.startDate, false)}. Coins: 1 per dollar of service sales, plus {g.bonusTreatment} per
-          treatment, {g.bonusColor} per color, and {g.bonusWax} per wax
-          {g.handicap !== 'NONE' && ', with a handicap'}.
-        </p>
         {g.prize && <p className="mt-1 text-sm"><b>Prize:</b> {g.prize}</p>}
-        <p className="mt-1 text-xs opacity-60">
-          {g.lastCheckedAt ? `Coins last counted ${formatDateTime(g.lastCheckedAt)}. ` : ''}
-          A turn runs at 8, 12, 4, and 8 every day.
-        </p>
-        {g.checkProblem && <p className="mt-2 text-sm text-[var(--danger)]">Coins couldn&apos;t be counted last turn: {g.checkProblem}</p>}
+        {g.checkProblem && <p className="mt-2 text-sm text-[var(--danger)]">Coins couldn&apos;t be counted: {g.checkProblem}</p>}
         {isManager && (
           <div className="mt-3 flex flex-wrap gap-2">
             {g.status !== 'FINISHED' && g.startDate <= new Date().toLocaleDateString('en-CA') && (
-              <button className="btn-ghost" disabled={busy} onClick={() => void act(() => api.trailTurn(g.id))}>Play the next turn now</button>
+              <button className="btn-ghost" disabled={busy} onClick={() => void act(() => api.trailUnlock(g.id))}>
+                {g.turn >= g.turns ? 'End the game now' : 'Unlock the next turn now'}
+              </button>
             )}
             <button className="text-sm font-bold text-[var(--danger)] hover:underline" onClick={onDelete}>Delete</button>
           </div>
         )}
-        {error && <p className="mt-2 text-sm text-[var(--danger)]">{error}</p>}
       </div>
+
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
 
       <TrailMap game={g} myPartyId={g.me?.party.id} />
 
-      {g.me && myParty && (
-        <MyTrail game={g} me={g.me} party={myParty} busy={busy} act={act} />
-      )}
+      {g.me && myParty && <MyTurn game={g} me={g.me} party={myParty} busy={busy} act={act} />}
 
-      <Standings game={g} viewerId={viewerId} />
+      <details className="text-sm">
+        <summary className="cursor-pointer font-extrabold">Standings</summary>
+        <Standings game={g} viewerId={viewerId} />
+      </details>
 
-      <div>
-        <h3 className="mb-2 text-lg font-extrabold">What happened</h3>
+      <details className="text-sm">
+        <summary className="cursor-pointer font-extrabold">Everything that&apos;s happened</summary>
         {g.log.length === 0 ? (
-          <p className="text-sm opacity-70">Nothing yet. The trail awaits.</p>
+          <p className="mt-2 opacity-70">Nothing yet. The trail awaits.</p>
         ) : (
-          <ol className="max-h-96 space-y-2 overflow-y-auto pr-1 text-sm">
+          <ol className="mt-2 max-h-96 space-y-2 overflow-y-auto pr-1">
             {g.log.map((l, i) => (
               <li key={i} className="flex gap-3">
                 <span className="w-14 shrink-0 text-xs font-bold opacity-60">Turn {l.turn}</span>
@@ -99,114 +91,154 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
             ))}
           </ol>
         )}
-      </div>
+      </details>
+
+      {g.me && g.me.purchases.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer font-extrabold">Who paid for what</summary>
+          <ul className="mt-2 space-y-1">
+            {g.me.purchases.map((l, i) => (
+              <li key={i}><span className="mr-2 text-xs font-bold opacity-60">Turn {l.turn}</span>{l.body}</li>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
   );
 }
 
-/**
- * The route from Maple Grove to the coast, top to bottom: every landmark with its miles,
- * and each party as a labeled marker where it is. A thin bar above shows the whole trail.
- */
+// The map: the overland route plotted from real coordinates, Maple Grove on the right, the Pacific on the left.
+
+const WEST = -125.2, EAST = -90.6, NORTH = 48.3, SOUTH = 44.9;
+const x = (lon: number) => 3 + ((lon - WEST) / (EAST - WEST)) * 94;
+const y = (lat: number) => 12 + ((NORTH - lat) / (NORTH - SOUTH)) * 76;
+
+const TERRITORIES = [
+  { name: 'Oregon', lon: -121.6, lat: 45.1 },
+  { name: 'Washington Territory', lon: -119.6, lat: 47.9 },
+  { name: 'Idaho Territory', lon: -115.2, lat: 45.4 },
+  { name: 'Montana Territory', lon: -109.0, lat: 47.6 },
+  { name: 'Dakota Territory', lon: -100.0, lat: 46.2 },
+  { name: 'Minnesota', lon: -94.5, lat: 47.6 },
+];
+
+/** Where on the map someone this many miles along is: between the two landmarks around them. */
+function spot(g: TrailGame, miles: number): { x: number; y: number } {
+  const ls = g.landmarks;
+  for (let i = 0; i < ls.length - 1; i++) {
+    const a = ls[i], b = ls[i + 1];
+    if (miles <= b.miles) {
+      const t = (miles - a.miles) / (b.miles - a.miles || 1);
+      return { x: x(a.lon + (b.lon - a.lon) * t), y: y(a.lat + (b.lat - a.lat) * t) };
+    }
+  }
+  const last = ls[ls.length - 1];
+  return { x: x(last.lon), y: y(last.lat) };
+}
+
 function TrailMap({ game: g, myPartyId }: { game: TrailGame; myPartyId: number | undefined }) {
-  const at = (miles: number) => {
-    let i = 0;
-    g.landmarks.forEach((l, j) => { if (l.miles <= miles) i = j; });
-    return i;
-  };
-  const pct = (miles: number) => `${(Math.min(miles, g.trailMiles) / g.trailMiles) * 100}%`;
-  const mine = g.parties.find((p) => p.id === myPartyId);
+  const me = g.parties.find((p) => p.id === myPartyId);
+  const points = g.landmarks.map((l) => `${x(l.lon)},${y(l.lat)}`).join(' ');
+  // The route walked so far, up to where the viewer is.
+  const walked = me ? [...g.landmarks.filter((l) => l.miles <= me.miles).map((l) => ({ x: x(l.lon), y: y(l.lat) })), spot(g, me.miles)] : [];
+  const nextStop = me ? g.landmarks.find((l) => l.miles > me.miles) : undefined;
+  const start = g.landmarks[0], end = g.landmarks[g.landmarks.length - 1];
+
+  // Everyone else, with names stacked so close neighbors don't overlap.
+  const others = g.parties.filter((p) => p.id !== myPartyId)
+    .map((p) => ({ p, at: spot(g, p.miles) }))
+    .sort((a, b) => a.at.x - b.at.x);
+  const rows: number[] = [];
+  const placed = others.map((o) => {
+    let row = 0;
+    while (rows[row] !== undefined && o.at.x - rows[row] < 9) row++;
+    rows[row] = o.at.x;
+    return { ...o, row };
+  });
 
   return (
     <div>
-      <h3 className="mb-2 text-lg font-extrabold">The map</h3>
-      <div className="relative mb-6 mt-1 h-2 rounded-full bg-[var(--surface-2)]" aria-hidden>
+      <div className="relative h-56 w-full overflow-hidden rounded-xl bg-[var(--surface-2)] sm:h-72">
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          <polyline points={points} fill="none" stroke="var(--foreground)" strokeOpacity="0.3" strokeWidth="2" strokeDasharray="6 6"
+            vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          {walked.length > 1 && (
+            <polyline points={walked.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="var(--accent)" strokeWidth="4"
+              vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          )}
+        </svg>
+        {TERRITORIES.map((s) => (
+          <span key={s.name} className="pointer-events-none absolute -translate-x-1/2 text-[10px] font-bold uppercase tracking-widest opacity-25 sm:text-xs"
+            style={{ left: `${x(s.lon)}%`, top: `${y(s.lat)}%` }}>{s.name}</span>
+        ))}
         {g.landmarks.map((l) => (
-          <span key={l.name} className="absolute top-0 h-2 w-px bg-[var(--border)]" style={{ left: pct(l.miles) }} />
+          <span key={l.name} title={`${l.name}, mile ${l.miles}`}
+            className={`absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${l.miles === g.trailMiles ? 'bg-[var(--success)]' : 'bg-[var(--foreground)] opacity-40'}`}
+            style={{ left: `${x(l.lon)}%`, top: `${y(l.lat)}%` }} />
         ))}
-        {g.parties.map((p) => (
-          <span key={p.id}
-            className={`absolute -top-1 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-[var(--surface)] ${p.id === myPartyId ? 'bg-[var(--accent)]' : 'bg-[var(--foreground)] opacity-50'}`}
-            style={{ left: pct(p.miles) }} />
+        <span className="pointer-events-none absolute -translate-x-1/2 whitespace-nowrap text-[10px] font-bold opacity-70 sm:text-xs"
+          style={{ left: `${x(start.lon)}%`, top: `calc(${y(start.lat)}% + 24px)` }}>Maple Grove</span>
+        <span className="pointer-events-none absolute -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-[var(--success)] sm:text-xs"
+          style={{ left: `${x(end.lon)}%`, top: `calc(${y(end.lat)}% - 26px)` }}>The Pacific</span>
+        {placed.map(({ p, at, row }) => (
+          <div key={p.id} className="absolute" style={{ left: `${at.x}%`, top: `${at.y}%` }}>
+            <span className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--foreground)] opacity-60" />
+            <span className="absolute z-20 -translate-x-1/2 whitespace-nowrap rounded bg-[var(--surface)] px-1 text-[10px] font-semibold opacity-80 sm:text-xs"
+              style={{ top: `${-26 - row * 16}px` }}>{firstNames(p)}</span>
+          </div>
         ))}
-        {mine && (
-          <span className="absolute top-4 -translate-x-1/2 whitespace-nowrap text-xs font-bold text-[var(--accent-strong)]"
-            style={{ left: `clamp(1.5rem, ${pct(mine.miles)}, calc(100% - 1.5rem))` }}>You</span>
+        {me && (
+          <div className="absolute z-10" style={{ left: `${spot(g, me.miles).x}%`, top: `${spot(g, me.miles).y}%` }}>
+            <span className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--accent)]" />
+            <span className="absolute -translate-x-1/2 whitespace-nowrap rounded bg-[var(--accent)] px-1.5 text-xs font-extrabold text-[var(--accent-ink)]"
+              style={{ top: '12px' }}>You</span>
+          </div>
         )}
       </div>
-      <ol className="relative ml-2 border-l-2 border-[var(--border)]">
-        {g.landmarks.map((l, i) => {
-          const here = g.parties.filter((p) => at(p.miles) === i);
-          const last = i === g.landmarks.length - 1;
-          return (
-            <li key={l.name} className="relative pb-3 pl-5 last:pb-0">
-              <span className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full ${last ? 'bg-[var(--success)]' : 'bg-[var(--border)]'}`} />
-              <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                <span className="font-bold">{l.name}</span>
-                <span className="text-xs opacity-60">mile {l.miles}</span>
-              </div>
-              {here.length > 0 && (
-                <ul className="mt-1 space-y-1">
-                  {here.map((p) => (
-                    <li key={p.id}
-                      className={`rounded-lg px-2.5 py-1 text-sm ${p.id === myPartyId ? 'bg-[var(--accent)] text-[var(--accent-ink)]' : 'bg-[var(--surface-2)]'}`}>
-                      <b>{names(p)}</b>
-                      {p.id === myPartyId && ' (you)'}
-                      <span className="opacity-80">
-                        {p.arrivedTurn !== null ? `, at the coast since turn ${p.arrivedTurn}` : `, mile ${p.miles}, ${p.travel}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ol>
+      {me && (
+        <p className="mt-2 text-sm">
+          {me.arrivedTurn !== null
+            ? <>You reached the Pacific in {me.arrivedTurn} turns.</>
+            : <><b>Mile {me.miles}</b> of {g.trailMiles.toLocaleString('en-US')}, past {inSentence(me.at)}{nextStop && `. ${nextStop.miles - me.miles} miles to ${inSentence(nextStop.name)}`}.</>}
+        </p>
+      )}
     </div>
   );
 }
 
 function Standings({ game: g, viewerId }: { game: TrailGame; viewerId: number | undefined }) {
   return (
-    <div>
-      <h3 className="mb-2 text-lg font-extrabold">Standings</h3>
-      <ol className="divide-y divide-[var(--border)]">
-        {g.parties.map((p) => {
-          const mine = p.members.some((m) => m.userId === viewerId);
-          const tied = p.place !== null && g.parties.filter((o) => o.place === p.place).length > 1;
-          return (
-            <li key={p.id} className={`flex items-center gap-3 px-2 py-2.5 ${mine ? 'rounded-lg bg-[var(--accent-soft)]' : ''}`}>
-              <span className="w-14 shrink-0 text-sm font-extrabold">{p.place === null ? '' : `${tied ? 'Tied ' : ''}${ordinal(p.place)}`}</span>
-              <div className="min-w-0 flex-1">
-                <div className="break-words font-bold">{names(p)}{mine && ' (you)'}</div>
-                <div className="text-xs opacity-70">
-                  {p.travel}{p.members.length > 1 && !p.travel.startsWith('Wagon') && `: ${p.members.map((m) => `${m.name.split(' ')[0]} ${m.mount.toLowerCase()}`).join(', ')}`}
+    <ol className="mt-2 divide-y divide-[var(--border)]">
+      {g.parties.map((p) => {
+        const mine = p.members.some((m) => m.userId === viewerId);
+        const tied = p.place !== null && g.parties.filter((o) => o.place === p.place).length > 1;
+        return (
+          <li key={p.id} className={`flex items-center gap-3 px-2 py-2 ${mine ? 'rounded-lg bg-[var(--accent-soft)]' : ''}`}>
+            <span className="w-14 shrink-0 font-extrabold">{p.place === null ? '' : `${tied ? 'Tied ' : ''}${ordinal(p.place)}`}</span>
+            <div className="min-w-0 flex-1">
+              <div className="break-words font-bold">{names(p)}{mine && ' (you)'}</div>
+              <div className="text-xs opacity-70">{p.travel}</div>
+              {p.members.some((m) => m.labels.length > 0) && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {p.members.flatMap((m) => m.labels.map((label) => (
+                    <span key={`${m.userId}-${label}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${label === 'Sticky Fingers' ? 'bg-[var(--danger)] text-white' : 'bg-[var(--success-soft)] text-[var(--success)]'}`}>
+                      {p.members.length > 1 ? `${m.name.split(' ')[0]}: ` : ''}{label}
+                    </span>
+                  )))}
                 </div>
-                {p.members.some((m) => m.labels.length > 0) && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {p.members.flatMap((m) => m.labels.map((label) => (
-                      <span key={`${m.userId}-${label}`}
-                        className={`rounded-full px-2 py-0.5 text-xs font-bold ${label === 'Sticky Fingers' ? 'bg-[var(--danger)] text-white' : 'bg-[var(--success-soft)] text-[var(--success)]'}`}>
-                        {p.members.length > 1 ? `${m.name.split(' ')[0]}: ` : ''}{label}
-                      </span>
-                    )))}
-                  </div>
-                )}
-              </div>
-              <span className="shrink-0 text-right text-sm font-extrabold">
-                {p.arrivedTurn !== null ? 'At the coast' : `${p.miles} mi`}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+              )}
+            </div>
+            <span className="shrink-0 text-right font-extrabold">{p.arrivedTurn !== null ? 'At the Pacific' : `${p.miles} mi`}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
-/** The viewer's own party: this turn's scenario, open questions, supplies, the shop, and who to travel with. */
-function MyTrail({ game: g, me, party, busy, act }: {
+/** The viewer's turn: what just happened, anything to answer, four choices and Go, and a trading post when there is one. */
+function MyTurn({ game: g, me, party, busy, act }: {
   game: TrailGame;
   me: TrailMe;
   party: TrailParty;
@@ -216,12 +248,21 @@ function MyTrail({ game: g, me, party, busy, act }: {
   const dialogs = useDialogs();
   const p = me.party;
   const together = p.members.length > 1;
-  const open = g.status !== 'FINISHED' && party.arrivedTurn === null;
+  const turn = me.turn;
+  const [picked, setPicked] = useState<string | null>(null);
+  // Nothing is picked until you pick it: no hints about which choice is safe.
+  const choice = picked !== null && turn?.options.some((o) => o.value === picked && o.available) ? picked : null;
+
+  async function go() {
+    if (!turn || choice === null) return;
+    await act(() => api.trailPlay(g.id, turn.kind === 'MEETING' ? { answer: choice } : { option: Number(choice) }));
+    setPicked(null);
+  }
 
   async function leave() {
     if (!(await dialogs.confirm({
       title: 'Leave your party?',
-      message: 'You keep your coins and your animal and take your share of the snack packs. The wagon stays with them. You won\'t be able to join anyone for 4 turns.',
+      message: 'You keep your coins and your animal and take your share of the provisions. The wagon stays with them.',
       confirmLabel: 'Leave',
       danger: true,
     }))) return;
@@ -239,161 +280,106 @@ function MyTrail({ game: g, me, party, busy, act }: {
   }
 
   return (
-    <div className="space-y-5 rounded-xl border-2 border-[var(--accent)] p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-lg font-extrabold">{together ? 'Your party' : 'You, going it alone'}</h3>
-        <span className="text-sm font-bold">{me.coins.toLocaleString('en-US')} coins</span>
-      </div>
+    <div className="space-y-4">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <span><b>{me.coins.toLocaleString('en-US')}</b> coins</span>
+        <span><b>{p.food}</b> provisions{p.hangry && <b className="text-[var(--danger)]"> (hungry: half speed)</b>}</span>
+        <span>{party.travel}</span>
+        {together && <span>With {p.members.filter((m) => m.userId !== me.userId).map((m) => m.name).join(', ')}</span>}
+      </p>
 
-      {party.arrivedTurn !== null && (
-        <p className="rounded-lg bg-[var(--success-soft)] p-3 text-sm font-semibold text-[var(--success)]">
-          You made it to the Oregon Coast on turn {party.arrivedTurn}. Enjoy Haystack Rock while everyone else catches up.
-        </p>
+      {me.lastResult.length > 0 && (
+        <div className="rounded-xl bg-[var(--surface-2)] p-4">
+          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn {me.turnsPlayed}</p>
+          {me.lastResult.map((line, i) => <p key={i} className="mt-1">{line}</p>)}
+        </div>
       )}
 
       {me.choices.map((c) => (
-        <div key={c.id} className={`rounded-lg p-3 ${c.kind === 'SKIM' ? 'bg-[var(--surface-2)]' : 'bg-[var(--accent-soft)]'}`}>
+        <div key={c.id} className="rounded-xl border-2 border-[var(--accent)] p-4">
           <p className="font-bold">{c.title}</p>
           <p className="mt-1 text-sm opacity-80">{c.text}</p>
-          {c.answer && c.answeredByName && (
-            <p className="mt-1 text-sm font-semibold">
-              {c.answeredByName} picked: {c.options.find((o) => o.value === c.answer)?.label}. You can still change it until the next turn.
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {c.options.map((o) => (
-              <button key={o.value} disabled={busy}
-                className={c.answer === o.value ? 'btn' : 'btn-ghost'}
-                onClick={() => void act(() => api.trailAnswer(g.id, c.id, o.value))}>
-                {o.label}
-              </button>
+              <button key={o.value} className="btn-ghost" disabled={busy}
+                onClick={() => void act(() => api.trailAnswer(g.id, c.id, o.value))}>{o.label}</button>
             ))}
           </div>
         </div>
       ))}
 
-      {me.scenario && (
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide opacity-60">This turn</p>
-          <p className="mt-1 text-lg font-bold">{me.scenario.text}</p>
-          <p className="text-xs opacity-70">
-            {me.scenario.chosen !== null
-              ? `${me.scenario.chosenByName ?? 'Someone'} picked. It plays out at the next turn; anyone in the party can still change it.`
-              : 'It plays out at the next turn. If nobody picks, the party goes with the safe choice.'}
+      {party.arrivedTurn !== null ? (
+        <p className="rounded-xl bg-[var(--success-soft)] p-4 font-semibold text-[var(--success)]">
+          You reached the Pacific. Enjoy Haystack Rock while everyone else catches up.
+        </p>
+      ) : !turn ? (
+        <div className="rounded-xl border-2 border-[var(--accent)] p-4">
+          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn 1</p>
+          <p className="mt-1 text-lg font-bold">The frontier awaits.</p>
+          <p className="mt-1 text-sm opacity-80">
+            {g.status === 'UPCOMING' && g.startDate > new Date().toLocaleDateString('en-CA')
+              ? `The game starts ${formatDate(g.startDate, false)}. `
+              : 'Your first turn unlocks at the next Salon Ultimate check: 8, 12, 4, or 8. '}
+            Stock up at the trading post before you leave.
           </p>
-          <ul className="mt-2 space-y-2">
-            {me.scenario.options.map((o) => {
-              const picked = me.scenario!.chosen === o.index;
+        </div>
+      ) : (
+        <div className="rounded-xl border-2 border-[var(--accent)] p-4">
+          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn {me.turnsPlayed + 1}</p>
+          <p className="mt-1 text-lg font-bold">{turn.text}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2" role="radiogroup">
+            {turn.options.map((o) => {
+              const selected = choice === o.value;
               return (
-                <li key={o.index}>
-                  <button disabled={busy || !o.available}
-                    onClick={() => void act(() => api.trailChoose(g.id, o.index))}
-                    className={`w-full rounded-lg border-2 p-3 text-left text-sm transition ${picked
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                      : 'border-[var(--border)] hover:border-[var(--accent)]'} ${o.available ? '' : 'opacity-50'}`}>
-                    <span className="font-bold">{o.label}</span>
-                    {picked && <span className="ml-2 text-xs font-bold text-[var(--accent-strong)]">Picked</span>}
-                    {o.isDefault && !picked && <span className="ml-2 text-xs opacity-60">The safe choice</span>}
-                    <span className="mt-1 block opacity-80">
-                      {o.bad === null ? o.good : <>Could go well: {o.good} Could go badly: {o.bad}</>}
-                    </span>
-                    {!o.available && <span className="mt-1 block text-xs font-semibold">You don&apos;t have what this needs.</span>}
-                  </button>
-                </li>
+                <button key={o.value} role="radio" aria-checked={selected} disabled={!o.available || !me.ready || busy}
+                  onClick={() => setPicked(o.value)}
+                  className={`w-full rounded-lg border-2 p-3 text-left text-sm font-bold transition ${selected
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                    : 'border-[var(--border)] hover:border-[var(--accent)]'} ${o.available ? '' : 'opacity-50'}`}>
+                  {o.label}
+                </button>
               );
             })}
-          </ul>
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1 text-sm">
-          <p><b>Snack packs:</b> {p.food}{p.hangry && <span className="font-bold text-[var(--danger)]"> (Hangry: half speed)</span>}</p>
-          <p><b>Getting around:</b> {party.travel}</p>
-          {p.wagon && <p><b>Wagon:</b> {p.wagonBroken ? 'broken down. It won\'t move until it\'s repaired.' : 'rolling'}</p>}
-          {(p.spareWheels > 0 || p.horseshoes > 0 || p.carrots > 0 || p.playlists > 0) && (
-            <p><b>Packed:</b> {[
-              p.spareWheels > 0 && `${p.spareWheels} spare ${p.spareWheels === 1 ? 'wheel' : 'wheels'}`,
-              p.horseshoes > 0 && `${p.horseshoes} horseshoes`,
-              p.carrots > 0 && `${p.carrots} carrots`,
-              p.playlists > 0 && 'A Really Good Playlist',
-            ].filter(Boolean).join(', ')}</p>
-          )}
-          {p.puppy && <p><b>Also:</b> a puppy. Morale is high.</p>}
-          {together && (
-            <ul className="pt-1">
-              {p.members.map((m) => (
-                <li key={m.userId}>
-                  {m.name}: {m.coins.toLocaleString('en-US')} coins, {MOUNTS[m.mount]}{m.shoeThrown && ' (thrown shoe)'}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        {open && (
-          <div className="space-y-2 text-sm">
-            <label className="block">
-              <span className="mb-1 block font-semibold opacity-80">Pace</span>
-              <select className="input cursor-pointer" value={p.pace} disabled={busy}
-                onChange={(e) => void act(() => api.trailPace(g.id, e.target.value as TrailPace))}>
-                {PACES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
-              </select>
-              <span className="mt-1 block text-xs opacity-70">{PACES.find((x) => x.value === p.pace)?.help}</span>
-            </label>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {together && <button className="btn-ghost" disabled={busy} onClick={() => void leave()}>Leave the party</button>}
-              {p.wagon && <button className="btn-ghost" disabled={busy} onClick={() => void abandon()}>Abandon the wagon</button>}
-            </div>
           </div>
-        )}
-      </div>
-
-      {open && <Shop game={g} me={me} busy={busy} act={act} />}
-
-      {open && (
-        <div>
-          <h4 className="font-extrabold">Travel with someone</h4>
-          {me.noJoinUntil > g.turn ? (
-            <p className="text-sm opacity-80">You need some space until turn {me.noJoinUntil}.</p>
-          ) : me.canInvite.length === 0 ? (
-            <p className="text-sm opacity-70">
-              Nobody traveling alone is within 60 miles of you right now{p.members.length >= 4 ? ', and your party is full anyway' : ''}.
-            </p>
-          ) : (
-            <>
-              <p className="text-sm opacity-70">
-                A party shares food, a wagon, and buying power, but eats more, takes bad luck together, moves at its slowest member&apos;s pace without a wagon, and splits the prize.
-              </p>
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {me.canInvite.map((t) => (
-                  <li key={t.userId}>
-                    <button className="btn-ghost" disabled={busy} onClick={() => void act(() => api.trailInvite(g.id, t.userId))}>
-                      Invite {t.name} (mile {t.miles})
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button className="btn" disabled={!me.ready || busy || choice === null} onClick={() => void go()}>{busy ? 'Going…' : 'Go'}</button>
+            {me.ready && choice === null && <span className="text-sm opacity-70">Pick one, then press Go.</span>}
+            {!me.ready && (
+              <span className="text-sm opacity-70">
+                {g.status === 'UPCOMING' ? 'The first turn unlocks when the game starts.' : 'Your next turn unlocks at the next check: 8, 12, 4, or 8.'}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {me.purchases.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer font-extrabold">Who paid for what</summary>
-          <ul className="mt-2 space-y-1">
-            {me.purchases.map((l, i) => (
-              <li key={i}><span className="mr-2 text-xs font-bold opacity-60">Turn {l.turn}</span>{l.body}</li>
-            ))}
-          </ul>
-        </details>
+      {p.wagonBroken && party.arrivedTurn === null && (
+        <div className="rounded-xl bg-[var(--surface-2)] p-4 text-sm">
+          <p className="font-bold">The wagon is broken down. It won&apos;t move until it&apos;s fixed.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button className="btn-ghost" disabled={busy || me.coins < me.repairPrice}
+              onClick={() => void act(() => api.trailBuy(g.id, 'REPAIR', 1, false))}>Send for a wheelwright, {me.repairPrice.toLocaleString('en-US')}</button>
+            {together && (
+              <button className="btn-ghost" disabled={busy} onClick={() => void act(() => api.trailBuy(g.id, 'REPAIR', 1, true))}>Split the wheelwright</button>
+            )}
+            <button className="btn-ghost" disabled={busy} onClick={() => void abandon()}>Abandon the wagon</button>
+          </div>
+        </div>
+      )}
+
+      {me.store && <Store game={g} me={me} busy={busy} act={act} />}
+
+      {together && party.arrivedTurn === null && (
+        <button className="text-sm font-semibold text-[var(--accent-strong)] hover:underline" disabled={busy} onClick={() => void leave()}>
+          Leave the party
+        </button>
       )}
     </div>
   );
 }
 
-/** Items that make sense for this party right now. Several of a thing are bought with a quantity. */
-function Shop({ game: g, me, busy, act }: {
+/** A trading post, open until you move on. Shows only what makes sense for you right now. */
+function Store({ game: g, me, busy, act }: {
   game: TrailGame;
   me: TrailMe;
   busy: boolean;
@@ -403,12 +389,12 @@ function Shop({ game: g, me, busy, act }: {
   const together = p.members.length > 1;
   const pooled = p.members.reduce((sum, m) => sum + m.coins, 0);
   const [quantity, setQuantity] = useState<Record<string, number>>({ FOOD: Math.max(1, p.members.length * 4) });
-  const shown = g.shop.filter((s) => {
+  const items = (me.store?.items ?? []).filter((s) => {
     switch (s.item) {
       case 'DONKEY': return me.mount === 'WALK';
       case 'HORSE': return me.mount !== 'HORSE';
       case 'WAGON': return !p.wagon;
-      case 'REPAIR': return p.wagonBroken;
+      case 'SPARE_WHEEL': return p.wagon;
       case 'HORSESHOES': return p.members.some((m) => m.mount === 'HORSE');
       case 'CARROTS': return p.members.some((m) => m.mount === 'DONKEY');
       case 'PLAYLIST': return together;
@@ -416,15 +402,16 @@ function Shop({ game: g, me, busy, act }: {
     }
   });
   const many = (item: TrailItem) => ['FOOD', 'SPARE_WHEEL', 'HORSESHOES', 'CARROTS', 'PLAYLIST'].includes(item);
+  const isTrader = me.store?.name.startsWith('A ');
 
   return (
-    <div>
-      <h4 className="font-extrabold">The general store</h4>
+    <div className="rounded-xl bg-[var(--surface-2)] p-4">
+      <h4 className="font-extrabold">{isTrader ? me.store?.name : `Trading post at ${me.store?.name.replace(/, Minnesota Territory$/, '')}`}</h4>
       <p className="text-sm opacity-70">
-        {together ? `Your party has ${pooled.toLocaleString('en-US')} coins between you. Split buys share the cost evenly among whoever has coins.` : 'Prices follow the team\'s usual sales.'}
+        Open until you move on.{together ? ` Your party has ${pooled.toLocaleString('en-US')} coins between you.` : ''}
       </p>
       <ul className="mt-2 divide-y divide-[var(--border)]">
-        {shown.map((s) => {
+        {items.map((s) => {
           const q = many(s.item) ? quantity[s.item] ?? 1 : 1;
           const total = s.price * q;
           return (

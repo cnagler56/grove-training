@@ -559,7 +559,6 @@ export interface AdminStatus {
 }
 
 export type TrailItem = 'FOOD' | 'DONKEY' | 'HORSE' | 'WAGON' | 'REPAIR' | 'SPARE_WHEEL' | 'HORSESHOES' | 'CARROTS' | 'PLAYLIST';
-export type TrailPace = 'LEISURELY' | 'STEADY' | 'GRUELING';
 export type TrailMount = 'WALK' | 'DONKEY' | 'HORSE';
 
 export interface TrailParty {
@@ -567,24 +566,23 @@ export interface TrailParty {
   miles: number;
   /** The last landmark passed. */
   at: string;
+  /** Turns it took to reach the coast. */
   arrivedTurn: number | null;
   /** Null before the first turn. */
   place: number | null;
   travel: string;
   wagonBroken: boolean;
+  turnsPlayed: number;
   members: { userId: number; name: string; mount: string; labels: string[] }[];
 }
 
+/** An invite to travel together, a chance to skim, getting even, or a vote. */
 export interface TrailChoice {
   id: number;
-  kind: 'INVITE' | 'SKIM' | 'MEET' | 'GET_EVEN' | 'VOTE_OUT';
+  kind: 'INVITE' | 'SKIM' | 'GET_EVEN' | 'VOTE_OUT';
   title: string;
   text: string;
   options: { value: string; label: string }[];
-  /** Meetings: what the party picked so far, and who picked it. */
-  answer: string | null;
-  answeredByName: string | null;
-  expiresTurn: number;
 }
 
 export interface TrailLogLine {
@@ -601,10 +599,12 @@ export interface TrailMe {
   mount: TrailMount;
   shoeThrown: boolean;
   noJoinUntil: number;
+  turnsPlayed: number;
+  /** A turn is unlocked and waiting for Go. */
+  ready: boolean;
   party: {
     id: number;
     food: number;
-    pace: TrailPace;
     hangry: boolean;
     wagon: boolean;
     wagonBroken: boolean;
@@ -615,16 +615,20 @@ export interface TrailMe {
     puppy: boolean;
     members: { userId: number; name: string; coins: number; mount: TrailMount; shoeThrown: boolean }[];
   };
-  /** This turn's scenario; null at the coast or before the game starts. */
-  scenario: {
-    key: string;
+  /** The next turn: a scenario, or someone you ran into. Null at the coast. */
+  turn: {
+    kind: 'SCENARIO' | 'MEETING';
     text: string;
-    options: { index: number; label: string; good: string; bad: string | null; isDefault: boolean; available: boolean }[];
-    chosen: number | null;
-    chosenByName: string | null;
+    /** Always four. {@code value} is what Go sends: an option's position for a scenario, an answer for a meeting. */
+    options: { value: string; label: string; available: boolean }[];
   } | null;
+  /** A trading post here, only at the forts or when a traveling trader turns up. */
+  store: { name: string; items: { item: TrailItem; label: string; price: number; help: string }[] } | null;
+  /** A wheelwright can be sent for anywhere, for this much. */
+  repairPrice: number;
   choices: TrailChoice[];
-  canInvite: { userId: number; name: string; miles: number }[];
+  /** What happened on the last turn played. */
+  lastResult: string[];
   purchases: TrailLogLine[];
 }
 
@@ -632,6 +636,7 @@ export interface TrailGame {
   id: number;
   name: string;
   status: 'UPCOMING' | 'LIVE' | 'FINISHED';
+  /** Turns unlocked so far. */
   turn: number;
   turns: number;
   startDate: string;
@@ -641,15 +646,14 @@ export interface TrailGame {
   bonusColor: number;
   bonusWax: number;
   lastCheckedAt: string | null;
-  /** Managers only: why coins couldn't be read at the last turn. */
+  /** Managers only: why coins couldn't be counted at the last check. */
   checkProblem: string | null;
   createdByName: string;
   trailMiles: number;
-  landmarks: { name: string; miles: number }[];
+  landmarks: { name: string; miles: number; lon: number; lat: number; store: boolean }[];
   /** Standings order. */
   parties: TrailParty[];
   me: TrailMe | null;
-  shop: { item: TrailItem; label: string; price: number; help: string }[];
   log: TrailLogLine[];
 }
 
@@ -819,12 +823,10 @@ export const api = {
   trailPeople: () => send<{ userId: number; name: string }[]>('/api/trail/people'),
   createTrailGame: (g: TrailGameInput) => send<TrailGame>('/api/trail', 'POST', g),
   deleteTrailGame: (id: number) => send<void>(`/api/trail/${id}`, 'DELETE'),
-  trailTurn: (id: number) => send<TrailGame>(`/api/trail/${id}/turn`, 'POST', {}),
-  trailChoose: (id: number, option: number) => send<TrailGame>(`/api/trail/${id}/choose`, 'POST', { option }),
+  trailUnlock: (id: number) => send<TrailGame>(`/api/trail/${id}/unlock`, 'POST', {}),
+  trailPlay: (id: number, choice: { option?: number; answer?: string }) => send<TrailGame>(`/api/trail/${id}/play`, 'POST', choice),
   trailBuy: (id: number, item: TrailItem, quantity: number, split: boolean) =>
     send<TrailGame>(`/api/trail/${id}/buy`, 'POST', { item, quantity, split }),
-  trailPace: (id: number, pace: TrailPace) => send<TrailGame>(`/api/trail/${id}/pace`, 'POST', { pace }),
-  trailInvite: (id: number, userId: number) => send<TrailGame>(`/api/trail/${id}/invite`, 'POST', { userId }),
   trailAnswer: (id: number, choiceId: number, answer: string) =>
     send<TrailGame>(`/api/trail/${id}/choices/${choiceId}`, 'POST', { answer }),
   trailLeave: (id: number) => send<TrailGame>(`/api/trail/${id}/leave`, 'POST', {}),

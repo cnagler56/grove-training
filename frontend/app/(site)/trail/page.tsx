@@ -110,7 +110,7 @@ export default function TrailPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">The Grove Trail</h1>
           <p className="mt-1 text-sm opacity-70">
-            From the salon in Maple Grove to the Oregon Coast, paid for with your service sales. A turn runs at every Salon Ultimate check.
+            Cross the 1800s frontier from Maple Grove to the Pacific, paid for with your service sales. A new turn unlocks at every Salon Ultimate check.
           </p>
         </div>
         {isManager && form === null && <button className="btn" onClick={() => setForm(empty())}>New game</button>}

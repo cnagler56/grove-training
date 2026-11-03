@@ -8,6 +8,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,11 +56,14 @@ import com.grove.Service.TrailScenarios.Scenario;
 import com.grove.Service.TrailScenarios.Who;
 
 /**
- * The Grove Trail: stylists race from Maple Grove to the Oregon Coast, buying food,
- * animals, and wagons with coins from their Salon Ultimate service sales. A turn runs
- * at every Salon Ultimate check; each turn every party answers a multiple choice
- * scenario whose odds quietly favor whoever is behind. People can travel alone or
- * together, steal from each other, or help. Managers and up start games.
+ * The Grove Trail: stylists cross the 1800s frontier from Maple Grove to the Pacific,
+ * buying provisions, animals, and wagons with coins from their Salon Ultimate service
+ * sales. A new turn unlocks at every Salon Ultimate check; each party plays its turns
+ * when it likes by picking one of four choices and pressing Go. Odds quietly favor
+ * whoever is behind. Trading posts open only at the forts (or when a traveling trader
+ * happens by), and people on the same stretch of trail sometimes run into each other:
+ * to help, rob, or travel together.
+ * Managers and up start games.
  */
 @Service
 public class TrailService {
@@ -67,49 +71,55 @@ public class TrailService {
 	private static final Logger log = LoggerFactory.getLogger(TrailService.class);
 	private static final String PAGE = "/trail";
 	private static final DateTimeFormatter SHORT_DATE = DateTimeFormatter.ofPattern("MMM d");
+	private static final String PEDDLER = "A traveling trader";
 
 	public record GameInput(String name, LocalDate startDate, Integer turns, String prize, Handicap handicap,
 		List<Long> userIds, Integer bonusTreatment, Integer bonusColor, Integer bonusWax) {}
 
 	public record BuyInput(Item item, Integer quantity, Boolean split) {}
 
-	public record LandmarkView(String name, int miles) {}
+	/** What Go sends: a scenario option's position, or a meeting answer ("WAVE", "STEAL_COINS"...). */
+	public record PlayInput(Integer option, String answer) {}
+
+	public record LandmarkView(String name, int miles, double lon, double lat, boolean store) {}
 
 	public record MemberView(Long userId, String name, String mount, List<String> labels) {}
 
 	/** {@code place} is null before the first turn. */
 	public record PartyView(Long id, int miles, String at, Integer arrivedTurn, Integer place, String travel,
-		boolean wagonBroken, List<MemberView> members) {}
+		boolean wagonBroken, int turnsPlayed, List<MemberView> members) {}
 
 	public record MyMember(Long userId, String name, int coins, String mount, boolean shoeThrown) {}
 
-	public record MyParty(Long id, int food, String pace, boolean hangry, boolean wagon, boolean wagonBroken,
-		int spareWheels, int horseshoes, int carrots, int playlists, boolean puppy, List<MyMember> members) {}
+	public record MyParty(Long id, int food, boolean hangry, boolean wagon, boolean wagonBroken, int spareWheels,
+		int horseshoes, int carrots, int playlists, boolean puppy, List<MyMember> members) {}
 
-	/** {@code bad} is null for options that always go one way. */
-	public record OptionView(int index, String label, String good, String bad, boolean isDefault, boolean available) {}
+	/** One of the four choices. No odds or outcomes: you find out when you press Go. */
+	public record OptionView(String value, String label, boolean available) {}
 
-	public record ScenarioView(String key, String text, List<OptionView> options, Integer chosen, String chosenByName) {}
-
-	public record ChoiceOption(String value, String label) {}
-
-	public record ChoiceView(Long id, String kind, String title, String text, List<ChoiceOption> options, String answer,
-		String answeredByName, int expiresTurn) {}
-
-	public record InviteTarget(Long userId, String name, int miles) {}
-
-	public record LogView(int turn, String kind, String body, Integer coins) {}
-
-	public record MeView(Long userId, int coins, String mount, boolean shoeThrown, int noJoinUntil, MyParty party,
-		ScenarioView scenario, List<ChoiceView> choices, List<InviteTarget> canInvite, List<LogView> purchases) {}
+	/** {@code kind}: SCENARIO, or MEETING when the turn is about someone you ran into. */
+	public record TurnView(String kind, String text, List<OptionView> options) {}
 
 	public record ShopItem(String item, String label, int price, String help) {}
 
-	/** {@code status}: UPCOMING, LIVE, or FINISHED. */
+	public record StoreView(String name, List<ShopItem> items) {}
+
+	public record ChoiceOption(String value, String label) {}
+
+	public record ChoiceView(Long id, String kind, String title, String text, List<ChoiceOption> options) {}
+
+	public record LogView(int turn, String kind, String body, Integer coins) {}
+
+	/** {@code ready}: a turn is unlocked and waiting. {@code lastResult}: what happened on the last turn played. */
+	public record MeView(Long userId, int coins, String mount, boolean shoeThrown, int noJoinUntil, int turnsPlayed,
+		boolean ready, MyParty party, TurnView turn, StoreView store, int repairPrice, List<ChoiceView> choices,
+		List<String> lastResult, List<LogView> purchases) {}
+
+	/** {@code status}: UPCOMING, LIVE, or FINISHED. {@code turn} is how many turns have unlocked. */
 	public record GameView(Long id, String name, String status, int turn, int turns, LocalDate startDate, String prize,
 		String handicap, int bonusTreatment, int bonusColor, int bonusWax, LocalDateTime lastCheckedAt, String checkProblem,
 		String createdByName, int trailMiles, List<LandmarkView> landmarks, List<PartyView> parties, MeView me,
-		List<ShopItem> shop, List<LogView> log) {}
+		List<LogView> log) {}
 
 	public record Eligible(Long userId, String name) {}
 
@@ -226,6 +236,8 @@ public class TrailService {
 			TrailParty p = new TrailParty();
 			p.setGameId(g.getId());
 			p.setFood(TrailOdds.STARTING_FOOD);
+			// Everyone can stock up before leaving the salon.
+			p.setStoreName(TrailOdds.LANDMARKS.get(0).name());
 			p = parties.save(p);
 			TrailPlayer pl = new TrailPlayer();
 			pl.setGameId(g.getId());
@@ -237,7 +249,7 @@ public class TrailService {
 		}
 		push.notify(group.stream().map(User::getUserId).toList(), name,
 			"You're on the Grove Trail, starting " + (start.equals(today()) ? "today" : start.format(SHORT_DATE))
-				+ ". Pack snacks. Maybe find a wagon buddy.", PAGE);
+				+ ". Pack provisions.", PAGE);
 		return view(g, manager);
 	}
 
@@ -252,44 +264,48 @@ public class TrailService {
 		games.delete(g);
 	}
 
-	/** Play the next turn now instead of waiting for the next check. */
-	public GameView runTurnNow(User manager, Long id) {
+	/** Unlock the next turn for everyone now instead of waiting for the next check. */
+	public GameView unlockNow(User manager, Long id) {
 		requireManager(manager);
 		TrailGame g = find(id);
 		if (g.getFinishedAt() != null) throw bad("This game is already over");
 		if (g.getStartDate().isAfter(today())) throw bad("This game hasn't started yet");
-		turn(g);
+		unlock(g);
 		return view(find(id), manager);
 	}
 
-	/** One turn at every Salon Ultimate check, the same times as contests. */
+	/** A new turn at every Salon Ultimate check, the same times as contests. */
 	@Scheduled(cron = "0 0 8,12,16,20 * * *", zone = "${app.time-zone:America/Chicago}")
-	public void turnAll() {
+	public void unlockAll() {
 		for (TrailGame g : games.findByFinishedAtIsNullAndStartDateLessThanEqual(today())) {
 			try {
-				turn(g);
+				unlock(g);
 			} catch (Exception e) {
 				log.warn("Trail turn for game {} failed", g.getId(), e);
 			}
 		}
 	}
 
-	// A turn.
+	// Turns.
 
-	/** Everything that changes in one turn, kept together while it runs. */
+	/** One game's parties and players, loaded together while a turn runs. */
 	private final class Turn {
 		final TrailGame game;
+		/** The game's clock: how many turns have unlocked. Karma and waits count in these. */
 		final int t;
+		/** The turn number this party is on, for its log lines. */
+		int logTurn;
 		final Map<Long, TrailParty> partyById = new LinkedHashMap<>();
 		final List<TrailPlayer> everyone;
 		final Map<Long, User> people;
-		/** This turn's miles multiplier and flat miles, per party, from scenarios and meetings. */
+		/** This turn's miles multiplier and flat miles, per party. */
 		final Map<Long, Double> move = new HashMap<>();
 		final Map<Long, Integer> extra = new HashMap<>();
 
 		Turn(TrailGame game) {
 			this.game = game;
 			this.t = game.getTurn();
+			this.logTurn = game.getTurn();
 			parties.findByGameId(game.getId()).forEach(p -> partyById.put(p.getId(), p));
 			everyone = players.findByGameId(game.getId());
 			people = users.findAllById(everyone.stream().map(TrailPlayer::getUserId).toList()).stream()
@@ -305,7 +321,7 @@ public class TrailService {
 		}
 
 		TrailPlayer player(Long userId) {
-			return everyone.stream().filter(pl -> pl.getUserId().equals(userId)).findFirst().orElse(null);
+			return userId == null ? null : everyone.stream().filter(pl -> pl.getUserId().equals(userId)).findFirst().orElse(null);
 		}
 
 		String nameOf(Long userId) {
@@ -342,7 +358,7 @@ public class TrailService {
 		}
 
 		void story(TrailParty p, TrailLog.Kind kind, String body) {
-			addLog(game, p == null ? null : p.getId(), null, t, kind, body, null);
+			addLog(game, p == null ? null : p.getId(), null, logTurn, kind, body, null);
 		}
 
 		void save() {
@@ -352,9 +368,13 @@ public class TrailService {
 		}
 	}
 
-	/** Play one turn of this game. One at a time. */
-	synchronized void turn(TrailGame g) {
+	/** Unlock the next turn: count coins and make sure everyone has something to decide. After the last one, wrap up. */
+	synchronized void unlock(TrailGame g) {
 		if (g.getFinishedAt() != null) return;
+		if (g.getTurn() >= g.getTurns()) {
+			wrapUp(g);
+			return;
+		}
 		g.setTurn(g.getTurn() + 1);
 		games.save(g);
 		Turn turn = new Turn(g);
@@ -362,29 +382,79 @@ public class TrailService {
 		String problem = creditCoins(turn);
 		g.setCheckProblem(problem == null ? null : problem.length() <= 500 ? problem : problem.substring(0, 500));
 		if (problem == null) g.setLastCheckedAt(LocalDateTime.now(zone));
-
-		for (TrailParty p : turn.onTrail()) settleScenario(turn, p);
-		settleMeetings(turn);
 		expireChoices(turn);
-		for (TrailParty p : turn.onTrail()) eat(turn, p);
-		for (TrailParty p : turn.onTrail()) travel(turn, p);
-		turn.save();
-
-		boolean over = turn.t >= g.getTurns() || turn.onTrail().isEmpty();
-		if (over) {
-			finish(turn);
-			return;
+		for (TrailParty p : turn.onTrail()) {
+			if (p.getScenarioKey() == null && p.getEncounterPartyId() == null) deal(turn, p);
 		}
-		for (TrailParty p : turn.onTrail()) deal(turn, p);
-		offerSkims(turn);
-		arrangeMeetings(turn);
 		turn.save();
+	}
+
+	/** The game is out of turns: anything left unplayed goes with the safe choice, then the standings. */
+	private void wrapUp(TrailGame g) {
+		Turn turn = new Turn(g);
+		for (TrailParty p : turn.onTrail()) {
+			while (p.getArrivedTurn() == null && p.getTurnsPlayed() < g.getTurns()) playTurn(turn, p, null, null);
+		}
+		turn.save();
+		finish(turn);
+	}
+
+	/** Play the viewer's party's next turn with the option they picked. */
+	public synchronized GameView play(User viewer, Long gameId, PlayInput input) {
+		TrailGame g = open(gameId);
+		TrailPlayer mine = me(g, viewer);
+		if (g.getTurn() == 0) throw bad("The game hasn't started yet");
+		Turn turn = new Turn(g);
+		TrailParty p = turn.partyById.get(mine.getPartyId());
+		if (p.getArrivedTurn() != null) throw bad("You've already reached the Pacific");
+		if (p.getTurnsPlayed() >= g.getTurn()) throw bad("Your next turn unlocks at the next Salon Ultimate check");
+		playTurn(turn, p, input == null ? new PlayInput(null, null) : input, viewer.getUserId());
+		turn.save();
+		if (turn.onTrail().isEmpty()) finish(turn);
+		return view(find(gameId), viewer);
+	}
+
+	/**
+	 * One turn for one party: settle the scenario or meeting with the answer ({@code input} null
+	 * means nobody answered), eat, travel, then set up the next turn. The store here closes.
+	 */
+	private void playTurn(Turn turn, TrailParty p, PlayInput input, Long by) {
+		TrailPlayer player = turn.player(by);
+		int n = p.getTurnsPlayed() + 1;
+		turn.logTurn = n;
+		if (p.getEncounterPartyId() != null) {
+			List<OptionView> options = meetingOptions(turn, p);
+			String answer = input == null || input.answer() == null ? "WAVE" : input.answer().trim().toUpperCase();
+			if (options.stream().noneMatch(o -> o.value().equals(answer))) {
+				if (input != null) throw bad("Pick one of the options");
+			}
+			settleMeeting(turn, p, options.stream().anyMatch(o -> o.value().equals(answer)) ? answer : "WAVE", player);
+		} else if (p.getScenarioKey() != null) {
+			Scenario sc = TrailScenarios.BY_KEY.get(p.getScenarioKey());
+			Integer option = input == null ? null : input.option();
+			if (sc != null && option != null) {
+				if (option < 0 || option >= sc.options().size()) throw bad("Pick one of the options");
+				if (!available(sc.options().get(option), p)) throw bad(unavailable(sc.options().get(option)));
+			}
+			if (sc != null) settleScenario(turn, p, sc, option, by);
+		}
+		p.setStoreName(null);
+		p.setScenarioKey(null);
+		p.setEncounterPartyId(null);
+		p.setEncounterJoin(false);
+		eat(turn, p);
+		travel(turn, p, n);
+		p.setTurnsPlayed(n);
+		if (p.getArrivedTurn() == null) {
+			next(turn, p);
+			offerSkims(turn, p);
+		}
 	}
 
 	/**
 	 * Coins from Salon Ultimate since the game started: $1 of service sales is 1 coin, plus a
 	 * bonus for each treatment, color, and wax, times each person's handicap. Only what's new
-	 * since the last turn is added. Returns why it couldn't be read, or null.
+	 * since the last check is added. Returns why it couldn't be read, or null.
 	 */
 	private String creditCoins(Turn turn) {
 		if (!salonUltimate.isConfigured()) {
@@ -430,23 +500,15 @@ public class TrailService {
 		}
 	}
 
-	/** Roll last turn's scenario with the party's answer (or the default) and apply what happened. */
-	private void settleScenario(Turn turn, TrailParty p) {
-		Scenario sc = p.getScenarioKey() == null ? null : TrailScenarios.BY_KEY.get(p.getScenarioKey());
-		Integer answer = p.getScenarioAnswer();
-		Long answeredBy = p.getAnsweredBy();
-		p.setScenarioKey(null);
-		p.setScenarioAnswer(null);
-		p.setAnsweredBy(null);
-		if (sc == null) return;
-
+	/** Roll the scenario with the party's pick (or the safe choice) and apply what happened. */
+	private void settleScenario(Turn turn, TrailParty p, Scenario sc, Integer answer, Long by) {
 		List<TrailPlayer> members = turn.members(p);
-		int index = answer != null && answer >= 0 && answer < sc.options().size() && available(sc.options().get(answer), p, members)
-			? answer : sc.defaultOption();
+		int index = answer != null ? answer : sc.defaultOption();
+		if (!available(sc.options().get(index), p)) index = sc.defaultOption();
 		Option op = sc.options().get(index);
-		String who = answer != null && index == answer && answeredBy != null
-			? turn.nameOf(answeredBy) + " picked: " + op.label + "."
-			: "Nobody answered, so: " + op.label + ".";
+		String who = answer != null && by != null
+			? turn.nameOf(by) + " picked: " + op.label + "."
+			: "Nobody picked, so: " + op.label + ".";
 
 		boolean good;
 		String paid = "";
@@ -457,7 +519,7 @@ public class TrailService {
 				good = false;
 				paid = " You couldn't afford it.";
 			} else {
-				logPurchases(turn.game, p, turn.t, taken, op.label);
+				logPurchases(turn.game, p, turn.logTurn, taken, op.label);
 				good = op.sure() || roll(TrailOdds.chance(op.base, turn.behind(p), turn.bonus(p)));
 			}
 		} else {
@@ -500,7 +562,7 @@ public class TrailService {
 			return " A spare wheel saved the day.";
 		}
 		p.setWagonBroken(true);
-		push.notify(turn.ids(p), turn.game.getName(), "Your wagon broke down. It won't move until someone pays for a repair or a spare wheel.", PAGE);
+		push.notify(turn.ids(p), turn.game.getName(), "Your wagon broke down. It won't move until someone pays for a repair.", PAGE);
 		return " The wagon is broken down until it's repaired.";
 	}
 
@@ -513,11 +575,12 @@ public class TrailService {
 			return;
 		}
 		p.setFood(0);
-		if (!p.isHangry()) turn.story(p, TrailLog.Kind.STORY, "Out of snack packs. Everyone is Hangry: half speed until you buy food.");
+		if (!p.isHangry()) turn.story(p, TrailLog.Kind.STORY, "Out of provisions. Everyone is hungry: half speed until you find a trading post.");
 		p.setHangry(true);
 	}
 
-	private void travel(Turn turn, TrailParty p) {
+	/** Move west; passing a fort opens its trading post, and now and then a traveling trader turns up. */
+	private void travel(Turn turn, TrailParty p, int n) {
 		List<TrailPlayer> members = turn.members(p);
 		fixShoes(p, members);
 		int before = p.getMiles();
@@ -536,25 +599,69 @@ public class TrailService {
 
 		int from = TrailOdds.landmarkAt(before);
 		int to = TrailOdds.landmarkAt(p.getMiles());
-		if (to <= from) return;
-		String place = TrailOdds.LANDMARKS.get(to).name();
 		boolean coast = p.getMiles() >= TrailOdds.TRAIL_MILES;
-		if (coast) p.setArrivedTurn(turn.t);
-		turn.story(p, TrailLog.Kind.LANDMARK, (coast ? "You made it to " : "You reached ") + place + ".");
+		for (int i = to; i > from && !coast; i--) {
+			if (TrailOdds.LANDMARKS.get(i).store()) {
+				p.setStoreName(TrailOdds.LANDMARKS.get(i).name());
+				break;
+			}
+		}
+		if (p.getStoreName() == null && !coast && random.nextDouble() < TrailOdds.PEDDLER) p.setStoreName(PEDDLER);
+		if (to <= from) return;
+
+		String place = TrailOdds.LANDMARKS.get(to).name();
+		if (coast) p.setArrivedTurn(n);
+		turn.story(p, TrailLog.Kind.LANDMARK, (coast ? "You made it to the Pacific! " : "You reached ") + place + ".");
 		// Only the coast gets a notification of its own; there's a landmark every couple of turns.
 		if (coast) {
 			push.notify(turn.ids(p), turn.game.getName(),
-				"You made it to the Oregon Coast on turn " + turn.t + ". Enjoy Haystack Rock while the others catch up.", PAGE);
+				"You reached the Pacific in " + n + " turns. Enjoy Haystack Rock while the others catch up.", PAGE);
 		}
 		if (coast || to > turn.game.getFurthestLandmark()) {
-			String first = to > turn.game.getFurthestLandmark() ? "first" : "";
+			boolean first = to > turn.game.getFurthestLandmark();
 			turn.game.setFurthestLandmark(Math.max(turn.game.getFurthestLandmark(), to));
 			String text = coast
-				? turn.names(p) + " made it to the Oregon Coast" + (first.isEmpty() ? "" : ", first of everyone") + "!"
+				? turn.names(p) + " reached the Pacific in " + n + " turns" + (first ? ", first of everyone" : "") + "!"
 				: turn.names(p) + " reached " + place + " first.";
-			turn.story(null, TrailLog.Kind.LANDMARK, text);
-			announce(turn.game, turn.game.getName() + ": " + text + " (turn " + turn.t + " of " + turn.game.getTurns() + ")");
+			addLog(turn.game, null, null, turn.t, TrailLog.Kind.LANDMARK, text, null);
+			announce(turn.game, turn.game.getName() + ": " + text);
 		}
+	}
+
+	/** The next turn: sometimes running into someone on the same stretch of trail, otherwise a scenario. */
+	private void next(Turn turn, TrailParty p) {
+		int stretch = TrailOdds.landmarkAt(p.getMiles());
+		List<TrailParty> near = p.getMiles() == 0 ? List.of() : turn.onTrail().stream()
+			.filter(o -> !o.getId().equals(p.getId()) && o.getMiles() > 0 && TrailOdds.landmarkAt(o.getMiles()) == stretch)
+			.filter(o -> !recentlyMet(turn, p, o))
+			.toList();
+		if (!near.isEmpty() && random.nextDouble() < TrailOdds.MEET_CHANCE) {
+			TrailParty o = near.stream().min(Comparator.comparingInt(x -> Math.abs(x.getMiles() - p.getMiles()))).orElseThrow();
+			p.setEncounterPartyId(o.getId());
+			p.setEncounterJoin(canTravelTogether(turn, p, o) && random.nextDouble() < TrailOdds.JOIN_OFFER);
+			TrailChoice met = choice(turn.game, TrailChoice.Kind.MEET, turn.t, turn.t);
+			met.setPartyId(p.getId());
+			met.setOtherPartyId(o.getId());
+			met.setResolved(true);
+			choices.save(met);
+			return;
+		}
+		deal(turn, p);
+	}
+
+	private boolean recentlyMet(Turn turn, TrailParty a, TrailParty b) {
+		return choices.findByGameId(turn.game.getId()).stream().anyMatch(c -> c.getKind() == TrailChoice.Kind.MEET
+			&& ((a.getId().equals(c.getPartyId()) && b.getId().equals(c.getOtherPartyId()))
+				|| (b.getId().equals(c.getPartyId()) && a.getId().equals(c.getOtherPartyId())))
+			&& turn.t - c.getOfferedTurn() < TrailOdds.MEET_AGAIN_TURNS);
+	}
+
+	/** One of them travels alone, there's room, and nobody needs space. */
+	private boolean canTravelTogether(Turn turn, TrailParty a, TrailParty b) {
+		List<TrailPlayer> ma = turn.members(a), mb = turn.members(b);
+		if (ma.size() > 1 && mb.size() > 1) return false;
+		if (ma.size() + mb.size() > TrailOdds.MAX_PARTY) return false;
+		return ma.stream().allMatch(pl -> pl.getNoJoinUntil() <= turn.t) && mb.stream().allMatch(pl -> pl.getNoJoinUntil() <= turn.t);
 	}
 
 	/** Pick an unseen scenario this party can get. */
@@ -578,8 +685,7 @@ public class TrailService {
 		Scenario sc = options.get(random.nextInt(options.size()));
 		seen.add(sc.key());
 		p.setScenarioKey(sc.key());
-		p.setScenarioAnswer(null);
-		p.setAnsweredBy(null);
+		p.setEncounterPartyId(null);
 		p.setSeen(String.join(",", seen));
 	}
 
@@ -590,146 +696,73 @@ public class TrailService {
 		List<TrailParty> order = standings(turn.partyById.values().stream().filter(p -> !turn.members(p).isEmpty()).toList());
 		Map<Long, Integer> places = places(order);
 		List<String> lines = new ArrayList<>();
-		lines.add(g.getName() + " is over after " + turn.t + " turns. Final standings:");
+		lines.add(g.getName() + " is over. Final standings:");
 		for (TrailParty p : order) {
-			String where = p.getArrivedTurn() != null ? "made it to the coast on turn " + p.getArrivedTurn()
+			String where = p.getArrivedTurn() != null ? "reached the Pacific in " + p.getArrivedTurn() + " turns"
 				: "mile " + p.getMiles() + ", near " + TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(p.getMiles())).name();
 			lines.add(ContestService.ordinal(places.get(p.getId())) + ": " + turn.names(p) + ", " + where);
 		}
-		List<TrailParty> winners = order.stream().filter(p -> places.get(p.getId()) == 1).toList();
-		int winnerCount = winners.stream().mapToInt(p -> turn.members(p).size()).sum();
+		int winnerCount = order.stream().filter(p -> places.get(p.getId()) == 1).mapToInt(p -> turn.members(p).size()).sum();
 		if (g.getPrize() != null) {
 			lines.add("");
 			lines.add("Prize: " + g.getPrize() + (winnerCount > 1 ? ", split " + winnerCount + " ways." : "."));
 		}
-		turn.story(null, TrailLog.Kind.LANDMARK, String.join(" ", lines.subList(0, Math.min(lines.size(), 4))));
+		addLog(g, null, null, g.getTurn(), TrailLog.Kind.LANDMARK, String.join(" ", lines.subList(0, Math.min(lines.size(), 4))), null);
 		announce(g, String.join("\n", lines));
 		for (TrailParty p : order) {
 			push.notify(turn.ids(p), g.getName() + " is over",
-				"You finished " + ContestService.ordinal(places.get(p.getId())) + (p.getArrivedTurn() != null ? ", at the coast." : ", at mile " + p.getMiles() + "."),
+				"You finished " + ContestService.ordinal(places.get(p.getId())) + (p.getArrivedTurn() != null ? ", at the Pacific." : ", at mile " + p.getMiles() + "."),
 				PAGE);
 		}
 	}
 
-	// Stealing and helping.
+	// Meetings: helping, robbing, or traveling together.
 
-	/** Now and then, someone in a party gets a private chance to skim. */
-	private void offerSkims(Turn turn) {
-		for (TrailParty p : turn.onTrail()) {
-			List<TrailPlayer> members = turn.members(p);
-			if (members.size() < 2) continue;
-			for (TrailPlayer pl : members) {
-				if (turn.t < TrailOdds.SKIM_FIRST_TURN || turn.t - pl.getLastSkimTurn() < TrailOdds.SKIM_EVERY
-					|| turn.t - pl.getJoinedTurn() < TrailOdds.SKIM_AFTER_JOINING) continue;
-				if (random.nextDouble() >= TrailOdds.SKIM_OFFER) continue;
-				pl.setLastSkimTurn(turn.t);
-				TrailChoice c = choice(turn.game, TrailChoice.Kind.SKIM, turn.t, turn.t);
-				c.setUserId(pl.getUserId());
-				c.setPartyId(p.getId());
-				choices.save(c);
-				push.notify(List.of(pl.getUserId()), turn.game.getName(), "Psst. Nobody is watching the party's coins right now.", PAGE);
-			}
+	/**
+	 * The four things a party can do about someone it ran into: ride on (the default), share
+	 * provisions, rob them, and one more: travel together when that's on offer, help mend a
+	 * broken wagon, or lend coin.
+	 */
+	private List<OptionView> meetingOptions(Turn turn, TrailParty p) {
+		TrailParty them = p.getEncounterPartyId() == null ? null : turn.partyById.get(p.getEncounterPartyId());
+		List<OptionView> out = new ArrayList<>();
+		out.add(new OptionView("WAVE", "Tip your hat and ride on", true));
+		out.add(new OptionView("HELP_FOOD", "Share your provisions", true));
+		out.add(new OptionView("STEAL_COINS", "Rob them in the night", true));
+		if (them != null && p.isEncounterJoin() && canTravelTogether(turn, p, them)) {
+			out.add(new OptionView("JOIN", "Ask them to travel together", true));
+		} else if (them != null && them.isWagonBroken()) {
+			out.add(new OptionView("HELP_WAGON", "Help mend their wagon", true));
+		} else {
+			out.add(new OptionView("HELP_COINS", "Lend them some coin", true));
 		}
+		return out;
 	}
 
-	/** Parties that end a turn close together each get to help, steal, or wave. One meeting per party a turn. */
-	private void arrangeMeetings(Turn turn) {
-		List<TrailChoice> past = choices.findByGameId(turn.game.getId()).stream()
-			.filter(c -> c.getKind() == TrailChoice.Kind.MEET).toList();
-		List<TrailParty> open = new ArrayList<>(turn.onTrail().stream().filter(p -> p.getMiles() > 0).toList());
-		Set<Long> busy = new HashSet<>();
-		for (TrailParty a : open) {
-			if (busy.contains(a.getId())) continue;
-			TrailParty b = open.stream()
-				.filter(o -> !o.getId().equals(a.getId()) && !busy.contains(o.getId()))
-				.filter(o -> Math.abs(o.getMiles() - a.getMiles()) <= TrailOdds.MEET_MILES)
-				.filter(o -> past.stream().noneMatch(c -> c.getPartyId().equals(a.getId()) && c.getOtherPartyId().equals(o.getId())
-					&& (c.getAmount() < 0 || turn.t - c.getOfferedTurn() < TrailOdds.MEET_AGAIN_TURNS)))
-				.min(Comparator.comparingInt(o -> Math.abs(o.getMiles() - a.getMiles())))
-				.orElse(null);
-			if (b == null) continue;
-			busy.add(a.getId());
-			busy.add(b.getId());
-			String where = TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(a.getMiles())).name();
-			for (TrailParty[] side : new TrailParty[][] { { a, b }, { b, a } }) {
-				TrailChoice c = choice(turn.game, TrailChoice.Kind.MEET, turn.t, turn.t);
-				c.setPartyId(side[0].getId());
-				c.setOtherPartyId(side[1].getId());
-				choices.save(c);
-				push.notify(turn.ids(side[0]), turn.game.getName(),
-					"You ran into " + turn.names(side[1]) + " past " + where + ". Help them, rob them, or wave?", PAGE);
-			}
-		}
-	}
-
-	/** Meetings from last turn, both sides at once. */
-	private void settleMeetings(Turn turn) {
-		List<TrailChoice> open = choices.findByGameIdAndResolvedFalse(turn.game.getId()).stream()
-			.filter(c -> c.getKind() == TrailChoice.Kind.MEET && c.getExpiresTurn() < turn.t).toList();
-		Set<Long> done = new HashSet<>();
-		for (TrailChoice a : open) {
-			if (done.contains(a.getId())) continue;
-			TrailChoice b = open.stream().filter(o -> o.getPartyId().equals(a.getOtherPartyId())
-				&& o.getOtherPartyId().equals(a.getPartyId()) && o.getOfferedTurn() == a.getOfferedTurn()).findFirst().orElse(null);
-			done.add(a.getId());
-			a.setResolved(true);
-			if (b != null) {
-				done.add(b.getId());
-				b.setResolved(true);
-			}
-			TrailParty pa = turn.partyById.get(a.getPartyId());
-			TrailParty pb = turn.partyById.get(a.getOtherPartyId());
-			if (b == null || pa == null || pb == null || turn.members(pa).isEmpty() || turn.members(pb).isEmpty()) {
-				choices.save(a);
-				if (b != null) choices.save(b);
-				continue;
-			}
-			meet(turn, a, pa, b, pb);
-			choices.save(a);
-			choices.save(b);
-		}
-	}
-
-	private void meet(Turn turn, TrailChoice a, TrailParty pa, TrailChoice b, TrailParty pb) {
-		String ansA = a.getAnswer() == null ? "WAVE" : a.getAnswer();
-		String ansB = b.getAnswer() == null ? "WAVE" : b.getAnswer();
-		boolean stealA = ansA.startsWith("STEAL"), stealB = ansB.startsWith("STEAL");
-		boolean helpA = ansA.startsWith("HELP"), helpB = ansB.startsWith("HELP");
-
-		if (stealA && stealB) {
-			for (TrailChoice c : List.of(a, b)) {
-				TrailPlayer thief = turn.player(c.getAnsweredBy());
-				if (thief != null) {
-					thief.setStickyFingers(true);
-					addKarma(thief, TrailOdds.THEFT_KARMA, turn.t);
-				}
-				c.setAmount(-1);
-			}
-			String text = turn.names(pa) + " and " + turn.names(pb)
-				+ " both reached for each other's Glazers at the same time. Nothing changed hands. Everyone is embarrassed, and they will never speak again.";
-			turn.story(null, TrailLog.Kind.THEFT, text);
-			push.notify(concat(turn.ids(pa), turn.ids(pb)), turn.game.getName(), text, PAGE);
+	private void settleMeeting(Turn turn, TrailParty p, String answer, TrailPlayer me) {
+		TrailParty them = turn.partyById.get(p.getEncounterPartyId());
+		if (them == null || turn.members(them).isEmpty() || them.getArrivedTurn() != null) {
+			turn.story(p, TrailLog.Kind.STORY, "By the time you broke camp, they'd moved on.");
 			return;
 		}
-		if (helpA) help(turn, a, pa, pb, ansA);
-		if (helpB) help(turn, b, pb, pa, ansB);
-		if (stealA) steal(turn, a, pa, pb, ansA, helpB);
-		if (stealB) steal(turn, b, pb, pa, ansB, helpA);
-		if (helpA && helpB) {
-			pa.setLuck(TrailOdds.MAX_SHIFT);
-			pb.setLuck(TrailOdds.MAX_SHIFT);
-			turn.story(null, TrailLog.Kind.HELP, turn.names(pa) + " and " + turn.names(pb)
-				+ " helped each other out. The trail is a little kinder to both of them for a turn.");
-		}
-		if (!helpA && !helpB && !stealA && !stealB) {
-			turn.story(pa, TrailLog.Kind.STORY, "You waved at " + turn.names(pb) + ". They waved back.");
-			turn.story(pb, TrailLog.Kind.STORY, "You waved at " + turn.names(pa) + ". They waved back.");
+		switch (answer) {
+			case "JOIN" -> {
+				TrailChoice c = choice(turn.game, TrailChoice.Kind.INVITE, turn.t, turn.t + TrailOdds.INVITE_TURNS);
+				c.setPartyId(them.getId());
+				c.setOtherPartyId(p.getId());
+				c.setOtherUserId(me == null ? null : me.getUserId());
+				choices.save(c);
+				turn.story(p, TrailLog.Kind.PARTY, "You asked " + turn.names(them) + " to travel together. They'll answer on their turn.");
+				push.notify(turn.ids(them), turn.game.getName(), turn.names(p) + " asked you to travel together.", PAGE);
+			}
+			case "HELP_FOOD", "HELP_COINS", "HELP_WAGON" -> help(turn, me, p, them, answer);
+			case "STEAL_COINS", "STEAL_FOOD" -> steal(turn, me, p, them, answer);
+			default -> turn.story(p, TrailLog.Kind.STORY, "You tipped your hat to " + turn.names(them) + ". They tipped theirs.");
 		}
 	}
 
-	private void help(Turn turn, TrailChoice c, TrailParty giver, TrailParty taker, String how) {
-		TrailPlayer helper = turn.player(c.getAnsweredBy());
-		String helperName = turn.nameOf(c.getAnsweredBy());
+	private void help(Turn turn, TrailPlayer helper, TrailParty giver, TrailParty taker, String how) {
+		String helperName = helper == null ? turn.names(giver) : turn.nameOf(helper.getUserId());
 		String gave = null;
 		switch (how) {
 			case "HELP_FOOD" -> {
@@ -737,7 +770,8 @@ public class TrailService {
 				if (n > 0) {
 					giver.setFood(giver.getFood() - n);
 					taker.setFood(taker.getFood() + n);
-					gave = n + " snack " + (n == 1 ? "pack" : "packs");
+					taker.setHangry(false);
+					gave = n + (n == 1 ? " provision" : " provisions");
 				}
 			}
 			case "HELP_COINS" -> {
@@ -748,42 +782,32 @@ public class TrailService {
 					gave = n + " coins";
 				}
 			}
-			case "HELP_WAGON" -> {
+			default -> {
 				if (taker.isWagonBroken()) {
 					int cost = (int) Math.round(turn.price(Item.REPAIR) * TrailOdds.HELP_REPAIR_SHARE);
 					Map<TrailPlayer, Integer> paid = charge(turn.members(giver), cost);
 					if (paid != null) {
-						logPurchases(turn.game, giver, turn.t, paid, "fixing " + turn.names(taker) + "'s wagon");
+						logPurchases(turn.game, giver, turn.logTurn, paid, "fixing " + turn.names(taker) + "'s wagon");
 						taker.setWagonBroken(false);
 						gave = "a wagon repair";
 					}
 				}
 			}
-			case "HELP_WHEEL" -> {
-				if (giver.getSpareWheels() > 0) {
-					giver.setSpareWheels(giver.getSpareWheels() - 1);
-					taker.setSpareWheels(taker.getSpareWheels() + 1);
-					useSpareWheel(taker);
-					gave = "a spare wheel";
-				}
-			}
-			default -> { }
 		}
 		if (gave == null) {
-			turn.story(null, TrailLog.Kind.HELP, helperName + " wanted to help " + turn.names(taker)
-				+ " but had nothing to give. The thought counts, a little.");
+			turn.story(giver, TrailLog.Kind.HELP, "You wanted to help " + turn.names(taker) + " but had nothing to give. The thought counts, a little.");
 			return;
 		}
 		if (helper != null) {
 			addKarma(helper, TrailOdds.HELP_KARMA, turn.t);
 			helper.setSamaritanUntil(turn.t + TrailOdds.SAMARITAN_TURNS);
 		}
-		turn.story(null, TrailLog.Kind.HELP, helperName + " gave " + turn.names(taker) + " " + gave + ". A Good Samaritan.");
+		giver.setLuck(Math.max(giver.getLuck(), TrailOdds.HELP_KARMA));
+		addLog(turn.game, null, null, turn.t, TrailLog.Kind.HELP, helperName + " gave " + turn.names(taker) + " " + gave + ". A Good Samaritan.", null);
 		push.notify(turn.ids(taker), turn.game.getName(), helperName + " gave you " + gave + ".", PAGE);
 	}
 
-	private void steal(Turn turn, TrailChoice c, TrailParty thieves, TrailParty target, String what, boolean targetHelped) {
-		TrailPlayer thief = turn.player(c.getAnsweredBy());
+	private void steal(Turn turn, TrailPlayer thief, TrailParty thieves, TrailParty target, String what) {
 		if (thief == null) return;
 		String thiefName = turn.nameOf(thief.getUserId());
 		addKarma(thief, TrailOdds.THEFT_KARMA, turn.t);
@@ -791,37 +815,30 @@ public class TrailService {
 		List<TrailPlayer> victims = turn.members(target);
 
 		int coins = 0, food = 0;
-		Item part = null;
-		switch (what) {
-			case "STEAL_COINS" -> {
-				int pool = victims.stream().mapToInt(TrailPlayer::getCoins).sum();
-				coins = Math.min(TrailOdds.STEAL_COIN_MAX, (int) Math.round(pool * TrailOdds.STEAL_COIN_SHARE));
-				if (topThird) coins /= 2;
-			}
-			case "STEAL_FOOD" -> {
-				food = Math.min(TrailOdds.STEAL_FOOD_MAX, target.getFood());
-				if (topThird) food /= 2;
-			}
-			default -> part = target.getSpareWheels() > 0 ? Item.SPARE_WHEEL : target.getHorseshoes() > 0 ? Item.HORSESHOES
-				: target.getCarrots() > 0 ? Item.CARROTS : null;
+		if (what.equals("STEAL_COINS")) {
+			int pool = victims.stream().mapToInt(TrailPlayer::getCoins).sum();
+			coins = Math.min(TrailOdds.STEAL_COIN_MAX, (int) Math.round(pool * TrailOdds.STEAL_COIN_SHARE));
+			if (topThird) coins /= 2;
+		} else {
+			food = Math.min(TrailOdds.STEAL_FOOD_MAX, target.getFood());
+			if (topThird) food /= 2;
 		}
-		String haul = coins > 0 ? coins + " coins" : food > 0 ? food + " snack " + (food == 1 ? "pack" : "packs")
-			: part != null ? "their " + part.label.toLowerCase() : null;
+		String haul = coins > 0 ? coins + " coins" : food > 0 ? food + (food == 1 ? " provision" : " provisions") : null;
 		if (haul == null) {
-			turn.story(null, TrailLog.Kind.THEFT, thiefName + " tried to rob " + turn.names(target) + ", but they had nothing worth taking.");
+			addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT,
+				thiefName + " tried to rob " + turn.names(target) + ", but they had nothing worth taking.", null);
 			return;
 		}
-		int haulValue = coins + food * turn.price(Item.FOOD) + (part == null ? 0 : turn.price(part));
-		int chance = TrailOdds.stealChance(worth(turn, thieves), worth(turn, target), targetHelped, target.isWagonBroken());
+		int haulValue = coins + food * turn.price(Item.FOOD);
+		int chance = TrailOdds.stealChance(worth(turn, thieves), worth(turn, target), target.isWagonBroken());
 		if (roll(chance)) {
 			if (coins > 0) give(List.of(thief), sum(take(victims, coins)));
 			if (food > 0) {
 				target.setFood(target.getFood() - food);
 				thieves.setFood(thieves.getFood() + food);
 			}
-			if (part != null) movePart(target, thieves, part);
 			String text = thiefName + " robbed " + turn.names(target) + " of " + haul + (topThird ? " (and felt a little bad about it)" : "") + ".";
-			turn.story(null, TrailLog.Kind.THEFT, text);
+			addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT, text, null);
 			push.notify(turn.ids(target), turn.game.getName(), thiefName + " robbed you of " + haul + ".", PAGE);
 			return;
 		}
@@ -833,8 +850,8 @@ public class TrailService {
 		}
 		turn.move.merge(thieves.getId(), 0.5, (x, y) -> x * y);
 		String text = thiefName + " tried to rob " + turn.names(target) + " of " + haul + " and got caught. "
-			+ (fine > 0 ? "Paid them " + fine + " coins and " : "") + "lost half a turn explaining themselves to a Montana sheriff.";
-		turn.story(null, TrailLog.Kind.THEFT, text);
+			+ (fine > 0 ? "Paid them " + fine + " coins and " : "") + "lost half a turn explaining themselves to a territorial marshal.";
+		addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT, text, null);
 		push.notify(concat(turn.ids(target), List.of(thief.getUserId())), turn.game.getName(), text, PAGE);
 	}
 
@@ -851,7 +868,26 @@ public class TrailService {
 		return index >= 0 && index < Math.ceil(order.size() / 3.0) && order.size() >= 3;
 	}
 
-	/** Skims, invites, get-evens, and votes nobody answered in time. */
+	// Skimming from your own party.
+
+	/** Now and then, someone in a party gets a private chance to skim. */
+	private void offerSkims(Turn turn, TrailParty p) {
+		List<TrailPlayer> members = turn.members(p);
+		if (members.size() < 2) return;
+		for (TrailPlayer pl : members) {
+			if (turn.t < TrailOdds.SKIM_FIRST_TURN || turn.t - pl.getLastSkimTurn() < TrailOdds.SKIM_EVERY
+				|| turn.t - pl.getJoinedTurn() < TrailOdds.SKIM_AFTER_JOINING) continue;
+			if (random.nextDouble() >= TrailOdds.SKIM_OFFER) continue;
+			pl.setLastSkimTurn(turn.t);
+			TrailChoice c = choice(turn.game, TrailChoice.Kind.SKIM, turn.t, turn.t + 1);
+			c.setUserId(pl.getUserId());
+			c.setPartyId(p.getId());
+			choices.save(c);
+			push.notify(List.of(pl.getUserId()), turn.game.getName(), "Psst. Nobody is watching the party's coins right now.", PAGE);
+		}
+	}
+
+	/** Skims, requests, get-evens, and votes nobody answered in time. */
 	private void expireChoices(Turn turn) {
 		for (TrailChoice c : choices.findByGameIdAndResolvedFalse(turn.game.getId())) {
 			if (c.getExpiresTurn() >= turn.t) continue;
@@ -860,33 +896,18 @@ public class TrailService {
 		}
 	}
 
-	// What players do.
-
-	@Transactional
-	public GameView choose(User viewer, Long gameId, int option) {
-		TrailGame g = live(gameId);
-		TrailPlayer me = me(g, viewer);
-		TrailParty p = parties.findById(me.getPartyId()).orElseThrow();
-		Scenario sc = p.getScenarioKey() == null ? null : TrailScenarios.BY_KEY.get(p.getScenarioKey());
-		if (sc == null) throw bad("There's nothing to decide right now");
-		if (option < 0 || option >= sc.options().size()) throw bad("Pick one of the options");
-		List<TrailPlayer> members = players.findByPartyId(p.getId());
-		Option op = sc.options().get(option);
-		if (!available(op, p, members)) throw bad(unavailable(op));
-		p.setScenarioAnswer(option);
-		p.setAnsweredBy(viewer.getUserId());
-		parties.save(p);
-		return view(g, viewer);
-	}
+	// What players do between turns.
 
 	@Transactional
 	public GameView buy(User viewer, Long gameId, BuyInput input) {
 		TrailGame g = open(gameId);
 		TrailPlayer me = me(g, viewer);
 		TrailParty p = parties.findById(me.getPartyId()).orElseThrow();
-		if (p.getArrivedTurn() != null) throw bad("You're at the coast. Nothing to buy but saltwater taffy.");
+		if (p.getArrivedTurn() != null) throw bad("You've reached the Pacific. Nothing to buy here but salt water.");
 		if (input == null || input.item() == null) throw bad("Pick something to buy");
 		Item item = input.item();
+		// A wheelwright can be sent for anywhere; everything else needs a trading post.
+		if (item != Item.REPAIR && p.getStoreName() == null) throw bad("There's no trading post here. Keep going and you'll find one.");
 		int quantity = input.quantity() == null ? 1 : input.quantity();
 		int max = item == Item.FOOD ? 60 : switch (item) {
 			case SPARE_WHEEL, HORSESHOES, CARROTS, PLAYLIST -> 5;
@@ -940,18 +961,7 @@ public class TrailService {
 		parties.save(p);
 		players.saveAll(members);
 		players.save(me);
-		logPurchases(g, p, g.getTurn(), paid, (quantity > 1 ? quantity + " x " : "") + item.label);
-		return view(g, viewer);
-	}
-
-	@Transactional
-	public GameView setPace(User viewer, Long gameId, Pace pace) {
-		TrailGame g = open(gameId);
-		TrailPlayer me = me(g, viewer);
-		if (pace == null) throw bad("Pick a pace");
-		TrailParty p = parties.findById(me.getPartyId()).orElseThrow();
-		p.setPace(pace);
-		parties.save(p);
+		logPurchases(g, p, p.getTurnsPlayed(), paid, (quantity > 1 ? quantity + " x " : "") + item.label);
 		return view(g, viewer);
 	}
 
@@ -964,121 +974,105 @@ public class TrailService {
 		p.setWagon(false);
 		p.setWagonBroken(false);
 		parties.save(p);
-		addLog(g, p.getId(), null, g.getTurn(), TrailLog.Kind.PARTY, userName(viewer) + " left the wagon by the side of the road. Someone will make it a planter.", null);
+		addLog(g, p.getId(), null, p.getTurnsPlayed(), TrailLog.Kind.PARTY,
+			userName(viewer) + " left the wagon on the prairie. Someone will make it a chicken coop.", null);
 		return view(g, viewer);
 	}
 
-	@Transactional
-	public GameView invite(User viewer, Long gameId, Long userId) {
-		TrailGame g = open(gameId);
-		TrailPlayer me = me(g, viewer);
-		TrailPlayer them = userId == null ? null : players.findByGameIdAndUserId(gameId, userId).orElse(null);
-		if (them == null || them.getUserId().equals(me.getUserId())) throw bad("Pick someone else on the trail");
-		checkJoin(g, me, them);
-		boolean already = choices.findByGameIdAndResolvedFalse(gameId).stream().anyMatch(c -> c.getKind() == TrailChoice.Kind.INVITE
-			&& them.getUserId().equals(c.getUserId()) && me.getPartyId().equals(c.getPartyId()));
-		if (already) throw bad("You've already invited them");
-		TrailChoice c = choice(g, TrailChoice.Kind.INVITE, g.getTurn(), g.getTurn() + TrailOdds.INVITE_TURNS);
-		c.setUserId(them.getUserId());
-		c.setOtherUserId(me.getUserId());
-		c.setPartyId(me.getPartyId());
-		choices.save(c);
-		push.notify(List.of(them.getUserId()), g.getName(), userName(viewer) + " wants you to join their party on the trail.", PAGE);
-		return view(g, viewer);
-	}
-
-	/** Whether {@code them} (alone) can join {@code me}'s party now. */
-	private void checkJoin(TrailGame g, TrailPlayer me, TrailPlayer them) {
-		TrailParty mine = parties.findById(me.getPartyId()).orElseThrow();
-		TrailParty theirs = parties.findById(them.getPartyId()).orElseThrow();
-		if (mine.getId().equals(theirs.getId())) throw bad("You're already traveling together");
-		if (mine.getArrivedTurn() != null || theirs.getArrivedTurn() != null) throw bad("Nobody forms parties at the coast");
-		if (players.findByPartyId(theirs.getId()).size() > 1) throw bad("They're already in a party. They'd have to leave it first.");
-		if (players.findByPartyId(mine.getId()).size() >= TrailOdds.MAX_PARTY) throw bad("A party can have " + TrailOdds.MAX_PARTY + " people at most");
-		if (Math.abs(mine.getMiles() - theirs.getMiles()) > TrailOdds.INVITE_MILES) {
-			throw bad("You have to be within " + TrailOdds.INVITE_MILES + " miles of each other");
-		}
-		if (me.getNoJoinUntil() > g.getTurn()) throw bad("You need some space until turn " + me.getNoJoinUntil());
-		if (them.getNoJoinUntil() > g.getTurn()) throw bad("They need some space until turn " + them.getNoJoinUntil());
-	}
-
-	/** Answer an invite, a chance to skim, a meeting, getting even, or a vote. */
+	/** Answer a request to travel together, a chance to skim, getting even, or a vote. */
 	@Transactional
 	public GameView answer(User viewer, Long gameId, Long choiceId, String answer) {
 		TrailGame g = open(gameId);
 		TrailPlayer me = me(g, viewer);
 		TrailChoice c = choices.findById(choiceId).filter(x -> x.getGameId().equals(gameId))
 			.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "That's not a question anymore"));
-		boolean mine = c.getKind() == TrailChoice.Kind.MEET ? me.getPartyId().equals(c.getPartyId()) : me.getUserId().equals(c.getUserId());
-		if (!mine) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "That question isn't yours");
+		boolean mine = c.getKind() == TrailChoice.Kind.INVITE ? me.getPartyId().equals(c.getPartyId()) : me.getUserId().equals(c.getUserId());
+		if (!mine || c.getKind() == TrailChoice.Kind.MEET) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "That question isn't yours");
 		if (c.isResolved() || c.getExpiresTurn() < g.getTurn()) throw bad("Too late. That moment has passed.");
 		String a = answer == null ? "" : answer.trim().toUpperCase();
 		switch (c.getKind()) {
 			case INVITE -> answerInvite(g, me, c, a);
 			case SKIM -> skim(g, me, c, a);
-			case MEET -> {
-				if (!List.of("WAVE", "HELP_FOOD", "HELP_COINS", "HELP_WAGON", "HELP_WHEEL", "STEAL_COINS", "STEAL_FOOD", "STEAL_PARTS").contains(a)) {
-					throw bad("Pick one of the options");
-				}
-				c.setAnswer(a);
-				c.setAnsweredBy(me.getUserId());
-				choices.save(c);
-			}
 			case GET_EVEN -> getEven(g, me, c, a);
 			case VOTE_OUT -> voteOut(g, me, c, a);
+			default -> { }
 		}
 		return view(g, viewer);
 	}
 
+	/** Saying yes merges the two parties: whoever travels alone joins the other, at the rearmost spot. */
 	private void answerInvite(TrailGame g, TrailPlayer me, TrailChoice c, String a) {
-		if (!a.equals("ACCEPT") && !a.equals("DECLINE")) throw bad("Accept or decline");
+		if (!a.equals("ACCEPT") && !a.equals("DECLINE")) throw bad("Yes or no");
 		c.setAnswer(a);
 		c.setAnsweredBy(me.getUserId());
 		c.setResolved(true);
 		choices.save(c);
-		TrailPlayer inviter = players.findByGameIdAndUserId(g.getId(), c.getOtherUserId()).orElse(null);
+		TrailParty mine = parties.findById(me.getPartyId()).orElseThrow();
+		TrailParty asker = parties.findById(c.getOtherPartyId()).orElse(null);
+		List<TrailPlayer> askers = asker == null ? List.of() : players.findByPartyId(asker.getId());
 		String myName = userName(me.getUserId());
 		if (a.equals("DECLINE")) {
-			if (inviter != null) push.notify(List.of(inviter.getUserId()), g.getName(), myName + " would rather go it alone. For now.", PAGE);
+			push.notify(askers.stream().map(TrailPlayer::getUserId).toList(), g.getName(), myName + " would rather go it alone. For now.", PAGE);
 			return;
 		}
-		if (inviter == null || !inviter.getPartyId().equals(c.getPartyId())) throw bad("That party isn't together anymore");
-		checkJoin(g, inviter, me);
-		TrailParty party = parties.findById(inviter.getPartyId()).orElseThrow();
-		TrailParty old = parties.findById(me.getPartyId()).orElseThrow();
-		String note = "";
-		party.setMiles(Math.min(party.getMiles(), old.getMiles()));
-		party.setFood(party.getFood() + old.getFood());
-		party.setSpareWheels(party.getSpareWheels() + old.getSpareWheels());
-		party.setHorseshoes(party.getHorseshoes() + old.getHorseshoes());
-		party.setCarrots(party.getCarrots() + old.getCarrots());
-		party.setPlaylists(party.getPlaylists() + old.getPlaylists());
-		party.setPuppy(party.isPuppy() || old.isPuppy());
-		if (old.isWagon() && party.isWagon()) {
-			int back = (int) Math.round(TrailOdds.price(Item.WAGON, g.getPriceScale()) * TrailOdds.WAGON_RESALE);
-			me.setCoins(me.getCoins() + back);
-			note = " One wagon too many: " + myName + " sold theirs back for " + back + " coins.";
-		} else if (old.isWagon()) {
-			party.setWagon(true);
-			party.setWagonBroken(old.isWagonBroken());
+		if (asker == null || askers.isEmpty()) throw bad("They're not traveling anymore");
+		if (asker.getArrivedTurn() != null || mine.getArrivedTurn() != null) throw bad("Nobody forms parties at the Pacific");
+		if (TrailOdds.landmarkAt(asker.getMiles()) != TrailOdds.landmarkAt(mine.getMiles())) {
+			throw bad("You've drifted apart. You'd have to be on the same stretch of trail.");
 		}
-		if (party.getFood() > 0) party.setHangry(false);
-		useSpareWheel(party);
-		me.setPartyId(party.getId());
-		me.setJoinedTurn(g.getTurn());
-		parties.save(party);
-		players.save(me);
+		Turn turn = new Turn(g);
+		TrailParty a1 = turn.partyById.get(mine.getId()), a2 = turn.partyById.get(asker.getId());
+		if (!canTravelTogether(turn, a1, a2)) throw bad("You can't travel together right now");
+		// The one traveling alone joins the other; when both are, the one who said yes joins the one who asked.
+		TrailParty into = turn.members(a2).size() > 1 || turn.members(a1).size() == 1 ? a2 : a1;
+		TrailParty from = into == a2 ? a1 : a2;
+		TrailPlayer joiner = turn.members(from).get(0);
+		String note = "";
+		into.setMiles(Math.min(into.getMiles(), from.getMiles()));
+		into.setTurnsPlayed(Math.max(into.getTurnsPlayed(), from.getTurnsPlayed()));
+		into.setFood(into.getFood() + from.getFood());
+		into.setSpareWheels(into.getSpareWheels() + from.getSpareWheels());
+		into.setHorseshoes(into.getHorseshoes() + from.getHorseshoes());
+		into.setCarrots(into.getCarrots() + from.getCarrots());
+		into.setPlaylists(into.getPlaylists() + from.getPlaylists());
+		into.setPuppy(into.isPuppy() || from.isPuppy());
+		if (into.getStoreName() == null) into.setStoreName(from.getStoreName());
+		if (from.isWagon() && into.isWagon()) {
+			int back = (int) Math.round(TrailOdds.price(Item.WAGON, g.getPriceScale()) * TrailOdds.WAGON_RESALE);
+			joiner.setCoins(joiner.getCoins() + back);
+			note = " One wagon too many: " + turn.nameOf(joiner.getUserId()) + " sold theirs back for " + back + " coins.";
+		} else if (from.isWagon()) {
+			into.setWagon(true);
+			into.setWagonBroken(from.isWagonBroken());
+		}
+		if (into.getFood() > 0) into.setHangry(false);
+		useSpareWheel(into);
+		if (into.getScenarioKey() == null && into.getEncounterPartyId() == null) deal(turn, into);
+		joiner.setPartyId(into.getId());
+		joiner.setJoinedTurn(g.getTurn());
+		parties.save(into);
+		players.save(joiner);
 		for (TrailChoice other : choices.findByGameIdAndResolvedFalse(g.getId())) {
-			if (old.getId().equals(other.getPartyId()) || old.getId().equals(other.getOtherPartyId())) {
+			if (from.getId().equals(other.getPartyId()) || from.getId().equals(other.getOtherPartyId())) {
 				other.setResolved(true);
 				choices.save(other);
 			}
 		}
-		parties.delete(old);
-		List<Long> everyone = players.findByPartyId(party.getId()).stream().map(TrailPlayer::getUserId).toList();
-		addLog(g, null, null, g.getTurn(), TrailLog.Kind.PARTY, myName + " joined " + userName(inviter.getUserId())
-			+ "'s party at mile " + party.getMiles() + "." + note, null);
-		push.notify(everyone.stream().filter(id -> !id.equals(me.getUserId())).toList(), g.getName(), myName + " joined your party.", PAGE);
+		for (TrailParty p : turn.partyById.values()) {
+			if (from.getId().equals(p.getEncounterPartyId())) {
+				p.setEncounterPartyId(null);
+				p.setEncounterJoin(false);
+				deal(turn, p);
+				parties.save(p);
+			}
+		}
+		parties.delete(from);
+		String joinerName = turn.nameOf(joiner.getUserId());
+		addLog(g, null, null, g.getTurn(), TrailLog.Kind.PARTY, joinerName + " is now traveling with "
+			+ joinNames(turn.members(into).stream().filter(pl -> pl != joiner).map(pl -> turn.nameOf(pl.getUserId())).toList())
+			+ ", from mile " + into.getMiles() + "." + note, null);
+		push.notify(turn.ids(into).stream().filter(id -> !id.equals(me.getUserId())).toList(),
+			g.getName(), myName + " said yes. You're traveling together now.", PAGE);
 	}
 
 	/** Leave your party: keep your coins and your animal, take your share of the food, and need some space. */
@@ -1089,11 +1083,11 @@ public class TrailService {
 		TrailParty party = parties.findById(me.getPartyId()).orElseThrow();
 		List<TrailPlayer> members = players.findByPartyId(party.getId());
 		if (members.size() < 2) throw bad("You're already on your own");
-		if (party.getArrivedTurn() != null) throw bad("You're at the coast. Just move your towel.");
+		if (party.getArrivedTurn() != null) throw bad("You've reached the Pacific. There's nowhere left to go.");
 		int share = party.getFood() / members.size();
 		split(g, me, party, share, TrailOdds.SPACE_TURNS);
 		addLog(g, null, null, g.getTurn(), TrailLog.Kind.PARTY, userName(viewer) + " left their party at mile " + party.getMiles()
-			+ " with " + share + " snack " + (share == 1 ? "pack" : "packs") + ". It's not you, it's the trail.", null);
+			+ " with " + share + (share == 1 ? " provision" : " provisions") + ". It's not you, it's the trail.", null);
 		push.notify(members.stream().map(TrailPlayer::getUserId).filter(id -> !id.equals(viewer.getUserId())).toList(),
 			g.getName(), userName(viewer) + " left your party.", PAGE);
 		return view(g, viewer);
@@ -1106,6 +1100,7 @@ public class TrailService {
 		alone.setMiles(from.getMiles());
 		alone.setFood(food);
 		alone.setSeen(from.getSeen());
+		alone.setTurnsPlayed(from.getTurnsPlayed());
 		from.setFood(from.getFood() - food);
 		parties.save(from);
 		alone = parties.save(alone);
@@ -1121,7 +1116,7 @@ public class TrailService {
 				choices.save(c);
 			}
 		}
-		if (g.getFinishedAt() == null && g.getTurn() > 0 && g.getTurn() < g.getTurns()) {
+		if (g.getFinishedAt() == null && g.getTurn() > 0) {
 			Turn turn = new Turn(g);
 			TrailParty mine = turn.partyById.get(alone.getId());
 			deal(turn, mine);
@@ -1157,11 +1152,11 @@ public class TrailService {
 			}
 			case "FOOD" -> {
 				int n = Math.min(TrailOdds.SKIM_FOOD_MAX, party.getFood());
-				if (n <= 0) throw bad("There are no snack packs to take");
+				if (n <= 0) throw bad("There are no provisions to take");
 				party.setFood(party.getFood() - n);
 				value = n * TrailOdds.price(Item.FOOD, scale);
 				me.setCoins(me.getCoins() + value);
-				what = n + " snack " + (n == 1 ? "pack" : "packs") + " (sold to a trucker for " + value + " coins)";
+				what = n + (n == 1 ? " provision" : " provisions") + " (sold to a passing freighter for " + value + " coins)";
 			}
 			default -> {
 				Item part = party.getSpareWheels() > 0 ? Item.SPARE_WHEEL : party.getHorseshoes() > 0 ? Item.HORSESHOES : null;
@@ -1188,12 +1183,12 @@ public class TrailService {
 			give(victims, back);
 			text = myName + " took " + what + " from the party. Caught with crumbs on their cape, and gave back " + back + " coins.";
 		} else {
-			text = "Someone took " + what + " from the party. The Glazers are also missing.";
+			text = "Someone took " + what + " from the party. The jerky is also missing.";
 		}
 		parties.save(party);
 		players.saveAll(victims);
 		players.save(me);
-		addLog(g, party.getId(), null, g.getTurn(), TrailLog.Kind.THEFT, text, null);
+		addLog(g, party.getId(), null, party.getTurnsPlayed(), TrailLog.Kind.THEFT, text, null);
 		push.notify(victims.stream().map(TrailPlayer::getUserId).toList(), g.getName(), text, PAGE);
 		for (TrailPlayer v : victims) {
 			TrailChoice even = choice(g, TrailChoice.Kind.GET_EVEN, g.getTurn(), g.getTurn() + TrailOdds.AFTERMATH_TURNS);
@@ -1235,7 +1230,8 @@ public class TrailService {
 		}
 		players.save(thief);
 		players.save(me);
-		addLog(g, c.getPartyId(), null, g.getTurn(), TrailLog.Kind.THEFT, text, null);
+		int partyTurn = parties.findById(c.getPartyId()).map(TrailParty::getTurnsPlayed).orElse(g.getTurn());
+		addLog(g, c.getPartyId(), null, partyTurn, TrailLog.Kind.THEFT, text, null);
 		push.notify(List.of(thief.getUserId()), g.getName(), text, PAGE);
 	}
 
@@ -1334,33 +1330,13 @@ public class TrailService {
 		return fixed;
 	}
 
-	private static void movePart(TrailParty from, TrailParty to, Item part) {
-		switch (part) {
-			case SPARE_WHEEL -> {
-				from.setSpareWheels(from.getSpareWheels() - 1);
-				to.setSpareWheels(to.getSpareWheels() + 1);
-				useSpareWheel(to);
-			}
-			case HORSESHOES -> {
-				from.setHorseshoes(from.getHorseshoes() - 1);
-				to.setHorseshoes(to.getHorseshoes() + 1);
-			}
-			case CARROTS -> {
-				from.setCarrots(from.getCarrots() - 1);
-				to.setCarrots(to.getCarrots() + 1);
-			}
-			default -> { }
-		}
-	}
-
-	private static boolean available(Option op, TrailParty p, List<TrailPlayer> members) {
-		boolean has = switch (op.needs) {
+	private static boolean available(Option op, TrailParty p) {
+		return switch (op.needs) {
 			case NOTHING -> true;
 			case WAGON -> p.isWagon();
 			case CARROTS -> p.getCarrots() > 0;
 			case PLAYLIST -> p.getPlaylists() > 0;
 		};
-		return has;
 	}
 
 	private static String unavailable(Option op) {
@@ -1464,7 +1440,8 @@ public class TrailService {
 			List<MemberView> mv = members.stream().map(pl -> new MemberView(pl.getUserId(), turn.nameOf(pl.getUserId()),
 				mountLabel(pl), labels(pl, g.getTurn()))).sorted(Comparator.comparing(m -> m.name().toLowerCase())).toList();
 			return new PartyView(p.getId(), p.getMiles(), TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(p.getMiles())).name(),
-				p.getArrivedTurn(), g.getTurn() > 0 ? places.get(p.getId()) : null, travel(p, members), p.isWagonBroken(), mv);
+				p.getArrivedTurn(), g.getTurn() > 0 ? places.get(p.getId()) : null, travel(p, members), p.isWagonBroken(),
+				p.getTurnsPlayed(), mv);
 		}).toList();
 
 		TrailPlayer me = turn.player(viewer.getUserId());
@@ -1476,126 +1453,110 @@ public class TrailService {
 			.limit(80)
 			.map(l -> new LogView(l.getTurn(), l.getKind().name(), l.getBody(), l.getCoins()))
 			.toList();
-		List<ShopItem> shop = java.util.Arrays.stream(Item.values())
-			.map(i -> new ShopItem(i.name(), i.label, TrailOdds.price(i, g.getPriceScale()), i.help)).toList();
-		List<LandmarkView> landmarks = TrailOdds.LANDMARKS.stream().map(l -> new LandmarkView(l.name(), l.miles())).toList();
+		List<LandmarkView> landmarks = TrailOdds.LANDMARKS.stream()
+			.map(l -> new LandmarkView(l.name(), l.miles(), l.lon(), l.lat(), l.store())).toList();
 		String status = g.getFinishedAt() != null ? "FINISHED" : g.getTurn() == 0 ? "UPCOMING" : "LIVE";
 		return new GameView(g.getId(), g.getName(), status, g.getTurn(), g.getTurns(), g.getStartDate(), g.getPrize(),
 			g.getHandicap().name(), g.getBonusTreatment(), g.getBonusColor(), g.getBonusWax(), g.getLastCheckedAt(),
 			viewer.isAdmin() ? g.getCheckProblem() : null,
 			users.findById(g.getCreatedBy()).map(TrailService::name).orElse("Former employee"),
-			TrailOdds.TRAIL_MILES, landmarks, partyViews, meView, shop, story);
+			TrailOdds.TRAIL_MILES, landmarks, partyViews, meView, story);
 	}
 
 	private MeView me(Turn turn, TrailPlayer me) {
 		TrailGame g = turn.game;
 		TrailParty p = turn.partyById.get(me.getPartyId());
 		List<TrailPlayer> members = turn.members(p);
-		MyParty party = new MyParty(p.getId(), p.getFood(), p.getPace().name(), p.isHangry(), p.isWagon(), p.isWagonBroken(),
+		MyParty party = new MyParty(p.getId(), p.getFood(), p.isHangry(), p.isWagon(), p.isWagonBroken(),
 			p.getSpareWheels(), p.getHorseshoes(), p.getCarrots(), p.getPlaylists(), p.isPuppy(),
 			members.stream().map(pl -> new MyMember(pl.getUserId(), turn.nameOf(pl.getUserId()), pl.getCoins(), pl.getMount().name(), pl.isShoeThrown()))
 				.sorted(Comparator.comparing(m -> m.name().toLowerCase())).toList());
+		boolean ready = g.getFinishedAt() == null && p.getArrivedTurn() == null && p.getTurnsPlayed() < g.getTurn();
 
-		ScenarioView scenario = null;
-		Scenario sc = p.getScenarioKey() == null ? null : TrailScenarios.BY_KEY.get(p.getScenarioKey());
-		if (sc != null) {
-			List<OptionView> options = new ArrayList<>();
-			for (int i = 0; i < sc.options().size(); i++) {
-				Option op = sc.options().get(i);
-				options.add(new OptionView(i, op.label, op.good.text, op.sure() ? null : op.bad.text, op.isDefault, available(op, p, members)));
+		TurnView next = null;
+		if (p.getArrivedTurn() == null && g.getFinishedAt() == null) {
+			if (p.getEncounterPartyId() != null) {
+				TrailParty them = turn.partyById.get(p.getEncounterPartyId());
+				String who = them == null ? "someone" : turn.names(them);
+				String where = TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(p.getMiles())).name();
+				next = new TurnView("MEETING", "You come upon " + who + "'s camp near " + where
+					+ (them != null && them.isWagonBroken() ? ". Their wagon is broken down." : ".") + " What do you do?",
+					meetingOptions(turn, p));
+			} else if (p.getScenarioKey() != null && TrailScenarios.BY_KEY.containsKey(p.getScenarioKey())) {
+				Scenario sc = TrailScenarios.BY_KEY.get(p.getScenarioKey());
+				List<OptionView> options = new ArrayList<>();
+				for (int i = 0; i < sc.options().size(); i++) {
+					Option op = sc.options().get(i);
+					options.add(new OptionView(String.valueOf(i), op.label, available(op, p)));
+				}
+				next = new TurnView("SCENARIO", sc.text(), options);
 			}
-			scenario = new ScenarioView(sc.key(), sc.text(), options, p.getScenarioAnswer(),
-				p.getAnsweredBy() == null ? null : turn.nameOf(p.getAnsweredBy()));
+		}
+
+		StoreView store = null;
+		if (p.getStoreName() != null && p.getArrivedTurn() == null && g.getFinishedAt() == null) {
+			store = new StoreView(p.getStoreName(), Arrays.stream(Item.values()).filter(i -> i != Item.REPAIR)
+				.map(i -> new ShopItem(i.name(), i.label, turn.price(i), i.help)).toList());
 		}
 
 		List<ChoiceView> mine = new ArrayList<>();
 		for (TrailChoice c : choices.findByGameIdAndResolvedFalse(g.getId())) {
-			if (c.getExpiresTurn() < g.getTurn()) continue;
-			boolean forMe = c.getKind() == TrailChoice.Kind.MEET ? p.getId().equals(c.getPartyId()) : me.getUserId().equals(c.getUserId());
-			if (!forMe) continue;
-			ChoiceView v = choiceView(turn, c, p, me);
-			if (v != null) mine.add(v);
+			if (c.getExpiresTurn() < g.getTurn() || c.getKind() == TrailChoice.Kind.MEET) continue;
+			boolean forMe = c.getKind() == TrailChoice.Kind.INVITE ? p.getId().equals(c.getPartyId()) : me.getUserId().equals(c.getUserId());
+			if (forMe) mine.add(choiceView(turn, c, p, me));
 		}
 
-		List<InviteTarget> canInvite = new ArrayList<>();
-		if (p.getArrivedTurn() == null && members.size() < TrailOdds.MAX_PARTY && me.getNoJoinUntil() <= g.getTurn() && g.getFinishedAt() == null) {
-			for (TrailPlayer other : turn.everyone) {
-				TrailParty theirs = turn.partyById.get(other.getPartyId());
-				if (theirs == null || theirs.getId().equals(p.getId()) || theirs.getArrivedTurn() != null) continue;
-				if (turn.members(theirs).size() != 1 || other.getNoJoinUntil() > g.getTurn()) continue;
-				if (Math.abs(theirs.getMiles() - p.getMiles()) > TrailOdds.INVITE_MILES) continue;
-				canInvite.add(new InviteTarget(other.getUserId(), turn.nameOf(other.getUserId()), theirs.getMiles()));
-			}
-			canInvite.sort(Comparator.comparing(i -> i.name().toLowerCase()));
-		}
-
+		List<String> lastResult = logs.findByGameIdOrderByIdDesc(g.getId()).stream()
+			.filter(l -> p.getId().equals(l.getPartyId()) && l.getKind() != TrailLog.Kind.PURCHASE && l.getTurn() == p.getTurnsPlayed()
+				&& p.getTurnsPlayed() > 0)
+			.sorted(Comparator.comparing(TrailLog::getId))
+			.map(TrailLog::getBody)
+			.toList();
 		List<LogView> purchases = logs.findByGameIdOrderByIdDesc(g.getId()).stream()
 			.filter(l -> l.getKind() == TrailLog.Kind.PURCHASE && p.getId().equals(l.getPartyId()))
 			.limit(40)
 			.map(l -> new LogView(l.getTurn(), l.getKind().name(), l.getBody(), l.getCoins()))
 			.toList();
-		return new MeView(me.getUserId(), me.getCoins(), me.getMount().name(), me.isShoeThrown(), me.getNoJoinUntil(), party,
-			scenario, mine, canInvite, purchases);
+		return new MeView(me.getUserId(), me.getCoins(), me.getMount().name(), me.isShoeThrown(), me.getNoJoinUntil(),
+			p.getTurnsPlayed(), ready, party, next, store, turn.price(Item.REPAIR), mine, lastResult, purchases);
 	}
 
 	private ChoiceView choiceView(Turn turn, TrailChoice c, TrailParty p, TrailPlayer me) {
-		String answeredBy = c.getAnsweredBy() == null ? null : turn.nameOf(c.getAnsweredBy());
-		double scale = turn.game.getPriceScale();
 		return switch (c.getKind()) {
-			case INVITE -> new ChoiceView(c.getId(), "INVITE", turn.nameOf(c.getOtherUserId()) + " wants you to join their party",
-				"You'd set off from wherever the rearmost of you is. Food and spare parts are pooled, and anyone can spend the party's coins on the party.",
-				List.of(new ChoiceOption("ACCEPT", "Join them"), new ChoiceOption("DECLINE", "No thanks")), null, null, c.getExpiresTurn());
+			case INVITE -> new ChoiceView(c.getId(), "INVITE",
+				turn.nameOf(c.getOtherUserId()) + " wants to travel together",
+				"You'd travel as one party from wherever the rearmost of you is. Food is shared and purchases can be split, but you eat more, bad luck hits everyone, and the prize is split.",
+				List.of(new ChoiceOption("ACCEPT", "Travel together"), new ChoiceOption("DECLINE", "No thanks")));
 			case SKIM -> {
 				List<ChoiceOption> opts = new ArrayList<>();
 				int pool = turn.members(p).stream().filter(pl -> !pl.getId().equals(me.getId())).mapToInt(TrailPlayer::getCoins).sum();
 				int coins = Math.min(TrailOdds.SKIM_COIN_MAX, (int) Math.round(pool * TrailOdds.SKIM_COIN_SHARE));
 				if (coins > 0) opts.add(new ChoiceOption("COINS", "Pocket " + coins + " coins from the others"));
-				if (p.getFood() > 0) opts.add(new ChoiceOption("FOOD", "Sell " + Math.min(TrailOdds.SKIM_FOOD_MAX, p.getFood()) + " snack packs to a trucker"));
+				if (p.getFood() > 0) opts.add(new ChoiceOption("FOOD", "Sell " + Math.min(TrailOdds.SKIM_FOOD_MAX, p.getFood()) + " provisions to a passing freighter"));
 				if (p.getSpareWheels() > 0) opts.add(new ChoiceOption("PARTS", "Sell the spare wheel"));
 				else if (p.getHorseshoes() > 0) opts.add(new ChoiceOption("PARTS", "Sell the horseshoes"));
 				opts.add(new ChoiceOption("NO", "Not today"));
 				yield new ChoiceView(c.getId(), "SKIM", "Skim off the top?",
-					"Nobody is watching the party's stuff right now. Only you can see this. If you're caught, everyone will know.",
-					opts, null, null, c.getExpiresTurn());
-			}
-			case MEET -> {
-				TrailParty them = turn.partyById.get(c.getOtherPartyId());
-				if (them == null) yield null;
-				List<ChoiceOption> opts = new ArrayList<>();
-				opts.add(new ChoiceOption("WAVE", "Wave and keep going"));
-				if (p.getFood() > 0) opts.add(new ChoiceOption("HELP_FOOD", "Give them up to " + TrailOdds.HELP_FOOD_MAX + " snack packs"));
-				if (me.getCoins() > 0) opts.add(new ChoiceOption("HELP_COINS", "Give them up to " + TrailOdds.HELP_COIN_MAX + " of your coins"));
-				if (them.isWagonBroken()) {
-					int cost = (int) Math.round(TrailOdds.price(Item.REPAIR, scale) * TrailOdds.HELP_REPAIR_SHARE);
-					opts.add(new ChoiceOption("HELP_WAGON", "Pay to fix their wagon (" + cost + " coins, you know a guy)"));
-				}
-				if (p.getSpareWheels() > 0) opts.add(new ChoiceOption("HELP_WHEEL", "Give them your spare wheel"));
-				opts.add(new ChoiceOption("STEAL_COINS", "Steal some of their coins"));
-				opts.add(new ChoiceOption("STEAL_FOOD", "Steal some of their snack packs"));
-				opts.add(new ChoiceOption("STEAL_PARTS", "Steal their spare parts"));
-				String where = TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(them.getMiles())).name();
-				yield new ChoiceView(c.getId(), "MEET", "You ran into " + turn.names(them),
-					"They're at mile " + them.getMiles() + ", past " + where + (them.isWagonBroken() ? ", with a broken-down wagon" : "")
-						+ ". They're deciding what to do about you, too. It all happens at the next turn.",
-					opts, c.getAnswer(), answeredBy, c.getExpiresTurn());
+					"Nobody is watching the party's stuff right now. Only you can see this. If you're caught, everyone will know.", opts);
 			}
 			case GET_EVEN -> new ChoiceView(c.getId(), "GET_EVEN", "Get even?",
 				"Someone took from you. You could take back double, if it works. If it doesn't, you're the one with Sticky Fingers.",
-				List.of(new ChoiceOption("YES", "Get even"), new ChoiceOption("NO", "Let it go")), null, null, c.getExpiresTurn());
+				List.of(new ChoiceOption("YES", "Get even"), new ChoiceOption("NO", "Let it go")));
 			case VOTE_OUT -> new ChoiceView(c.getId(), "VOTE_OUT", "Vote " + turn.nameOf(c.getOtherUserId()) + " out of the party?",
-				"They'd leave with no food and couldn't join anyone for " + TrailOdds.SPACE_TURNS * 2 + " turns.",
-				List.of(new ChoiceOption("YES", "Vote them out"), new ChoiceOption("NO", "Give them another chance")), null, null, c.getExpiresTurn());
+				"They'd leave with no food and couldn't travel with anyone for " + TrailOdds.SPACE_TURNS * 2 + " turns.",
+				List.of(new ChoiceOption("YES", "Vote them out"), new ChoiceOption("NO", "Give them another chance")));
+			default -> null;
 		};
 	}
 
-	/** At the coast first (earliest first), then by miles. */
+	/** At the coast first (fewest turns first), then by miles. */
 	private static List<TrailParty> standings(List<TrailParty> list) {
 		return list.stream().sorted(Comparator
 			.comparing((TrailParty p) -> p.getArrivedTurn() == null ? Integer.MAX_VALUE : p.getArrivedTurn())
 			.thenComparing(TrailParty::getMiles, Comparator.reverseOrder())).toList();
 	}
 
-	/** Places with ties: same arrival turn, or same miles on the trail. */
+	/** Places with ties: same number of turns to the coast, or same miles on the trail. */
 	private static Map<Long, Integer> places(List<TrailParty> order) {
 		Map<Long, Integer> out = new HashMap<>();
 		for (int i = 0; i < order.size(); i++) {
@@ -1683,13 +1644,6 @@ public class TrailService {
 		return g;
 	}
 
-	/** A game that has started and isn't over. */
-	private TrailGame live(Long id) {
-		TrailGame g = open(id);
-		if (g.getTurn() == 0) throw bad("The game hasn't started yet");
-		return g;
-	}
-
 	private TrailGame find(Long id) {
 		return games.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "That game isn't here anymore"));
 	}
@@ -1709,7 +1663,7 @@ public class TrailService {
 	}
 
 	private String userName(Long userId) {
-		return users.findById(userId).map(TrailService::name).orElse("Former employee");
+		return userId == null ? "Someone" : users.findById(userId).map(TrailService::name).orElse("Former employee");
 	}
 
 	private static String name(User u) {

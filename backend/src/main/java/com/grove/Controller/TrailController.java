@@ -13,22 +13,19 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.grove.Domain.TrailParty.Pace;
 import com.grove.Service.SessionService;
 import com.grove.Service.TrailService;
 import com.grove.Service.TrailService.BuyInput;
 import com.grove.Service.TrailService.Eligible;
 import com.grove.Service.TrailService.GameInput;
 import com.grove.Service.TrailService.GameView;
+import com.grove.Service.TrailService.PlayInput;
 
 /** The Trail tab: everyone on staff sees the games; players play; managers and up start them. */
 @RestController
 @RequestMapping("/api/trail")
 public class TrailController {
 
-	public record ChooseBody(Integer option) {}
-	public record PaceBody(Pace pace) {}
-	public record InviteBody(Long userId) {}
 	public record AnswerBody(String answer) {}
 
 	private final TrailService trail;
@@ -67,34 +64,23 @@ public class TrailController {
 		return ResponseEntity.noContent().build();
 	}
 
-	/** Managers: play the next turn now. */
-	@PostMapping("/{id}/turn")
-	public GameView turn(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token, @PathVariable Long id) {
-		return trail.runTurnNow(sessions.requireUser(token), id);
+	/** Managers: unlock the next turn for everyone now instead of waiting for the next check. */
+	@PostMapping("/{id}/unlock")
+	public GameView unlock(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token, @PathVariable Long id) {
+		return trail.unlockNow(sessions.requireUser(token), id);
 	}
 
-	@PostMapping("/{id}/choose")
-	public GameView choose(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
-			@PathVariable Long id, @RequestBody ChooseBody body) {
-		return trail.choose(sessions.requireUser(token), id, body == null || body.option() == null ? -1 : body.option());
+	/** Go: play your party's next turn with the option you picked. */
+	@PostMapping("/{id}/play")
+	public GameView play(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable Long id, @RequestBody(required = false) PlayInput body) {
+		return trail.play(sessions.requireUser(token), id, body);
 	}
 
 	@PostMapping("/{id}/buy")
 	public GameView buy(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
 			@PathVariable Long id, @RequestBody BuyInput body) {
 		return trail.buy(sessions.requireUser(token), id, body);
-	}
-
-	@PostMapping("/{id}/pace")
-	public GameView pace(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
-			@PathVariable Long id, @RequestBody PaceBody body) {
-		return trail.setPace(sessions.requireUser(token), id, body == null ? null : body.pace());
-	}
-
-	@PostMapping("/{id}/invite")
-	public GameView invite(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
-			@PathVariable Long id, @RequestBody InviteBody body) {
-		return trail.invite(sessions.requireUser(token), id, body == null ? null : body.userId());
 	}
 
 	@PostMapping("/{id}/choices/{choiceId}")

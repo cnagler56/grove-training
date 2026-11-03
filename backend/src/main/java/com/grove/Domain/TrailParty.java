@@ -74,15 +74,25 @@ public class TrailParty {
 	@Column(name = "arrived_turn")
 	private Integer arrivedTurn;
 
-	/** The scenario waiting on an answer, and the answer (an option position) once someone gives one. */
+	/** Turns this party has played; it can play another while this is below the game's unlocked turns. */
+	@Column(name = "turns_played", nullable = false)
+	private int turnsPlayed;
+
+	/** The next turn's scenario. Null while a meeting takes its place, or at the coast. */
 	@Column(name = "scenario_key", length = 40)
 	private String scenarioKey;
 
-	@Column(name = "scenario_answer")
-	private Integer scenarioAnswer;
+	/** Another party this one ran into; the next turn is about what to do about them. */
+	@Column(name = "encounter_party_id")
+	private Long encounterPartyId;
 
-	@Column(name = "answered_by")
-	private Long answeredBy;
+	/** Whether that meeting comes with the option to travel together. */
+	@Column(name = "encounter_join", nullable = false)
+	private boolean encounterJoin;
+
+	/** The general store here (a town's name, or a peddler), open until the party moves on. Null when there's none. */
+	@Column(name = "store_name", length = 80)
+	private String storeName;
 
 	/** Scenarios already dealt, comma separated, so nobody gets a repeat until they've seen them all. */
 	@Column(length = 2000)
@@ -132,14 +142,20 @@ public class TrailParty {
 	public Integer getArrivedTurn() { return arrivedTurn; }
 	public void setArrivedTurn(Integer arrivedTurn) { this.arrivedTurn = arrivedTurn; }
 
+	public int getTurnsPlayed() { return turnsPlayed; }
+	public void setTurnsPlayed(int turnsPlayed) { this.turnsPlayed = turnsPlayed; }
+
 	public String getScenarioKey() { return scenarioKey; }
 	public void setScenarioKey(String scenarioKey) { this.scenarioKey = scenarioKey; }
 
-	public Integer getScenarioAnswer() { return scenarioAnswer; }
-	public void setScenarioAnswer(Integer scenarioAnswer) { this.scenarioAnswer = scenarioAnswer; }
+	public Long getEncounterPartyId() { return encounterPartyId; }
+	public void setEncounterPartyId(Long encounterPartyId) { this.encounterPartyId = encounterPartyId; }
 
-	public Long getAnsweredBy() { return answeredBy; }
-	public void setAnsweredBy(Long answeredBy) { this.answeredBy = answeredBy; }
+	public boolean isEncounterJoin() { return encounterJoin; }
+	public void setEncounterJoin(boolean encounterJoin) { this.encounterJoin = encounterJoin; }
+
+	public String getStoreName() { return storeName; }
+	public void setStoreName(String storeName) { this.storeName = storeName; }
 
 	public String getSeen() { return seen; }
 	public void setSeen(String seen) { this.seen = seen; }

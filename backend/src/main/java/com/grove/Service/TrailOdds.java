@@ -15,30 +15,31 @@ public final class TrailOdds {
 
 	// The map.
 
-	public record Landmark(String name, int miles) {}
+	/** A stop on the route, where it is on a map, and whether it has a trading post. */
+	public record Landmark(String name, int miles, double lon, double lat, boolean store) {}
 
+	/** An 1800s overland route: no roads, just rivers, forts, and trading posts between them. */
 	public static final List<Landmark> LANDMARKS = List.of(
-		new Landmark("Maple Grove, MN", 0),
-		new Landmark("St. Cloud, MN", 65),
-		new Landmark("Big Ole the Viking, Alexandria", 135),
-		new Landmark("Fargo, ND", 235),
-		new Landmark("The World's Largest Buffalo, Jamestown", 330),
-		new Landmark("Salem Sue, the World's Largest Holstein", 440),
-		new Landmark("The Enchanted Highway", 490),
-		new Landmark("Medora, ND", 560),
-		new Landmark("Miles City, MT", 700),
-		new Landmark("Pompeys Pillar", 815),
-		new Landmark("Billings, MT", 845),
-		new Landmark("Bozeman, MT", 990),
-		new Landmark("The Continental Divide", 1060),
-		new Landmark("Missoula, MT", 1180),
-		new Landmark("Lookout Pass, ID", 1280),
-		new Landmark("Coeur d'Alene, ID", 1350),
-		new Landmark("Spokane, WA", 1385),
-		new Landmark("The Columbia River Gorge", 1640),
-		new Landmark("Multnomah Falls", 1760),
-		new Landmark("Portland, OR", 1790),
-		new Landmark("Haystack Rock, Cannon Beach", 1870));
+		new Landmark("Maple Grove, Minnesota Territory", 0, -93.46, 45.07, true),
+		new Landmark("The Crow River", 70, -94.35, 45.25, false),
+		new Landmark("Otter Tail Lake", 150, -95.6, 46.3, false),
+		new Landmark("Fort Abercrombie on the Red River", 235, -96.73, 46.45, true),
+		new Landmark("The Sheyenne River", 330, -97.95, 46.95, false),
+		new Landmark("The James River", 420, -98.75, 47.1, false),
+		new Landmark("Fort Berthold on the Missouri", 560, -101.55, 47.6, true),
+		new Landmark("Fort Union", 690, -104.04, 47.99, true),
+		new Landmark("The Yellowstone River", 820, -106.2, 46.7, false),
+		new Landmark("Pompeys Pillar", 960, -108.0, 45.99, false),
+		new Landmark("Three Forks of the Missouri", 1130, -111.5, 45.9, false),
+		new Landmark("The Continental Divide", 1200, -112.4, 46.65, false),
+		new Landmark("Hell Gate", 1290, -114.0, 46.87, true),
+		new Landmark("The Coeur d'Alene Mission", 1410, -116.36, 47.55, true),
+		new Landmark("Spokane Falls", 1460, -117.43, 47.66, false),
+		new Landmark("Fort Walla Walla", 1600, -118.9, 46.07, true),
+		new Landmark("The Dalles", 1720, -121.18, 45.6, false),
+		new Landmark("The Cascade Rapids", 1780, -121.9, 45.66, false),
+		new Landmark("Fort Vancouver", 1810, -122.66, 45.62, true),
+		new Landmark("The Pacific at Haystack Rock", 1870, -123.96, 45.89, false));
 
 	public static final int TRAIL_MILES = 1870;
 
@@ -55,7 +56,7 @@ public final class TrailOdds {
 	public static final int MAX_TURNS = 50;
 	public static final int DEFAULT_TURNS = 40;
 	public static final int STARTING_COINS = 200;
-	public static final int STARTING_FOOD = 3;
+	public static final int STARTING_FOOD = 5;
 	public static final int MAX_PARTY = 4;
 	public static final int DEFAULT_BONUS_TREATMENT = 25;
 	public static final int DEFAULT_BONUS_COLOR = 20;
@@ -116,15 +117,15 @@ public final class TrailOdds {
 	public static final double MAX_PRICE_SCALE = 3;
 
 	public enum Item {
-		FOOD("Snack pack", 12, "Feeds one person for one turn (two on Grueling)."),
+		FOOD("Provisions", 12, "Flour, bacon, and coffee for one person for one turn."),
 		DONKEY("Donkey", 800, "40 miles a turn. Stubborn. Loves carrots."),
-		HORSE("Horse", 2000, "52 miles a turn. Throws shoes. Afraid of plastic bags."),
-		WAGON("Wagon with oxen", 6000, "64 miles a turn for up to 4 people. Can break down."),
-		REPAIR("Wagon repair", 1200, "Gets a broken-down wagon moving again."),
-		SPARE_WHEEL("Spare wheel", 400, "Fixes a breakdown on the spot, for free."),
+		HORSE("Horse", 2000, "52 miles a turn. Throws shoes. Spooks easily."),
+		WAGON("Covered wagon with oxen", 6000, "64 miles a turn for up to 4 people. Can break down."),
+		REPAIR("Wheelwright", 1200, "Gets a broken-down wagon rolling again."),
+		SPARE_WHEEL("Spare wagon wheel", 400, "Fixes a breakdown on the spot."),
 		HORSESHOES("Horseshoes", 150, "Gets a horse that threw a shoe back to full speed."),
-		CARROTS("Carrots", 60, "Convinces a donkey that is having a moment."),
-		PLAYLIST("A Really Good Playlist", 100, "Settles one aux cord war.");
+		CARROTS("Carrots", 60, "Convinces a donkey that has stopped."),
+		PLAYLIST("A fiddle", 100, "Settles one argument about which way to go.");
 
 		public final String label;
 		public final int basePrice;
@@ -178,8 +179,7 @@ public final class TrailOdds {
 
 	// Parties.
 
-	/** You can invite people this close to you. */
-	public static final int INVITE_MILES = 60;
+	/** How long someone has to answer a request to travel together. */
 	public static final int INVITE_TURNS = 4;
 	/** After leaving a party, how long before joining another. Voted out: double. */
 	public static final int SPACE_TURNS = 4;
@@ -199,9 +199,17 @@ public final class TrailOdds {
 	public static final int AFTERMATH_TURNS = 3;
 	public static final int GET_EVEN_WORKS = 60;
 
+	// Trading posts: at the forts, and now and then a traveling trader.
+
+	/** Chance a traveling trader turns up on a turn that doesn't pass a trading post. */
+	public static final double PEDDLER = 0.15;
+
 	// Meeting someone on the trail.
 
-	public static final int MEET_MILES = 10;
+	/** Chance of running into another party on the same stretch of trail (since the same landmark). */
+	public static final double MEET_CHANCE = 0.4;
+	/** Chance a meeting comes with the option to travel together, when the parties could. */
+	public static final double JOIN_OFFER = 0.35;
 	/** The same two can't meet again for this many turns. */
 	public static final int MEET_AGAIN_TURNS = 6;
 	public static final int HELP_FOOD_MAX = 5;
@@ -213,8 +221,6 @@ public final class TrailOdds {
 	public static final int STEAL_FOOD_MAX = 3;
 	public static final int STEAL_MIN = 25;
 	public static final int STEAL_MAX = 70;
-	/** The target held the door: they chose to help while being robbed. */
-	public static final int STEAL_FROM_HELPER = 15;
 	/** Everyone is looking at the broken-down wagon. */
 	public static final int STEAL_FROM_BROKEN = -10;
 
@@ -222,11 +228,10 @@ public final class TrailOdds {
 	 * The chance (0 to 100) a theft works: easier from someone better off, harder from someone
 	 * worse off, so leaders can't snowball. Worth is coins plus food and spare parts.
 	 */
-	public static int stealChance(int thiefWorth, int targetWorth, boolean targetHelped, boolean targetBroken) {
+	public static int stealChance(int thiefWorth, int targetWorth, boolean targetBroken) {
 		int total = Math.max(1, thiefWorth + targetWorth);
 		int chance = 50 + (int) Math.round(40.0 * (targetWorth - thiefWorth) / total);
 		chance = Math.max(STEAL_MIN, Math.min(STEAL_MAX, chance));
-		if (targetHelped) chance += STEAL_FROM_HELPER;
 		if (targetBroken) chance += STEAL_FROM_BROKEN;
 		return Math.max(5, Math.min(95, chance));
 	}

@@ -14,18 +14,18 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 
 /**
- * A question for one person or one party that isn't the turn's scenario: an invite
- * to join a party, a chance to skim, a meeting on the trail, getting even, or voting
- * a thief out.
+ * A question for one person or one party that isn't the turn's scenario: a request
+ * to travel together, a chance to skim, getting even, or voting a thief out. MEET
+ * rows only remember who ran into whom.
  */
 @Entity
 @Table(name = "trail_choices", indexes = @Index(name = "ix_trail_choice_game", columnList = "game_id"))
 public class TrailChoice {
 
 	/**
-	 * INVITE: {@code userId} is asked to join {@code partyId} by {@code otherUserId}.
+	 * INVITE: party {@code partyId} is asked by {@code otherUserId} (of {@code otherPartyId}) to travel together.
 	 * SKIM: {@code userId} can take from their own party {@code partyId}.
-	 * MEET: {@code partyId} decides what to do about {@code otherPartyId}.
+	 * MEET: a record that {@code partyId} ran into {@code otherPartyId}, so they don't meet again too soon.
 	 * GET_EVEN: {@code userId} can take back {@code amount} coins' worth from thief {@code otherUserId}.
 	 * VOTE_OUT: {@code userId} can vote thief {@code otherUserId} out of {@code partyId}.
 	 */
