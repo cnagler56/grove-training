@@ -7,18 +7,21 @@ This lives only on the `oregon-trail` branch.
 
 ## Basics
 
-- A manager creates a trail game the way they create a contest: name, start date, length (30 to 50 turns,
-  default 40), prize text, optional handicap, players. Receptionists and customers can't play.
-- **A new turn unlocks at every Salon Ultimate check** (8 am, 12, 4 pm, 8 pm), so a 40 turn game runs about 10
-  days. Each player (or party) plays their own turns: pick an option, press **Go**, and see what happened right
-  away. Unplayed turns wait; after the last check, anything still unplayed goes with the safe choice.
+- A manager creates a trail game the way they create a contest: name, start date, prize text, optional
+  handicap, players. Receptionists and customers can't play. There is no set number of turns: a game runs
+  until everyone reaches the Pacific or a manager presses **End the game now**.
+- **A new turn unlocks at every Salon Ultimate check** (8 am, 12, 4 pm, 8 pm). Each player (or party) plays
+  their own turns: pick an option, press **Go**, and see what happened right away, shown big. Unplayed turns
+  wait. Players never see turn numbers. A game starting today is at its first turn the moment it's made.
+- **Practice mode** (`TRAIL_PRACTICE=true` on the server, off by default): turns don't wait for checks and
+  everyone starts with 2,000 coins, for playing a whole game in one sitting.
 - **Coins:** $1 of service sales = 1 coin, plus 25 per treatment, 20 per color, 15 per wax (bonuses set when
   the game is created), counted at every check. Everyone also starts with 200 coins and 5 provisions.
 - **Handicap (optional):** the contest handicaps reused. NONE, HOURS (fewer hours earns more per dollar),
   RATE (lower usual sales per hour earns more), BOTH. Coins are multiplied by worth / 100 (100 to 200),
   from the 4 weeks before the start.
 - **Winning:** the party that reaches the Pacific in the fewest turns wins and splits the prize. When the game
-  ends, everyone else is ranked by miles. People who arrive early wait on the beach and show as "At the Pacific".
+  ends (everyone has arrived, or a manager ends it), everyone else is ranked by miles. People who arrive early wait on the beach and show as "At the Pacific".
 
 ## A turn (when you press Go)
 
@@ -74,8 +77,7 @@ a dot with their first name. Under the map: your mile, the last landmark, and ho
 
 ## Travel modes
 
-Speeds are miles per turn for a 40 turn game and scale with length (a 30 turn game moves 40/30 as fast),
-so the same mode always takes the same share of the game.
+Speeds are miles per turn.
 
 | Mode | Cost | Speed | Turns to the Pacific | Its own risks |
 |---|---|---|---|---|

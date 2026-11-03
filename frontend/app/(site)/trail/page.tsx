@@ -18,7 +18,6 @@ const HANDICAPS: { value: ContestHandicap; label: string; help: string }[] = [
 type Form = {
   name: string;
   startDate: string | null;
-  turns: number;
   prize: string;
   handicap: ContestHandicap;
   picked: number[];
@@ -28,7 +27,7 @@ type Form = {
 };
 
 const empty = (): Form => ({
-  name: 'The Grove Trail', startDate: null, turns: 40, prize: '', handicap: 'NONE', picked: [],
+  name: 'The Grove Trail', startDate: null, prize: '', handicap: 'NONE', picked: [],
   bonusTreatment: 25, bonusColor: 20, bonusWax: 15,
 });
 
@@ -68,7 +67,6 @@ export default function TrailPage() {
     const input: TrailGameInput = {
       name: form.name,
       startDate: form.startDate,
-      turns: form.turns,
       prize: form.prize.trim() || null,
       handicap: form.handicap,
       userIds: form.picked,
@@ -149,7 +147,6 @@ function GameForm({ form, setForm, people, busy, onSubmit, onCancel }: {
 }) {
   const toggle = (id: number) =>
     setForm({ ...form, picked: form.picked.includes(id) ? form.picked.filter((x) => x !== id) : [...form.picked, id] });
-  const days = Math.ceil(form.turns / 4);
 
   return (
     <form onSubmit={onSubmit} className="card space-y-5 p-5">
@@ -161,12 +158,6 @@ function GameForm({ form, setForm, people, busy, onSubmit, onCancel }: {
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </label>
         <DateField label="First day" value={form.startDate} onChange={(startDate) => setForm({ ...form, startDate })} />
-        <label className="block text-sm">
-          <span className="mb-1 block font-semibold opacity-80">Turns (30 to 50)</span>
-          <input className="input" type="number" min={30} max={50} required value={form.turns}
-            onChange={(e) => setForm({ ...form, turns: Number(e.target.value) })} />
-          <span className="mt-1 block text-xs opacity-70">4 turns a day, so about {days} days.</span>
-        </label>
         <label className="block text-sm">
           <span className="mb-1 block font-semibold opacity-80">Prize (optional)</span>
           <input className="input" value={form.prize} maxLength={200} placeholder="$50 gift card"

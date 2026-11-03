@@ -70,6 +70,12 @@ public class TrailController {
 		return trail.unlockNow(sessions.requireUser(token), id);
 	}
 
+	/** Managers: end the game now and send out the standings. */
+	@PostMapping("/{id}/end")
+	public GameView end(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token, @PathVariable Long id) {
+		return trail.endNow(sessions.requireUser(token), id);
+	}
+
 	/** Go: play your party's next turn with the option you picked. */
 	@PostMapping("/{id}/play")
 	public GameView play(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,

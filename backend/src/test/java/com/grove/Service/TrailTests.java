@@ -116,7 +116,7 @@ class TrailTests {
 
 	@Test
 	void everyoneOnStaffSeesGamesButOnlyManagersStartThem() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		mvc.perform(get("/api/trail").cookie(rae))
 			.andExpect(jsonPath("$[0].name").value("Grove Trail"))
 			.andExpect(jsonPath("$[0].status").value("LIVE"))
@@ -131,7 +131,7 @@ class TrailTests {
 			.andExpect(jsonPath("$.me.store.name").value("Maple Grove, Minnesota Territory"))
 			.andExpect(jsonPath("$.landmarks[19].name").value("The Pacific at Haystack Rock"))
 			.andExpect(jsonPath("$.landmarks[0].lon").value(-93.46));
-		send(ava, post("/api/trail"), game("No", 40, avaId, miaId), status().isForbidden());
+		send(ava, post("/api/trail"), game("No", avaId, miaId), status().isForbidden());
 		mvc.perform(post("/api/trail/" + id + "/unlock").cookie(ava)).andExpect(status().isForbidden());
 		mvc.perform(delete("/api/trail/" + id).cookie(ava)).andExpect(status().isForbidden());
 		mvc.perform(get("/api/trail")).andExpect(status().isUnauthorized());
@@ -143,7 +143,7 @@ class TrailTests {
 
 	@Test
 	void aGameStartingLaterShowsTheFirstChoicesButWaitsToStart() throws Exception {
-		Map<String, Object> later = game("Later", 40, avaId, miaId);
+		Map<String, Object> later = game("Later", avaId, miaId);
 		later.put("startDate", today.plusDays(3).toString());
 		long id = create(later);
 		JsonNode g = view(ava, id);
@@ -156,7 +156,7 @@ class TrailTests {
 	@Test
 	void practiceModeLetsYouPlayTurnAfterTurnWithMoreCoins() throws Exception {
 		service.setPractice(true);
-		long id = create(game("Practice", 30, avaId, miaId));
+		long id = create(game("Practice", avaId, miaId));
 		JsonNode g = view(ava, id);
 		assertThat(g.get("practice").asBoolean()).isTrue();
 		assertThat(g.at("/me/coins").asInt()).isEqualTo(2000);
@@ -164,15 +164,15 @@ class TrailTests {
 		JsonNode after = view(ava, id);
 		assertThat(after.at("/me/turnsPlayed").asInt()).isEqualTo(5);
 		assertThat(after.at("/me/ready").asBoolean()).isTrue();
-		// Turns still stop at the game's length.
-		for (int i = 5; i < 30 && view(ava, id).at("/me/ready").asBoolean(); i++) go(ava, id, Map.of("option", 0));
-		send(ava, post("/api/trail/" + id + "/play"), Map.of("option", 0), status().isBadRequest());
+		// No limit on turns: keep going as long as you like.
+		for (int i = 0; i < 55 && view(ava, id).at("/me/ready").asBoolean(); i++) go(ava, id, Map.of("option", 0));
+		assertThat(view(ava, id).at("/me/turnsPlayed").asInt()).isGreaterThan(50);
 	}
 
 	@Test
 	void goingWithoutFoodGetsWorseUntilYouCantTravelAndNothingNeedsFoodYouDontHave() throws Exception {
 		service.setPractice(true);
-		long id = create(game("Hungry", 40, avaId, miaId));
+		long id = create(game("Hungry", avaId, miaId));
 		List<String> stages = new java.util.ArrayList<>();
 		for (int i = 0; i < 11; i++) {
 			JsonNode g = view(ava, id);
@@ -196,19 +196,16 @@ class TrailTests {
 	}
 
 	@Test
-	void gamesLastThirtyToFiftyTurnsWithAtLeastTwoPlayers() throws Exception {
-		send(manager, post("/api/trail"), game("Short", 29, avaId, miaId), status().isBadRequest());
-		send(manager, post("/api/trail"), game("Long", 51, avaId, miaId), status().isBadRequest());
-		send(manager, post("/api/trail"), game("Lonely", 40, avaId), status().isBadRequest());
-		send(manager, post("/api/trail"), game("Front desk", 40, avaId, raeId), status().isBadRequest());
+	void aGameNeedsAtLeastTwoPlayersAndNoReceptionists() throws Exception {
+		send(manager, post("/api/trail"), game("Lonely", avaId), status().isBadRequest());
+		send(manager, post("/api/trail"), game("Front desk", avaId, raeId), status().isBadRequest());
 		assertThat(games.findAll()).isEmpty();
-		create(game("Just right", 30, avaId, miaId));
-		create(game("Also right", 50, avaId, miaId));
+		create(game("Just right", avaId, miaId));
 	}
 
 	@Test
 	void coinsComeFromServiceSalesAndBonusesOnlyOnce() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		sales(Map.of("Ava Stone", 480));
 		treatments("Ava Stone", 2);
 		unlock(id);
@@ -227,7 +224,7 @@ class TrailTests {
 	@Test
 	void goPlaysYourTurnRightAwayAndTheNextWaitsForTheNextCheck() throws Exception {
 		// A game starting today starts at turn 1.
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		JsonNode g = view(ava, id);
 		assertThat(g.at("/me/ready").asBoolean()).isTrue();
 		assertThat(g.at("/me/turn/kind").asText()).isEqualTo("SCENARIO");
@@ -238,7 +235,9 @@ class TrailTests {
 		JsonNode after = view(ava, id);
 		assertThat(after.at("/me/turnsPlayed").asInt()).isEqualTo(1);
 		assertThat(after.at("/me/ready").asBoolean()).isFalse();
-		assertThat(after.at("/me/lastResult").get(0).asText()).contains("Ava Stone picked:");
+		// Just the result: not the question again, and no turn numbers.
+		String result = after.at("/me/lastResult").get(0).asText();
+		assertThat(result).isNotBlank().doesNotContain(g.at("/me/turn/text").asText()).doesNotContain("picked");
 		// On foot, a 40 turn game moves about 28 miles a turn.
 		assertThat(party(after, avaId).get("miles").asInt()).isPositive();
 		// The next turn is already dealt but waits for the next check.
@@ -282,7 +281,7 @@ class TrailTests {
 
 	@Test
 	void storesOnlyOpenInTownsOrWhenAPeddlerTurnsUp() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		// The salon's store is open before leaving.
 		send(ava, post("/api/trail/" + id + "/buy"), Map.of("item", "FOOD", "quantity", 2), status().isOk());
 		assertThat(view(ava, id).at("/me/party/food").asInt()).isEqualTo(7);
@@ -302,7 +301,7 @@ class TrailTests {
 
 	@Test
 	void aWagonBreaksDownAndStaysPutUntilRepaired() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		sales(Map.of("Ava Stone", 8000));
 		unlock(id);
 		send(ava, post("/api/trail/" + id + "/buy"), Map.of("item", "WAGON"), status().isOk());
@@ -325,7 +324,7 @@ class TrailTests {
 
 	@Test
 	void peopleOnTheSameStretchSometimesMeetAndCanTravelTogether() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		travelTogether(id);
 		JsonNode g = view(ava, id);
 		assertThat(g.at("/me/party/members").size()).isEqualTo(2);
@@ -344,7 +343,7 @@ class TrailTests {
 
 	@Test
 	void aMeetingCanTurnIntoARobbery() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		sales(Map.of("Ava Stone", 1000));
 		meet(id);
 		JsonNode meeting = view(mia, id).at("/me/turn");
@@ -361,7 +360,7 @@ class TrailTests {
 
 	@Test
 	void helpingEarnsAGoodSamaritanLabel() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		meet(id);
 		go(mia, id, Map.of("answer", "HELP_FOOD"));
 		JsonNode g = view(ava, id);
@@ -371,7 +370,7 @@ class TrailTests {
 
 	@Test
 	void leavingAPartyTakesAShareOfTheFoodAndNeedsSomeSpace() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		travelTogether(id);
 		int food = view(mia, id).at("/me/party/food").asInt();
 		send(mia, post("/api/trail/" + id + "/leave"), Map.of(), status().isOk());
@@ -384,7 +383,7 @@ class TrailTests {
 
 	@Test
 	void aSkimmerWhoGetsAwayWithItCanStillBeGottenEvenWith() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		travelTogether(id);
 		JsonNode skim = skimOffer(id);
 		int miaBefore = player(id, miaId).getCoins();
@@ -405,7 +404,7 @@ class TrailTests {
 
 	@Test
 	void aCaughtSkimmerGetsStickyFingersAndCanBeVotedOut() throws Exception {
-		long id = create(game("Grove Trail", 40, avaId, miaId));
+		long id = create(game("Grove Trail", avaId, miaId));
 		travelTogether(id);
 		JsonNode skim = skimOffer(id);
 		dice.roll = 0;
@@ -423,17 +422,17 @@ class TrailTests {
 	}
 
 	@Test
-	void afterTheLastTurnUnplayedTurnsTakeTheSafeChoiceAndTheStandingsArePosted() throws Exception {
-		long id = create(game("Grove Trail", 30, avaId, miaId));
+	void theGameRunsUntilAManagerEndsItAndTheStandingsArePosted() throws Exception {
+		long id = create(game("Grove Trail", avaId, miaId));
 		long postsBefore = posts.count();
-		for (int i = 0; i < 29; i++) unlock(id);
+		for (int i = 0; i < 60; i++) unlock(id);
 		assertThat(view(ava, id).get("status").asText()).isEqualTo("LIVE");
-		unlock(id);
+		go(ava, id, Map.of());
+		mvc.perform(post("/api/trail/" + id + "/end").cookie(ava)).andExpect(status().isForbidden());
+		mvc.perform(post("/api/trail/" + id + "/end").cookie(manager)).andExpect(status().isOk());
 		JsonNode g = view(ava, id);
 		assertThat(g.get("status").asText()).isEqualTo("FINISHED");
-		assertThat(g.get("parties").get(0).get("place").asInt()).isEqualTo(1);
-		assertThat(g.get("parties").get(0).get("turnsPlayed").asInt()).isEqualTo(30);
-		assertThat(bodies(g)).anyMatch(b -> b.contains("Nobody picked, so:"));
+		assertThat(party(g, avaId).get("place").asInt()).isEqualTo(1);
 		assertThat(posts.findAll().stream().skip(postsBefore).map(p -> p.getBody()))
 			.anyMatch(b -> b.startsWith("Grove Trail is over"));
 		mvc.perform(post("/api/trail/" + id + "/unlock").cookie(manager)).andExpect(status().isBadRequest());
@@ -530,11 +529,10 @@ class TrailTests {
 		when(salonUltimate.detailedServiceByEmployee(any(), any())).thenReturn(html);
 	}
 
-	private Map<String, Object> game(String name, int turns, Long... userIds) {
+	private Map<String, Object> game(String name, Long... userIds) {
 		Map<String, Object> g = new HashMap<>();
 		g.put("name", name);
 		g.put("startDate", today.toString());
-		g.put("turns", turns);
 		g.put("prize", "Gift card");
 		g.put("userIds", List.of(userIds));
 		return g;

@@ -639,9 +639,8 @@ export interface TrailGame {
   status: 'UPCOMING' | 'LIVE' | 'FINISHED';
   /** The server is in practice mode: turns don't wait and everyone starts with 2,000 coins. */
   practice: boolean;
-  /** Turns unlocked so far. */
+  /** Turns unlocked so far (not shown to players). */
   turn: number;
-  turns: number;
   startDate: string;
   prize: string | null;
   handicap: ContestHandicap;
@@ -663,7 +662,6 @@ export interface TrailGame {
 export interface TrailGameInput {
   name: string;
   startDate: string | null;
-  turns: number;
   prize: string | null;
   handicap: ContestHandicap;
   userIds: number[];
@@ -827,6 +825,7 @@ export const api = {
   createTrailGame: (g: TrailGameInput) => send<TrailGame>('/api/trail', 'POST', g),
   deleteTrailGame: (id: number) => send<void>(`/api/trail/${id}`, 'DELETE'),
   trailUnlock: (id: number) => send<TrailGame>(`/api/trail/${id}/unlock`, 'POST', {}),
+  trailEnd: (id: number) => send<TrailGame>(`/api/trail/${id}/end`, 'POST', {}),
   trailPlay: (id: number, choice: { option?: number; answer?: string }) => send<TrailGame>(`/api/trail/${id}/play`, 'POST', choice),
   trailBuy: (id: number, item: TrailItem, quantity: number, split: boolean) =>
     send<TrailGame>(`/api/trail/${id}/buy`, 'POST', { item, quantity, split }),

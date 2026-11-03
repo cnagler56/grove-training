@@ -32,7 +32,7 @@ public class TrailGame {
 	@Column(nullable = false, length = 80)
 	private String name;
 
-	/** How many turns the game lasts, 30 to 50. */
+	/** Unused: games have no set length (0). Kept so existing rows still load. */
 	@Column(name = "turn_count", nullable = false)
 	private int turns;
 

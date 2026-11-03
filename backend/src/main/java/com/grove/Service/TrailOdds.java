@@ -50,11 +50,8 @@ public final class TrailOdds {
 		return at;
 	}
 
-	// Game length and the start.
+	// The start. Games have no set length: they run until everyone reaches the Pacific or a manager ends them.
 
-	public static final int MIN_TURNS = 30;
-	public static final int MAX_TURNS = 50;
-	public static final int DEFAULT_TURNS = 40;
 	public static final int STARTING_COINS = 200;
 	/** In practice mode, enough to try the shop and wagons without waiting for sales. */
 	public static final int PRACTICE_COINS = 2000;
@@ -64,7 +61,7 @@ public final class TrailOdds {
 	public static final int DEFAULT_BONUS_COLOR = 20;
 	public static final int DEFAULT_BONUS_WAX = 15;
 
-	// Speeds, in miles per turn for a 40 turn game; shorter games move faster, so each mode takes the same share of the game.
+	// Speeds, in miles per turn.
 
 	public static final int WALK_SPEED = 28;
 	public static final int DONKEY_SPEED = 40;
@@ -77,11 +74,6 @@ public final class TrailOdds {
 			case DONKEY -> DONKEY_SPEED;
 			case HORSE -> shoeThrown ? WALK_SPEED : HORSE_SPEED;
 		};
-	}
-
-	/** How much faster than a 40 turn game everything moves. */
-	public static double lengthScale(int turns) {
-		return (double) DEFAULT_TURNS / turns;
 	}
 
 	public static double paceSpeed(Pace pace) {

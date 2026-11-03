@@ -25,6 +25,7 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
   onChange: (g: TrailGame) => void;
   onDelete: () => void;
 }) {
+  const dialogs = useDialogs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const myParty = g.me ? g.parties.find((p) => p.id === g.me!.party.id) : undefined;
@@ -43,7 +44,17 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
 
   const status = g.status === 'FINISHED' ? 'Finished'
     : g.status === 'UPCOMING' ? `Starts ${formatDate(g.startDate, false)}`
-    : `Turn ${g.turn} of ${g.turns}`;
+    : 'On the trail';
+
+  async function end() {
+    if (!(await dialogs.confirm({
+      title: `End ${g.name} now?`,
+      message: 'The standings as they are now are final, and everyone is told how they finished.',
+      confirmLabel: 'End the game',
+      danger: true,
+    }))) return;
+    await act(() => api.trailEnd(g.id));
+  }
 
   return (
     <section className="card space-y-5 p-5">
@@ -63,8 +74,11 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
           <div className="mt-3 flex flex-wrap gap-2">
             {g.status !== 'FINISHED' && g.startDate <= new Date().toLocaleDateString('en-CA') && (
               <button className="btn-ghost" disabled={busy} onClick={() => void act(() => api.trailUnlock(g.id))}>
-                {g.turn >= g.turns ? 'End the game now' : 'Unlock the next turn now'}
+                Unlock the next turn now
               </button>
+            )}
+            {g.status !== 'FINISHED' && (
+              <button className="btn-ghost" disabled={busy} onClick={() => void end()}>End the game now</button>
             )}
             <button className="text-sm font-bold text-[var(--danger)] hover:underline" onClick={onDelete}>Delete</button>
           </div>
@@ -89,8 +103,7 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
         ) : (
           <ol className="mt-2 max-h-96 space-y-2 overflow-y-auto pr-1">
             {g.log.map((l, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="w-14 shrink-0 text-xs font-bold opacity-60">Turn {l.turn}</span>
+              <li key={i}>
                 <span className={l.kind === 'THEFT' ? 'text-[var(--danger)]' : l.kind === 'LANDMARK' ? 'font-semibold' : ''}>{l.body}</span>
               </li>
             ))}
@@ -103,7 +116,7 @@ export default function TrailGameCard({ game: g, viewerId, isManager, onChange, 
           <summary className="cursor-pointer font-extrabold">Who paid for what</summary>
           <ul className="mt-2 space-y-1">
             {g.me.purchases.map((l, i) => (
-              <li key={i}><span className="mr-2 text-xs font-bold opacity-60">Turn {l.turn}</span>{l.body}</li>
+              <li key={i}>{l.body}</li>
             ))}
           </ul>
         </details>
@@ -203,7 +216,7 @@ function TrailMap({ game: g, myPartyId }: { game: TrailGame; myPartyId: number |
       {me && (
         <p className="mt-2 text-sm">
           {me.arrivedTurn !== null
-            ? <>You reached the Pacific in {me.arrivedTurn} turns.</>
+            ? <>You reached the Pacific.</>
             : <><b>Mile {me.miles}</b> of {g.trailMiles.toLocaleString('en-US')}, past {inSentence(me.at)}{nextStop && `. ${nextStop.miles - me.miles} miles to ${inSentence(nextStop.name)}`}.</>}
         </p>
       )}
@@ -286,17 +299,25 @@ function MyTurn({ game: g, me, party, busy, act }: {
 
   return (
     <div className="space-y-4">
-      <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <span><b>{me.coins.toLocaleString('en-US')}</b> coins</span>
-        <span><b>{p.food}</b> provisions{p.hunger && <b className="text-[var(--danger)]"> ({p.hunger})</b>}</span>
-        <span>{party.travel}</span>
-        {together && <span>With {p.members.filter((m) => m.userId !== me.userId).map((m) => m.name).join(', ')}</span>}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-[var(--surface-2)] p-4">
+          <div className="text-4xl font-extrabold leading-none">{me.coins.toLocaleString('en-US')}</div>
+          <div className="mt-1 text-sm font-bold uppercase tracking-wide opacity-70">Coins</div>
+        </div>
+        <div className={`rounded-xl p-4 ${p.hunger ? 'bg-[var(--danger)] text-white' : 'bg-[var(--surface-2)]'}`}>
+          <div className="text-4xl font-extrabold leading-none">{p.food}</div>
+          <div className="mt-1 text-sm font-bold uppercase tracking-wide opacity-80">Provisions</div>
+          {p.hunger && <div className="mt-1 text-sm font-bold">{p.hunger}</div>}
+        </div>
+      </div>
+      <p className="text-sm">
+        {party.travel}
+        {together && `, with ${p.members.filter((m) => m.userId !== me.userId).map((m) => m.name).join(', ')}`}
       </p>
 
       {me.lastResult.length > 0 && (
-        <div className="rounded-xl bg-[var(--surface-2)] p-4">
-          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn {me.turnsPlayed}</p>
-          {me.lastResult.map((line, i) => <p key={i} className="mt-1">{line}</p>)}
+        <div className="rounded-xl border-l-8 border-[var(--accent)] bg-[var(--accent-soft)] p-5" aria-live="polite">
+          {me.lastResult.map((line, i) => <p key={i} className={`text-xl font-bold leading-snug ${i > 0 ? 'mt-2' : ''}`}>{line}</p>)}
         </div>
       )}
 
@@ -319,8 +340,7 @@ function MyTurn({ game: g, me, party, busy, act }: {
         </p>
       ) : !turn ? (
         <div className="rounded-xl border-2 border-[var(--accent)] p-4">
-          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn 1</p>
-          <p className="mt-1 text-lg font-bold">The frontier awaits.</p>
+          <p className="text-lg font-bold">The frontier awaits.</p>
           <p className="mt-1 text-sm opacity-80">
             {g.status === 'UPCOMING' && g.startDate > new Date().toLocaleDateString('en-CA')
               ? `The game starts ${formatDate(g.startDate, false)}. `
@@ -330,8 +350,7 @@ function MyTurn({ game: g, me, party, busy, act }: {
         </div>
       ) : (
         <div className="rounded-xl border-2 border-[var(--accent)] p-4">
-          <p className="text-xs font-bold uppercase tracking-wide opacity-60">Turn {me.turnsPlayed + 1}</p>
-          <p className="mt-1 text-lg font-bold">{turn.text}</p>
+          <p className="text-lg font-bold">{turn.text}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2" role="radiogroup">
             {turn.options.map((o) => {
               const selected = choice === o.value;

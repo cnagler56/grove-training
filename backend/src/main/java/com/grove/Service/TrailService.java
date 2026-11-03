@@ -73,7 +73,7 @@ public class TrailService {
 	private static final DateTimeFormatter SHORT_DATE = DateTimeFormatter.ofPattern("MMM d");
 	private static final String PEDDLER = "A traveling trader";
 
-	public record GameInput(String name, LocalDate startDate, Integer turns, String prize, Handicap handicap,
+	public record GameInput(String name, LocalDate startDate, String prize, Handicap handicap,
 		List<Long> userIds, Integer bonusTreatment, Integer bonusColor, Integer bonusWax) {}
 
 	public record BuyInput(Item item, Integer quantity, Boolean split) {}
@@ -120,7 +120,7 @@ public class TrailService {
 	 * {@code status}: UPCOMING, LIVE, or FINISHED. {@code turn} is how many turns have unlocked.
 	 * {@code practice}: the server is in practice mode (turns don't wait, 2,000 coins to start).
 	 */
-	public record GameView(Long id, String name, String status, boolean practice, int turn, int turns, LocalDate startDate, String prize,
+	public record GameView(Long id, String name, String status, boolean practice, int turn, LocalDate startDate, String prize,
 		String handicap, int bonusTreatment, int bonusColor, int bonusWax, LocalDateTime lastCheckedAt, String checkProblem,
 		String createdByName, int trailMiles, List<LandmarkView> landmarks, List<PartyView> parties, MeView me,
 		List<LogView> log) {}
@@ -206,10 +206,6 @@ public class TrailService {
 		if (name.length() > 80) throw bad("Keep the name to 80 characters");
 		LocalDate start = input.startDate() == null ? today() : input.startDate();
 		if (start.isBefore(today())) throw bad("The first day can't be in the past");
-		int turns = input.turns() == null ? TrailOdds.DEFAULT_TURNS : input.turns();
-		if (turns < TrailOdds.MIN_TURNS || turns > TrailOdds.MAX_TURNS) {
-			throw bad("A game lasts " + TrailOdds.MIN_TURNS + " to " + TrailOdds.MAX_TURNS + " turns");
-		}
 		String prize = trim(input.prize());
 		if (prize != null && prize.length() > 200) throw bad("Keep the prize to 200 characters");
 		int treatment = bonus(input.bonusTreatment(), TrailOdds.DEFAULT_BONUS_TREATMENT);
@@ -232,7 +228,6 @@ public class TrailService {
 		TrailGame g = new TrailGame();
 		g.setName(name);
 		g.setStartDate(start);
-		g.setTurns(turns);
 		g.setPrize(prize);
 		g.setHandicap(handicap);
 		g.setBonusTreatment(treatment);
@@ -386,13 +381,9 @@ public class TrailService {
 		}
 	}
 
-	/** Unlock the next turn: count coins and make sure everyone has something to decide. After the last one, wrap up. */
+	/** Unlock the next turn: count coins and make sure everyone has something to decide. */
 	synchronized void unlock(TrailGame g) {
 		if (g.getFinishedAt() != null) return;
-		if (g.getTurn() >= g.getTurns()) {
-			wrapUp(g);
-			return;
-		}
 		g.setTurn(g.getTurn() + 1);
 		games.save(g);
 		Turn turn = new Turn(g);
@@ -407,14 +398,13 @@ public class TrailService {
 		turn.save();
 	}
 
-	/** The game is out of turns: anything left unplayed goes with the safe choice, then the standings. */
-	private void wrapUp(TrailGame g) {
-		Turn turn = new Turn(g);
-		for (TrailParty p : turn.onTrail()) {
-			while (p.getArrivedTurn() == null && p.getTurnsPlayed() < g.getTurns()) playTurn(turn, p, null, null);
-		}
-		turn.save();
-		finish(turn);
+	/** A manager calls it: the standings as they are now go out to everyone. */
+	public synchronized GameView endNow(User manager, Long id) {
+		requireManager(manager);
+		TrailGame g = find(id);
+		if (g.getFinishedAt() != null) throw bad("This game is already over");
+		finish(new Turn(g));
+		return view(find(id), manager);
 	}
 
 	/** Play the viewer's party's next turn with the option they picked. */
@@ -425,17 +415,14 @@ public class TrailService {
 		Turn turn = new Turn(g);
 		TrailParty p = turn.partyById.get(mine.getPartyId());
 		if (p.getArrivedTurn() != null) throw bad("You've already reached the Pacific");
-		if (practice && p.getTurnsPlayed() >= g.getTurn() && g.getTurn() < g.getTurns()) {
+		if (practice && p.getTurnsPlayed() >= g.getTurn()) {
 			// Practice: no waiting for the next check.
 			g.setTurn(g.getTurn() + 1);
 			games.save(g);
 			turn = new Turn(g);
 			p = turn.partyById.get(mine.getPartyId());
 		}
-		if (p.getTurnsPlayed() >= g.getTurn()) {
-			throw bad(p.getTurnsPlayed() >= g.getTurns() ? "You've played every turn. The game ends at the next check."
-				: "Your next turn unlocks at the next Salon Ultimate check");
-		}
+		if (p.getTurnsPlayed() >= g.getTurn()) throw bad("Your next turn unlocks at the next Salon Ultimate check");
 		playTurn(turn, p, input == null ? new PlayInput(null, null) : input, viewer.getUserId());
 		turn.save();
 		if (turn.onTrail().isEmpty()) finish(turn);
@@ -534,9 +521,6 @@ public class TrailService {
 		int index = answer != null ? answer : sc.defaultOption();
 		if (!available(sc.options().get(index), p)) index = sc.defaultOption();
 		Option op = sc.options().get(index);
-		String who = answer != null && by != null
-			? turn.nameOf(by) + " picked: " + op.label + "."
-			: "Nobody picked, so: " + op.label + ".";
 
 		boolean good;
 		String paid = "";
@@ -556,7 +540,8 @@ public class TrailService {
 		p.setLuck(0);
 		Fx fx = good ? op.good : op.bad;
 		String effects = apply(turn, p, members, fx);
-		turn.story(p, TrailLog.Kind.STORY, sc.text() + " " + who + paid + " " + fx.text + effects);
+		// Just what happened: that's what the player sees after Go.
+		turn.story(p, TrailLog.Kind.STORY, (paid + " " + fx.text + effects).trim());
 	}
 
 	/** Apply an outcome to the party. Returns anything extra worth saying (a spare wheel used, say). */
@@ -627,7 +612,7 @@ public class TrailService {
 		if (!p.isWagonBroken() && TrailOdds.hungerSpeed(p.getHungryTurns()) > 0) {
 			int base = p.isWagon() ? TrailOdds.WAGON_SPEED
 				: members.stream().mapToInt(pl -> TrailOdds.speed(pl.getMount(), pl.isShoeThrown())).min().orElse(TrailOdds.WALK_SPEED);
-			double miles = base * TrailOdds.lengthScale(turn.game.getTurns()) * TrailOdds.paceSpeed(p.getPace())
+			double miles = base * TrailOdds.paceSpeed(p.getPace())
 				* TrailOdds.hungerSpeed(p.getHungryTurns()) * turn.move.getOrDefault(p.getId(), 1.0)
 				+ turn.extra.getOrDefault(p.getId(), 0);
 			p.setMiles(Math.max(0, Math.min(TrailOdds.TRAIL_MILES, before + (int) Math.round(miles))));
@@ -655,13 +640,13 @@ public class TrailService {
 		// Only the coast gets a notification of its own; there's a landmark every couple of turns.
 		if (coast) {
 			push.notify(turn.ids(p), turn.game.getName(),
-				"You reached the Pacific in " + n + " turns. Enjoy Haystack Rock while the others catch up.", PAGE);
+				"You reached the Pacific. Enjoy Haystack Rock while the others catch up.", PAGE);
 		}
 		if (coast || to > turn.game.getFurthestLandmark()) {
 			boolean first = to > turn.game.getFurthestLandmark();
 			turn.game.setFurthestLandmark(Math.max(turn.game.getFurthestLandmark(), to));
 			String text = coast
-				? turn.names(p) + " reached the Pacific in " + n + " turns" + (first ? ", first of everyone" : "") + "!"
+				? turn.names(p) + " reached the Pacific" + (first ? ", first of everyone" : "") + "!"
 				: turn.names(p) + " reached " + place + " first.";
 			addLog(turn.game, null, null, turn.t, TrailLog.Kind.LANDMARK, text, null);
 			announce(turn.game, turn.game.getName() + ": " + text);
@@ -742,7 +727,7 @@ public class TrailService {
 		List<String> lines = new ArrayList<>();
 		lines.add(g.getName() + " is over. Final standings:");
 		for (TrailParty p : order) {
-			String where = p.getArrivedTurn() != null ? "reached the Pacific in " + p.getArrivedTurn() + " turns"
+			String where = p.getArrivedTurn() != null ? "reached the Pacific"
 				: "mile " + p.getMiles() + ", near " + TrailOdds.LANDMARKS.get(TrailOdds.landmarkAt(p.getMiles())).name();
 			lines.add(ContestService.ordinal(places.get(p.getId())) + ": " + turn.names(p) + ", " + where);
 		}
@@ -845,6 +830,7 @@ public class TrailService {
 			helper.setSamaritanUntil(turn.t + TrailOdds.SAMARITAN_TURNS);
 		}
 		giver.setLuck(Math.max(giver.getLuck(), TrailOdds.HELP_KARMA));
+		turn.story(giver, TrailLog.Kind.HELP, "You gave " + turn.names(taker) + " " + gave + ". The trail remembers kindness.");
 		addLog(turn.game, null, null, turn.t, TrailLog.Kind.HELP, helperName + " gave " + turn.names(taker) + " " + gave + ". A Good Samaritan.", null);
 		push.notify(turn.ids(taker), turn.game.getName(), helperName + " gave you " + gave + ".", PAGE);
 	}
@@ -867,6 +853,7 @@ public class TrailService {
 		}
 		String haul = coins > 0 ? coins + " coins" : food > 0 ? food + (food == 1 ? " provision" : " provisions") : null;
 		if (haul == null) {
+			turn.story(thieves, TrailLog.Kind.THEFT, "You crept into their camp, but they had nothing worth taking.");
 			addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT,
 				thiefName + " tried to rob " + turn.names(target) + ", but they had nothing worth taking.", null);
 			return;
@@ -879,6 +866,7 @@ public class TrailService {
 				target.setFood(target.getFood() - food);
 				thieves.setFood(thieves.getFood() + food);
 			}
+			turn.story(thieves, TrailLog.Kind.THEFT, "You got away with " + haul + ".");
 			String text = thiefName + " robbed " + turn.names(target) + " of " + haul + (topThird ? " (and felt a little bad about it)" : "") + ".";
 			addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT, text, null);
 			push.notify(turn.ids(target), turn.game.getName(), thiefName + " robbed you of " + haul + ".", PAGE);
@@ -891,6 +879,8 @@ public class TrailService {
 			give(victims, fine);
 		}
 		turn.move.merge(thieves.getId(), 0.5, (x, y) -> x * y);
+		turn.story(thieves, TrailLog.Kind.THEFT, "Caught! " + (fine > 0 ? "You paid them " + fine + " coins and lost" : "You lost")
+			+ " half a turn explaining yourself to a territorial marshal.");
 		String text = thiefName + " tried to rob " + turn.names(target) + " of " + haul + " and got caught. "
 			+ (fine > 0 ? "Paid them " + fine + " coins and " : "") + "lost half a turn explaining themselves to a territorial marshal.";
 		addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT, text, null);
@@ -1499,7 +1489,7 @@ public class TrailService {
 		List<LandmarkView> landmarks = TrailOdds.LANDMARKS.stream()
 			.map(l -> new LandmarkView(l.name(), l.miles(), l.lon(), l.lat(), l.store())).toList();
 		String status = g.getFinishedAt() != null ? "FINISHED" : g.getTurn() == 0 ? "UPCOMING" : "LIVE";
-		return new GameView(g.getId(), g.getName(), status, practice, g.getTurn(), g.getTurns(), g.getStartDate(), g.getPrize(),
+		return new GameView(g.getId(), g.getName(), status, practice, g.getTurn(), g.getStartDate(), g.getPrize(),
 			g.getHandicap().name(), g.getBonusTreatment(), g.getBonusColor(), g.getBonusWax(), g.getLastCheckedAt(),
 			viewer.isAdmin() ? g.getCheckProblem() : null,
 			users.findById(g.getCreatedBy()).map(TrailService::name).orElse("Former employee"),
@@ -1515,7 +1505,7 @@ public class TrailService {
 			members.stream().map(pl -> new MyMember(pl.getUserId(), turn.nameOf(pl.getUserId()), pl.getCoins(), pl.getMount().name(), pl.isShoeThrown()))
 				.sorted(Comparator.comparing(m -> m.name().toLowerCase())).toList());
 		boolean ready = g.getFinishedAt() == null && p.getArrivedTurn() == null
-			&& p.getTurnsPlayed() < (practice && g.getTurn() > 0 ? g.getTurns() : g.getTurn());
+			&& (practice ? g.getTurn() > 0 : p.getTurnsPlayed() < g.getTurn());
 
 		TurnView next = null;
 		if (p.getArrivedTurn() == null && g.getFinishedAt() == null) {
