@@ -236,8 +236,11 @@ class TrailTests {
 		assertThat(after.at("/me/turnsPlayed").asInt()).isEqualTo(1);
 		assertThat(after.at("/me/ready").asBoolean()).isFalse();
 		// Just the result: not the question again, and no turn numbers.
-		String result = after.at("/me/lastResult").get(0).asText();
-		assertThat(result).isNotBlank().doesNotContain(g.at("/me/turn/text").asText()).doesNotContain("picked");
+		List<String> lines = new java.util.ArrayList<>();
+		after.at("/me/lastResult").forEach(l -> lines.add(l.asText()));
+		assertThat(lines).isNotEmpty().noneMatch(l -> l.contains(g.at("/me/turn/text").asText()) || l.contains("picked") || l.contains("turn"));
+		// Every turn ends by saying, in real miles, how far you got.
+		assertThat(lines).anyMatch(l -> l.matches("(You cover|Slow going: you cover) \\d+ miles?\\.|You don't get anywhere\\.|You lose \\d+ miles? of ground\\."));
 		// On foot, a 40 turn game moves about 28 miles a turn.
 		assertThat(party(after, avaId).get("miles").asInt()).isPositive();
 		// The next turn is already dealt but waits for the next check.
@@ -259,6 +262,20 @@ class TrailTests {
 				for (TrailScenarios.Option o : sc.options()) {
 					assertThat(o.label.toLowerCase()).as(sc.key()).doesNotContain("wagon bed", "the wagon", "your wagon", "axle", "oxen");
 				}
+			}
+		}
+	}
+
+	@Test
+	void distanceIsSaidInRealMiles() {
+		assertThat(TrailService.distance(28, 28)).isEqualTo("You cover 28 miles.");
+		assertThat(TrailService.distance(21, 28)).isEqualTo("Slow going: you cover 21 miles.");
+		assertThat(TrailService.distance(0, 28)).isEqualTo("You don't get anywhere.");
+		assertThat(TrailService.distance(-12, 28)).isEqualTo("You lose 12 miles of ground.");
+		// Nothing a player reads mentions turns.
+		for (TrailScenarios.Scenario sc : TrailScenarios.ALL) {
+			for (TrailScenarios.Option o : sc.options()) {
+				assertThat(o.good.text + " " + o.bad.text).as(sc.key()).doesNotContainPattern("(?i)\\b(lose|next|a) (a |half a |quarter )?turn\\b").doesNotContain(" miles");
 			}
 		}
 	}

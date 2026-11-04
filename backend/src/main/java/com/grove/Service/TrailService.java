@@ -540,8 +540,9 @@ public class TrailService {
 		p.setLuck(0);
 		Fx fx = good ? op.good : op.bad;
 		String effects = apply(turn, p, members, fx);
-		// Just what happened: that's what the player sees after Go.
-		turn.story(p, TrailLog.Kind.STORY, (paid + " " + fx.text + effects).trim());
+		// Just what happened: that's what the player sees after Go, then how far they got.
+		String result = (paid + " " + fx.text + effects).trim();
+		if (!result.isEmpty()) turn.story(p, TrailLog.Kind.STORY, result);
 	}
 
 	/** Apply an outcome to the party. Returns anything extra worth saying (a spare wheel used, say). */
@@ -609,14 +610,16 @@ public class TrailService {
 		List<TrailPlayer> members = turn.members(p);
 		fixShoes(p, members);
 		int before = p.getMiles();
+		int base = p.isWagon() ? TrailOdds.WAGON_SPEED
+			: members.stream().mapToInt(pl -> TrailOdds.speed(pl.getMount(), pl.isShoeThrown())).min().orElse(TrailOdds.WALK_SPEED);
 		if (!p.isWagonBroken() && TrailOdds.hungerSpeed(p.getHungryTurns()) > 0) {
-			int base = p.isWagon() ? TrailOdds.WAGON_SPEED
-				: members.stream().mapToInt(pl -> TrailOdds.speed(pl.getMount(), pl.isShoeThrown())).min().orElse(TrailOdds.WALK_SPEED);
 			double miles = base * TrailOdds.paceSpeed(p.getPace())
 				* TrailOdds.hungerSpeed(p.getHungryTurns()) * turn.move.getOrDefault(p.getId(), 1.0)
 				+ turn.extra.getOrDefault(p.getId(), 0);
 			p.setMiles(Math.max(0, Math.min(TrailOdds.TRAIL_MILES, before + (int) Math.round(miles))));
 		}
+		// Every turn says, in real miles, how far you got.
+		turn.story(p, TrailLog.Kind.STORY, distance(p.getMiles() - before, (int) Math.round(base * TrailOdds.paceSpeed(p.getPace()))));
 		if (p.isWagon() && !p.isWagonBroken() && p.getMiles() > before) {
 			double chance = TrailOdds.WAGON_BREAKDOWN * (p.getPace() == Pace.GRUELING ? 2 : 1);
 			if (random.nextDouble() < chance) turn.story(p, TrailLog.Kind.STORY, "A wheel falls off for no reason at all." + breakDown(turn, p));
@@ -651,6 +654,14 @@ public class TrailService {
 			addLog(turn.game, null, null, turn.t, TrailLog.Kind.LANDMARK, text, null);
 			announce(turn.game, turn.game.getName() + ": " + text);
 		}
+	}
+
+	/** How far the party got this turn, against how far it usually goes. */
+	static String distance(int moved, int usual) {
+		if (moved < 0) return "You lose " + -moved + (moved == -1 ? " mile" : " miles") + " of ground.";
+		if (moved == 0) return "You don't get anywhere.";
+		if (moved < usual * 0.9) return "Slow going: you cover " + moved + (moved == 1 ? " mile." : " miles.");
+		return "You cover " + moved + " miles.";
 	}
 
 	/** The next turn: sometimes running into someone on the same stretch of trail, otherwise a scenario. */
@@ -880,9 +891,9 @@ public class TrailService {
 		}
 		turn.move.merge(thieves.getId(), 0.5, (x, y) -> x * y);
 		turn.story(thieves, TrailLog.Kind.THEFT, "Caught! " + (fine > 0 ? "You paid them " + fine + " coins and lost" : "You lost")
-			+ " half a turn explaining yourself to a territorial marshal.");
+			+ " the day explaining yourself to a territorial marshal.");
 		String text = thiefName + " tried to rob " + turn.names(target) + " of " + haul + " and got caught. "
-			+ (fine > 0 ? "Paid them " + fine + " coins and " : "") + "lost half a turn explaining themselves to a territorial marshal.";
+			+ (fine > 0 ? "Paid them " + fine + " coins and " : "") + "lost the day explaining themselves to a territorial marshal.";
 		addLog(turn.game, null, null, turn.t, TrailLog.Kind.THEFT, text, null);
 		push.notify(concat(turn.ids(target), List.of(thief.getUserId())), turn.game.getName(), text, PAGE);
 	}

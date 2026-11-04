@@ -29,7 +29,8 @@ Every turn shows exactly four choices, as plain labels: no odds, no hint of the 
 nothing preselected. Go stays off until you pick one.
 
 1. Your pick plays out: roll the option's odds (moved by the rubber band) and apply the good or bad outcome.
-   Only now do you see what happened. In a party, whoever presses Go decides for everyone.
+   Only now do you see what happened, followed by how far you got in real miles ("You cover 28 miles.",
+   "Slow going: you cover 21 miles.", "You don't get anywhere.", "You lose 30 miles of ground."). In a party, whoever presses Go decides for everyone.
 2. Everyone eats 1 provision. Going without gets worse every turn until there's food: 1 turn hungry (half
    speed), 2 to 3 weak (half speed, 10 points worse luck), 4 to 5 starving (a quarter speed, 20 points worse
    luck), 6 or more too weak to travel at all. A traveling trader, a lucky scenario, or a kind stranger who
@@ -248,7 +249,7 @@ Outcomes are in `TrailScenarios.java`.
 **Parties only**
 - **The party argues over which way to go.** Put it to a vote [60%] / Flip a coin [50%] / Let the oldest decide [70%] (safe) / Play the fiddle until everyone agrees [always]
 - **Somebody forgot to pack the coffee.** Blame someone [40%] / Everyone chips in, 10 coins each [90%] (safe) / Brew chicory root [55%] / Go without [always]
-- **Somebody ate the last of the bacon.** Investigate [50%] / Let it go [90%] (safe) / Accuse the dog [60%] / Ration everything from now on [70%]
+- **Somebody ate most of the bacon.** Investigate [50%] / Let it go [90%] (safe) / Accuse the dog [60%] / Ration everything from now on [70%]
 - **Everyone trims each other's hair by the campfire.** Everyone trims everyone [60%] / Just a little off the ends [90%] (safe) / Matching hairstyles [45%] / Sell the clippings to a wigmaker [always]
 
 ## Build plan once this is agreed
