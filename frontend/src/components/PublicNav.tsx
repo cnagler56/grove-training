@@ -6,8 +6,8 @@ import { api } from '@/src/lib/api';
 import { SALON } from '@/src/lib/salon';
 
 /**
- * Navigation bar for the public pages (home, apply). Shows "Sign in", or
- * "My home" when someone is already signed in.
+ * Navigation bar for the public pages (home, apply). "Sign in" always reads
+ * the same, but goes straight to the staff Home when someone is signed in.
  */
 export default function PublicNav() {
   const [signedIn, setSignedIn] = useState(false);
@@ -33,7 +33,7 @@ export default function PublicNav() {
             <a href={SALON.bookingUrl} target="_blank" rel="noopener noreferrer" className="btn">Book now</a>
           )}
           <Link href={signedIn ? '/home' : '/signin'} className="btn-ghost">
-            {signedIn ? 'My home' : 'Sign in'}
+            Sign in
           </Link>
         </div>
       </div>
