@@ -40,8 +40,8 @@ public final class Dtos {
 	/** Admin create/edit body. */
 	public record VideoRequest(String title, String description, String category) {}
 
-	/** Admin adds a YouTube video by link instead of uploading a file. */
-	public record YouTubeRequest(String url, String title, String description, String category) {}
+	/** Admin adds a YouTube, Instagram, or TikTok video by link instead of uploading a file. */
+	public record VideoLinkRequest(String url, String title, String description, String category) {}
 
 	/**
 	 * What the browser needs to upload a file straight to Bunny over TUS, so the

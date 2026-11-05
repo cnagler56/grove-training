@@ -101,6 +101,34 @@ class GroveServerApplicationTests {
 	}
 
 	@Test
+	void managersAddInstagramAndTikTokVideos() throws Exception {
+		Cookie owner = signUp("owner@grove.test");
+		Cookie stylist = signUp("stylist@grove.test");
+
+		mvc.perform(post("/api/admin/videos/link").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"url\":\"https://www.instagram.com/reel/C0dE_ab-12X/?igsh=x\",\"title\":\"Balayage\"}"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.source").value("INSTAGRAM"))
+			.andExpect(jsonPath("$.status").value("READY"))
+			.andExpect(jsonPath("$.thumbnailUrl").doesNotExist());
+		mvc.perform(post("/api/admin/videos/link").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"url\":\"https://www.tiktok.com/@someone/video/7234567890123456789\",\"title\":\"Curtain bangs\"}"))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.source").value("TIKTOK"));
+		mvc.perform(post("/api/admin/videos/link").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"url\":\"https://www.instagram.com/someone/\",\"title\":\"A profile\"}"))
+			.andExpect(status().isBadRequest());
+
+		Long reel = videos.findAll().stream().filter(v -> v.getTitle().equals("Balayage")).findFirst().orElseThrow().getId();
+		Long tiktok = videos.findAll().stream().filter(v -> v.getTitle().equals("Curtain bangs")).findFirst().orElseThrow().getId();
+		mvc.perform(get("/api/videos/" + reel).cookie(stylist))
+			.andExpect(jsonPath("$.embedUrl").value("https://www.instagram.com/p/C0dE_ab-12X/embed/"));
+		mvc.perform(get("/api/videos/" + tiktok).cookie(stylist))
+			.andExpect(jsonPath("$.embedUrl").value(org.hamcrest.Matchers.startsWith("https://www.tiktok.com/player/v1/7234567890123456789")));
+		mvc.perform(post("/api/admin/videos/" + reel + "/upload-ticket").cookie(owner)).andExpect(status().isBadRequest());
+	}
+
+	@Test
 	void managersAddYouTubeVideosThatStaffCanWatch() throws Exception {
 		Cookie owner = signUp("owner@grove.test");
 		Cookie stylist = signUp("stylist@grove.test");

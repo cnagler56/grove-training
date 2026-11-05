@@ -49,7 +49,17 @@ export default function VideoPage() {
       <Link href="/videos" className="text-sm opacity-70 hover:opacity-100">Back to all videos</Link>
 
       <div className="mt-4 overflow-hidden rounded-2xl bg-black text-white shadow-lg">
-        {embedUrl ? (
+        {embedUrl && video.source === 'INSTAGRAM' ? (
+          // Instagram's player is a tall card with the post's header and caption around the video.
+          <div className="mx-auto h-[min(760px,85vh)] w-full max-w-[420px] bg-white">
+            <iframe src={embedUrl} title={video.title} className="h-full w-full border-0" allow="encrypted-media; fullscreen" allowFullScreen />
+          </div>
+        ) : embedUrl && video.source === 'TIKTOK' ? (
+          <div className="relative mx-auto aspect-[9/16] h-[min(747px,85vh)] max-w-full">
+            <iframe src={embedUrl} title={video.title} className="absolute inset-0 h-full w-full border-0"
+              allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen />
+          </div>
+        ) : embedUrl ? (
           <div className="relative aspect-video">
             <iframe
               src={embedUrl}

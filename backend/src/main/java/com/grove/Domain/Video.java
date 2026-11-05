@@ -40,7 +40,7 @@ public class Video {
 	private String bunnyVideoId;
 
 	/**
-	 * Where the video plays from. Null on rows from before YouTube links existed,
+	 * Where the video plays from. Null on rows from before video links existed,
 	 * which are all Bunny uploads; {@link #getSource()} reads null as BUNNY, so
 	 * old rows need no backfill.
 	 */
@@ -52,6 +52,10 @@ public class Video {
 	/** The 11-character YouTube video id, for YOUTUBE videos. */
 	@Column(name = "youtube_id", length = 20)
 	private String youtubeId;
+
+	/** The post's code (Instagram) or numeric id (TikTok), for those videos. */
+	@Column(name = "link_id", length = 64)
+	private String linkId;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -78,6 +82,9 @@ public class Video {
 
 	public String getYoutubeId() { return youtubeId; }
 	public void setYoutubeId(String youtubeId) { this.youtubeId = youtubeId; }
+
+	public String getLinkId() { return linkId; }
+	public void setLinkId(String linkId) { this.linkId = linkId; }
 
 	public String getTitle() { return title; }
 	public void setTitle(String title) { this.title = title; }

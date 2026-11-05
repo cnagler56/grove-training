@@ -5,5 +5,9 @@ public enum VideoSource {
 	/** Uploaded to our Bunny Stream library; only signed-in staff can play it. */
 	BUNNY,
 	/** A link to a public or unlisted YouTube video. */
-	YOUTUBE
+	YOUTUBE,
+	/** A link to a public Instagram post or reel, played in Instagram's own player. */
+	INSTAGRAM,
+	/** A link to a public TikTok video, played in TikTok's own player. */
+	TIKTOK
 }

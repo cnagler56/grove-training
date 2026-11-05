@@ -1,5 +1,10 @@
 package com.grove.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -18,8 +23,8 @@ import com.grove.Domain.Dtos.UploadTicket;
 import com.grove.Domain.Dtos.VideoAudience;
 import com.grove.Domain.Dtos.VideoDetail;
 import com.grove.Domain.Dtos.VideoRequest;
+import com.grove.Domain.Dtos.VideoLinkRequest;
 import com.grove.Domain.Dtos.VideoSummary;
-import com.grove.Domain.Dtos.YouTubeRequest;
 import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoAssignment;
@@ -44,6 +49,10 @@ import com.grove.Repository.VideoRepository;
  */
 @Service
 public class VideoService {
+
+	/** Reads where TikTok short links point, without following them. */
+	private static final HttpClient SHORT_LINKS = HttpClient.newBuilder()
+		.followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(5)).build();
 
 	private final VideoRepository videoRepo;
 	private final VideoCompletionRepository completionRepo;
@@ -123,31 +132,53 @@ public class VideoService {
 	}
 
 	/**
-	 * Add a YouTube video by link. It's live right away: nothing to upload or
-	 * process. The video must be public or unlisted on YouTube to play here.
+	 * Add a YouTube, Instagram, or TikTok video by link. It's live right away:
+	 * nothing to upload or process. It plays in that site's own player, so it has
+	 * to be public there (or unlisted, on YouTube).
 	 */
-	public VideoSummary createYouTube(User admin, YouTubeRequest req) {
-		String youtubeId = YouTube.parseId(req == null ? null : req.url())
-			.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-				"That doesn't look like a YouTube link. Copy it from the Share button on YouTube."));
-		String title = requireTitle(new VideoRequest(req.title(), req.description(), req.category()));
+	public VideoSummary createFromLink(User admin, VideoLinkRequest req) {
+		String url = req == null ? null : req.url();
 		Video v = new Video();
-		v.setTitle(title);
+		var youtubeId = YouTube.parseId(url);
+		if (youtubeId.isPresent()) {
+			v.setSource(VideoSource.YOUTUBE);
+			v.setYoutubeId(youtubeId.get());
+		} else {
+			SocialVideo.Post post = SocialVideo.parse(SocialVideo.isTikTokShortLink(url) ? followShortLink(url) : url)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+					"That doesn't look like a YouTube, Instagram, or TikTok video link. Copy it from the post's Share button."));
+			v.setSource(post.source());
+			v.setLinkId(post.id());
+		}
+		v.setTitle(requireTitle(new VideoRequest(req.title(), req.description(), req.category())));
 		v.setDescription(blankToNull(req.description()));
 		v.setCategory(blankToNull(req.category()));
-		v.setSource(VideoSource.YOUTUBE);
-		v.setYoutubeId(youtubeId);
 		v.setStatus(VideoStatus.READY);
 		v.setCreatedBy(admin.getUserId());
 		v.setCreatedAt(LocalDateTime.now());
 		return toSummary(videoRepo.save(v), false, false);
 	}
 
+	/** Where a TikTok short link (vm.tiktok.com/...) points: the full link, which carries the video id. */
+	private String followShortLink(String url) {
+		String target = url.trim().matches("(?i)^https?://.*") ? url.trim() : "https://" + url.trim();
+		try {
+			HttpResponse<Void> res = SHORT_LINKS.send(
+				HttpRequest.newBuilder(URI.create(target)).timeout(Duration.ofSeconds(8))
+					.header("User-Agent", "Mozilla/5.0 (compatible; GroveSalons/1.0)").GET().build(),
+				HttpResponse.BodyHandlers.discarding());
+			return res.headers().firstValue("Location").orElse(url);
+		} catch (Exception e) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+				"Couldn't open that TikTok link. Open the video on TikTok in a browser and copy the full address instead.");
+		}
+	}
+
 	/** A fresh ticket to retry or resume an upload. */
 	public UploadTicket uploadTicket(Long id) {
 		Video v = find(id);
-		if (v.getSource() == VideoSource.YOUTUBE) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "YouTube videos don't need uploading");
+		if (v.getSource() != VideoSource.BUNNY) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Linked videos don't need uploading");
 		}
 		if (v.getStatus() == VideoStatus.READY) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "This video is already uploaded");
@@ -266,15 +297,26 @@ public class VideoService {
 			.map(VideoCompletion::getVideoId).collect(Collectors.toSet());
 	}
 
-	/** Player URL: YouTube's privacy-enhanced player, or a signed Bunny embed once processing is done. */
+	/**
+	 * Player URL: YouTube's privacy-enhanced player, Instagram's or TikTok's own
+	 * player, or a signed Bunny embed once processing is done.
+	 */
 	private String embedUrl(Video v) {
-		if (v.getSource() == VideoSource.YOUTUBE) return YouTube.embedUrl(v.getYoutubeId());
+		return switch (v.getSource()) {
+			case YOUTUBE -> YouTube.embedUrl(v.getYoutubeId());
+			case INSTAGRAM, TIKTOK -> SocialVideo.embedUrl(new SocialVideo.Post(v.getSource(), v.getLinkId()));
+			case BUNNY -> bunnyEmbedUrl(v);
+		};
+	}
+
+	private String bunnyEmbedUrl(Video v) {
 		return v.getStatus() == VideoStatus.READY ? bunny.embedUrl(v.getBunnyVideoId()) : null;
 	}
 
 	private VideoSummary toSummary(Video v, boolean completed, boolean assignedToMe) {
-		String thumb = v.getSource() == VideoSource.YOUTUBE
-			? YouTube.thumbnailUrl(v.getYoutubeId())
+		// Instagram and TikTok have no thumbnail that works without their API.
+		String thumb = v.getSource() == VideoSource.YOUTUBE ? YouTube.thumbnailUrl(v.getYoutubeId())
+			: v.getSource() != VideoSource.BUNNY ? null
 			: v.getStatus() == VideoStatus.READY ? bunny.thumbnailUrl(v.getBunnyVideoId()) : null;
 		return new VideoSummary(v.getId(), v.getTitle(), v.getDescription(), v.getCategory(), v.getSource(), v.getStatus(),
 			v.getDurationSeconds(), thumb, completed, v.getCreatedAt(), v.isAssignedOnly(), v.isAssignedOnly() && assignedToMe);

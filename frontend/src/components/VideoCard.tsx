@@ -19,7 +19,7 @@ export default function VideoCard({ video }: { video: VideoSummary }) {
           <img src={video.thumbnailUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
           <div className="flex h-full items-center justify-center text-sm font-semibold text-[var(--accent-strong)] opacity-70">
-            No preview yet
+            {video.source === 'INSTAGRAM' ? 'Instagram video' : video.source === 'TIKTOK' ? 'TikTok video' : 'No preview yet'}
           </div>
         )}
         {duration && (

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api, formatDuration, type AdminStatus, type TeamMember, type UploadTicket, type VideoSummary } from '@/src/lib/api';
 import { uploadToBunny } from '@/src/lib/upload';
-import { youTubeId, youTubeThumbnail } from '@/src/lib/youtube';
+import { SOURCE_NAME, videoLinkSource, youTubeId, youTubeThumbnail } from '@/src/lib/youtube';
 import { useDialogs } from '@/src/components/Dialogs';
 import { useUnsavedChangesGuard } from '@/src/lib/leaveGuard';
 import VideoAudienceEditor from '@/src/components/VideoAudienceEditor';
@@ -28,7 +28,7 @@ export default function AdminVideosPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'upload' | 'youtube'>('upload');
+  const [mode, setMode] = useState<'upload' | 'link'>('upload');
 
   const load = useCallback(() => {
     api.adminStatus().then(setStatus).catch((e) => setError(e.message));
@@ -53,7 +53,7 @@ export default function AdminVideosPage() {
 
       <div>
         <div className="mb-3 flex gap-2" role="tablist">
-          {([['upload', 'Upload a file'], ['youtube', 'Add a YouTube video']] as const).map(([value, label]) => (
+          {([['upload', 'Upload a file'], ['link', 'Add by link']] as const).map(([value, label]) => (
             <button
               key={value}
               role="tab"
@@ -67,8 +67,8 @@ export default function AdminVideosPage() {
             </button>
           ))}
         </div>
-        {mode === 'youtube' ? (
-          <YouTubeForm categories={categories} onDone={load} />
+        {mode === 'link' ? (
+          <LinkForm categories={categories} onDone={load} />
         ) : status && !status.bunnyConfigured ? (
           <SetupHelp />
         ) : (
@@ -109,8 +109,8 @@ function SetupHelp() {
   );
 }
 
-/** Add a YouTube video by link. It's live as soon as it's added. */
-function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () => void }) {
+/** Add a YouTube, Instagram, or TikTok video by link. It's live as soon as it's added. */
+function LinkForm({ categories, onDone }: { categories: string[]; onDone: () => void }) {
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -118,6 +118,7 @@ function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const source = videoLinkSource(url);
   const id = youTubeId(url);
 
   async function onSubmit(e: React.FormEvent) {
@@ -126,7 +127,7 @@ function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () 
     setError(null);
     setMessage(null);
     try {
-      await api.addYouTube({ url, title, category, description });
+      await api.addVideoLink({ url, title, category, description });
       setMessage(`"${title}" added. It's live for the team now.`);
       setUrl('');
       setTitle('');
@@ -141,23 +142,26 @@ function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () 
 
   return (
     <form onSubmit={onSubmit} className="card space-y-4 p-5">
-      <h2 className="font-semibold">Add a YouTube video</h2>
+      <h2 className="font-semibold">Add a YouTube, Instagram, or TikTok video</h2>
       <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
         <label className="block text-sm">
-          <span className="mb-1 block opacity-70">YouTube link</span>
+          <span className="mb-1 block opacity-70">Video link</span>
           <input
             className="input"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://youtu.be/…"
+            placeholder="https://www.instagram.com/reel/…"
             required
             disabled={busy}
           />
           <span className="mt-1 block text-xs opacity-60">
-            On YouTube, click Share and copy the link. The video must be Public or Unlisted.
+            Tap Share on the post and copy the link. It must be public (or Unlisted, on YouTube) to play here.
           </span>
-          {url.trim() && !id && (
-            <span className="mt-1 block text-xs font-semibold text-[var(--danger)]">That doesn&apos;t look like a YouTube video link yet.</span>
+          {url.trim() && !source && (
+            <span className="mt-1 block text-xs font-semibold text-[var(--danger)]">That doesn&apos;t look like a YouTube, Instagram, or TikTok video link yet.</span>
+          )}
+          {source && source !== 'YOUTUBE' && (
+            <span className="mt-1 block text-xs font-semibold text-[var(--success)]">{SOURCE_NAME[source]} video found. It plays in {SOURCE_NAME[source]}&apos;s own player.</span>
           )}
         </label>
         {id && (
@@ -194,7 +198,7 @@ function YouTubeForm({ categories, onDone }: { categories: string[]; onDone: () 
       {message && <p className="text-sm text-[var(--success)]">{message}</p>}
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
 
-      <button type="submit" className="btn" disabled={busy || !id || !title.trim()}>
+      <button type="submit" className="btn" disabled={busy || !source || !title.trim()}>
         {busy ? 'Adding…' : 'Add video'}
       </button>
     </form>
@@ -326,8 +330,8 @@ function VideoRow({ video, categories, team, onChange }: {
   }
 
   async function remove() {
-    const where = video.source === 'YOUTUBE'
-      ? "It stays on YouTube, but everyone's watch history for it is removed."
+    const where = video.source !== 'BUNNY'
+      ? `It stays on ${SOURCE_NAME[video.source]}, but everyone's watch history for it is removed.`
       : "This removes it from Bunny too, along with everyone's watch history for it.";
     if (!(await dialogs.confirm({ title: `Delete "${video.title}"?`, message: where, confirmLabel: 'Delete video', danger: true }))) return;
     try {
@@ -375,7 +379,7 @@ function VideoRow({ video, categories, team, onChange }: {
             <Link href={`/videos/${video.id}`} className="font-medium hover:underline">{video.title}</Link>
             <p className="text-xs opacity-70">
               <span className={STATUS_STYLE[video.status]}>{STATUS_LABEL[video.status]}</span>
-              {video.source === 'YOUTUBE' && ' · YouTube'}
+              {video.source !== 'BUNNY' && ` · ${SOURCE_NAME[video.source]}`}
               {video.category && ` · ${video.category}`}
               {video.assignedOnly && <span className="font-semibold text-[var(--accent-strong)]"> · Only assigned people</span>}
               {video.durationSeconds ? ` · ${formatDuration(video.durationSeconds)}` : ''}
