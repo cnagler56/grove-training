@@ -316,7 +316,8 @@ public class StatsService {
 	static StatLine line(WeeklyStat s, BigDecimal payRate) {
 		BigDecimal hours = zeroIfNull(s.getFloorHours());
 		BigDecimal sales = zeroIfNull(s.getServiceSales());
-		BigDecimal perHour = hours.signum() > 0 ? sales.divide(hours, 2, RoundingMode.HALF_UP) : null;
+		// Same as payroll: after-discount sales plus 20% of the discounts, per floor hour.
+		BigDecimal perHour = hours.signum() > 0 ? PayService.pph(s) : null;
 		return new StatLine(s.getWeekStart(), sales, zeroIfNull(s.getNetServiceSales()), zeroIfNull(s.getRetailSales()),
 			zeroIfNull(s.getProductPerGuest()), hours, zeroIfNull(s.getOffFloorHours()), perHour, PayService.pph(s), payRate,
 			null, null, null, s.getServices(), s.getClients(), s.getColors(), s.getTreatments(), s.getWaxes());

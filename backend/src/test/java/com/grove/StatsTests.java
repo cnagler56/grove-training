@@ -84,7 +84,8 @@ class StatsTests {
 			.andExpect(jsonPath("$.linked").value(true))
 			.andExpect(jsonPath("$.weeks.length()").value(1))
 			.andExpect(jsonPath("$.weeks[0].serviceSales").value(1200.00))
-			.andExpect(jsonPath("$.weeks[0].serviceSalesPerHour").value(39.34))
+			// Like payroll: (1,150.50 after discounts + 20% of the 49.50 in discounts) ÷ 30.5 hours.
+			.andExpect(jsonPath("$.weeks[0].serviceSalesPerHour").value(38.05))
 			.andExpect(jsonPath("$.weeks[0].services").value(44))
 			.andExpect(jsonPath("$.weeks[0].clients").value(31));
 		// Mia's isn't ("Mia Cruz" vs "Mia De La Cruz"), so she sees nothing until a manager links her.

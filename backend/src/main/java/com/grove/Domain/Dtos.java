@@ -286,7 +286,7 @@ public final class Dtos {
 
 	/** Whether uploads are wired up — the admin page shows setup help when false. */
 	public record AdminStatus(boolean bunnyConfigured, boolean signupOpen) {}
-	/** One week of someone's numbers. {@code serviceSalesPerHour} is service sales ÷ floor hours (null with no hours). */
+	/** One week of someone's numbers. {@code serviceSalesPerHour} is figured like payroll's PPH: (after-discount sales + 20% of discounts) ÷ floor hours (null with no hours). */
 	public record StatLine(
 		LocalDate weekStart,
 		BigDecimal serviceSales,

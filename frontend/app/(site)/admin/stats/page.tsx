@@ -9,6 +9,8 @@ import MonthlyServices from '@/src/components/MonthlyServices';
 
 /** Below this many floor hours, "per hour" is too noisy to rank. */
 const MIN_HOURS_FOR_RATE = 5;
+/** Like payroll, per-hour sales count after-discount sales plus this share of the discounts. */
+const DISCOUNT_CREDIT = 0.2;
 /** How many people each leaderboard card shows until it's clicked open. */
 const BOARD_SIZE = 5;
 
@@ -45,7 +47,7 @@ const BOARDS: { title: string; column: string; note?: string }[] = [
   { title: 'Service sales', column: 'service' },
   { title: 'Retail sales', column: 'retail' },
   { title: 'Product per guest', column: 'ppg' },
-  { title: 'Service sales per hour', column: 'rate', note: `${MIN_HOURS_FOR_RATE}+ floor hours` },
+  { title: 'Service sales per hour', column: 'rate', note: `As payroll figures it, ${MIN_HOURS_FOR_RATE}+ floor hours` },
 ];
 
 const column = (key: string) => COLUMNS.find((c) => c.key === key)!;
@@ -251,7 +253,7 @@ export default function LeaderboardsPage() {
                   <td className="px-3 py-2 text-right">{money(total('retail'))}</td>
                   <td className="px-3 py-2" />
                   <td className="px-3 py-2 text-right">
-                    {total('hours') > 0 ? moneyCents(total('service') / total('hours')) : ''}
+                    {total('hours') > 0 ? moneyCents((total('net') + DISCOUNT_CREDIT * (total('service') - total('net'))) / total('hours')) : ''}
                   </td>
                   <td className="px-3 py-2 text-right">{hours(total('hours'))}</td>
                   <td className="px-3 py-2 text-right">{hours(total('off'))}</td>

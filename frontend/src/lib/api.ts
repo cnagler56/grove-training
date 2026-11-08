@@ -354,7 +354,7 @@ export interface StatLine {
   productPerGuest: number;
   floorHours: number;
   offFloorHours: number;
-  /** Service sales per floor hour; null with no floor hours. */
+  /** Service sales per floor hour, figured like payroll: (after-discount sales + 20% of discounts) ÷ floor hours. Null with no floor hours. */
   serviceSalesPerHour: number | null;
   /** Production per hour as payroll figures it: (after-discount sales + 20% of discounts) ÷ floor hours. */
   pph: number;
