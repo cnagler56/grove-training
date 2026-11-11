@@ -5,10 +5,10 @@ import PayRulesCard from '@/src/components/PayRulesCard';
 import { api, type PermissionKey, type PermissionRule, type UserRole } from '@/src/lib/api';
 import { ROLES } from '@/src/lib/roles';
 
-/** Roles that can be given schedule permissions (customers can't). */
-const STAFF_ROLES = ROLES.filter((r) => r.value !== 'CUSTOMER');
+/** Roles that can be given permissions. Owners always have all of them; customers can't have any. */
+const ROLE_COLUMNS = ROLES.filter((r) => r.value !== 'CUSTOMER' && r.value !== 'OWNER');
 
-/** Owner-only: decide which roles can see, build, and approve the schedule. */
+/** Owner-only: decide which roles can do what. */
 export default function SettingsPage() {
   const [rules, setRules] = useState<PermissionRule[] | null>(null);
   const [draft, setDraft] = useState<Record<PermissionKey, Set<UserRole>> | null>(null);
@@ -59,52 +59,45 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-3xl font-extrabold tracking-tight">Settings</h1>
-      <p className="mt-1 text-sm opacity-70">Decide which roles can use the schedule, time off, the team board, and payroll.</p>
+      <p className="mt-1 text-sm opacity-70">Which roles can do each thing. Owners can always do everything.</p>
 
-      <div className="mt-6 space-y-4">
-        {rules.map((rule) => (
-          <section key={rule.permission} className="card p-5">
-            <h2 className="text-lg font-extrabold">{rule.label}</h2>
-            <p className="text-sm opacity-70">{rule.description}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {STAFF_ROLES.map((r) => {
-                const on = draft[rule.permission].has(r.value);
-                const locked = r.value === 'OWNER';
-                return (
-                  <label
-                    key={r.value}
-                    className={`flex cursor-pointer select-none items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
-                      on ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] bg-[var(--surface)]'
-                    } ${locked ? 'cursor-default opacity-70' : ''}`}
-                    title={locked ? 'Owners always have every permission' : undefined}
-                  >
+      <section className="card mt-6 overflow-x-auto p-0">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead>
+            <tr className="border-b border-[var(--border)] text-xs font-semibold opacity-70">
+              <th className="px-4 py-2.5 text-left" />
+              {ROLE_COLUMNS.map((r) => <th key={r.value} className="px-2 py-2.5 text-center">{r.label}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border)]">
+            {rules.map((rule) => (
+              <tr key={rule.permission}>
+                <td className="px-4 py-2.5 font-semibold">{rule.label}</td>
+                {ROLE_COLUMNS.map((r) => (
+                  <td key={r.value} className="px-2 py-2.5 text-center">
                     <input
                       type="checkbox"
-                      className="accent-[var(--accent)]"
-                      checked={on}
-                      disabled={locked}
+                      className="h-4 w-4 cursor-pointer accent-[var(--accent)]"
+                      aria-label={`${r.label}: ${rule.label}`}
+                      checked={draft[rule.permission].has(r.value)}
                       onChange={() => toggle(rule.permission, r.value)}
                     />
-                    {r.label}
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
 
       {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
       {notice && <p className="mt-4 text-sm font-semibold text-[var(--success)]">{notice}</p>}
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3">
         <button className="btn" onClick={() => void save()} disabled={saving || !dirty}>
           {saving ? 'Saving…' : 'Save settings'}
         </button>
         {dirty && <span className="text-sm font-semibold text-[var(--warn)]">Unsaved changes</span>}
       </div>
-      <p className="mt-4 text-xs opacity-60">
-        Owners always have every permission. Customers can&apos;t be given any of these.
-      </p>
 
       <PayRulesCard />
     </div>
