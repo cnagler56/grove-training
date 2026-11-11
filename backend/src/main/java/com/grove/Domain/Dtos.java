@@ -181,7 +181,8 @@ public final class Dtos {
 	public record WeekPublish(boolean published) {}
 
 	/** What the signed-in person can do with the schedule (drives tabs and buttons). */
-	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff, boolean postUpdates) {}
+	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff, boolean postUpdates,
+		boolean payrollNotes, boolean viewPayroll) {}
 
 	/** Starting a Team board post. {@code withPhotos}: photos follow, so the text may be blank. */
 	public record TeamPostInput(String body, boolean withPhotos) {}
@@ -251,7 +252,10 @@ public final class Dtos {
 		String responseNote,
 		String decidedByName,
 		LocalDateTime decidedAt,
-		LocalDateTime createdAt) {}
+		LocalDateTime createdAt,
+		/** Set once the hours are entered into payroll. */
+		String finishedByName,
+		LocalDateTime finishedAt) {}
 
 	/** What an owner sees: requests waiting on them, and approved ones not yet paid. */
 	public record VacationPayQueue(List<VacationPayView> waiting, List<VacationPayView> approved) {}
@@ -357,4 +361,60 @@ public final class Dtos {
 
 	/** What's loaded, for the owner's Settings page. */
 	public record PayRules(List<PayMatrixEntry> matrix, List<PayCodeView> codes) {}
+
+	/** A pay period: the check date and the two Saturday-to-Friday weeks it pays for. */
+	public record PayPeriod(LocalDate checkDate, LocalDate workStart, LocalDate workEnd) {}
+
+	/** The pay periods to pick from, newest first, and the one to show by default. */
+	public record PayPeriods(List<PayPeriod> periods, LocalDate defaultCheckDate) {}
+
+	/** What someone enters on the Payroll notes tab. kind is ADDITION, DEDUCTION, or COMMENT; amount is dollars. */
+	public record PayrollNoteInput(Long userId, LocalDate checkDate, String kind, BigDecimal amount, String note) {}
+
+	public record PayrollNoteView(
+		Long id,
+		Long userId,
+		String name,
+		LocalDate checkDate,
+		String kind,
+		BigDecimal amount,
+		String note,
+		String createdByName,
+		LocalDateTime createdAt,
+		String updatedByName,
+		LocalDateTime updatedAt,
+		/** NEW, ACKNOWLEDGED, or FINISHED (entered into payroll). */
+		String status,
+		String acknowledgedByName,
+		LocalDateTime acknowledgedAt,
+		String finishedByName,
+		LocalDateTime finishedAt) {}
+
+	/** One employee on the Payroll tab: their paid time off and notes for the period. */
+	public record PayrollEmployee(
+		Long userId,
+		String name,
+		BigDecimal ptoHours,
+		BigDecimal pendingPtoHours,
+		/** Each paid time off request on this check, so approved ones can be marked Finished. */
+		List<PayrollPto> pto,
+		BigDecimal additions,
+		BigDecimal deductions,
+		List<PayrollNoteView> notes) {}
+
+	/** Everything for one pay period on the Payroll tab. */
+	public record PayrollSummary(
+		PayPeriod period,
+		List<PayrollEmployee> employees,
+		BigDecimal ptoHours,
+		BigDecimal additions,
+		BigDecimal deductions,
+		int pendingPtoRequests,
+		/** Notes not yet marked Finished. */
+		int openNotes,
+		/** Approved paid time off not yet marked Finished. */
+		int openPto) {}
+
+	/** One paid time off request on the Payroll tab. status is PENDING or APPROVED. */
+	public record PayrollPto(Long id, BigDecimal hours, String status, String finishedByName, LocalDateTime finishedAt) {}
 }

@@ -35,6 +35,7 @@ import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.TodoAssignmentRepository;
 import com.grove.Repository.UserNotificationRepository;
 import com.grove.Repository.UserSessionRepository;
+import com.grove.Repository.PayrollNoteRepository;
 import com.grove.Repository.VacationPayRequestRepository;
 import com.grove.Repository.VideoAssignmentRepository;
 import com.grove.Repository.VideoCompletionRepository;
@@ -58,6 +59,7 @@ public class UserService {
 	private final VideoAssignmentRepository assignmentRepo;
 	private final TimeOffRequestRepository timeOffRepo;
 	private final VacationPayRequestRepository vacationPayRepo;
+	private final PayrollNoteRepository payrollNoteRepo;
 	private final ScheduleNoteRepository scheduleNoteRepo;
 	private final TeamPostLikeRepository teamLikeRepo;
 	private final PushSubscriptionRepository pushRepo;
@@ -71,6 +73,7 @@ public class UserService {
 	public UserService(UserRepository userRepo, VideoCompletionRepository completionRepo,
 			UserSessionRepository sessionRepo, ShiftRepository shiftRepo, VideoAssignmentRepository assignmentRepo,
 			TimeOffRequestRepository timeOffRepo, VacationPayRequestRepository vacationPayRepo,
+			PayrollNoteRepository payrollNoteRepo,
 			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
 			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, ContestEntryRepository contestEntryRepo,
 			UserNotificationRepository notificationRepo, PasswordEncoder passwordEncoder,
@@ -83,6 +86,7 @@ public class UserService {
 		this.assignmentRepo = assignmentRepo;
 		this.timeOffRepo = timeOffRepo;
 		this.vacationPayRepo = vacationPayRepo;
+		this.payrollNoteRepo = payrollNoteRepo;
 		this.scheduleNoteRepo = scheduleNoteRepo;
 		this.teamLikeRepo = teamLikeRepo;
 		this.pushRepo = pushRepo;
@@ -250,6 +254,7 @@ public class UserService {
 		assignmentRepo.deleteByUserId(user.getUserId());
 		timeOffRepo.deleteByUserId(user.getUserId());
 		vacationPayRepo.deleteByUserId(user.getUserId());
+		payrollNoteRepo.deleteByUserId(user.getUserId());
 		scheduleNoteRepo.deleteByUserId(user.getUserId());
 		// Their posts and comments stay on the board, shown as a former employee.
 		teamLikeRepo.deleteByUserId(user.getUserId());

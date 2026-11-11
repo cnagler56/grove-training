@@ -175,12 +175,16 @@ export default function PaidTimeOffPage() {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
+                    {r.finishedAt ? (
+                      <span className="rounded-full bg-[var(--success-soft)] px-3 py-1 text-xs font-bold text-[var(--success)]">Entered into payroll</span>
+                    ) : (
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
+                    )}
                     {r.status === 'PENDING' && (
                       <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
                         onClick={() => void run(() => api.cancelVacationPay(r.id), 'Request cancelled.')}>Cancel</button>
                     )}
-                    {r.status === 'APPROVED' && r.checkDate > today() && (
+                    {r.status === 'APPROVED' && !r.finishedAt && r.checkDate > today() && (
                       <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy}
                         onClick={() => void cancelApproved(r)}>Cancel</button>
                     )}
@@ -199,7 +203,9 @@ export default function PaidTimeOffPage() {
             {queue.approved.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
                 <span><b>{r.name}</b> · {hoursLabel(r.hours)} · {longDayLabel(r.checkDate)}</span>
-                <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, true)}>Undo</button>
+                {r.finishedAt
+                  ? <span className="text-xs font-bold text-[var(--success)]">Entered into payroll</span>
+                  : <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, true)}>Undo</button>}
               </li>
             ))}
           </ul>

@@ -59,7 +59,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-3xl font-extrabold tracking-tight">Settings</h1>
-      <p className="mt-1 text-sm opacity-70">Decide which roles can see, build, and approve the weekly schedule.</p>
+      <p className="mt-1 text-sm opacity-70">Decide which roles can use the schedule, time off, the team board, and payroll.</p>
 
       <div className="mt-6 space-y-4">
         {rules.map((rule) => (
@@ -103,7 +103,7 @@ export default function SettingsPage() {
         {dirty && <span className="text-sm font-semibold text-[var(--warn)]">Unsaved changes</span>}
       </div>
       <p className="mt-4 text-xs opacity-60">
-        Owners always have every permission. Customers can&apos;t be given schedule access.
+        Owners always have every permission. Customers can&apos;t be given any of these.
       </p>
 
       <PayRulesCard />

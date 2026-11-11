@@ -53,7 +53,7 @@ public class PermissionService {
 	public MyPermissions forUser(User user) {
 		return new MyPermissions(has(user, Permission.VIEW_SCHEDULE), has(user, Permission.EDIT_SCHEDULE),
 			has(user, Permission.APPROVE_SCHEDULE), has(user, Permission.APPROVE_TIME_OFF),
-			has(user, Permission.POST_UPDATES));
+			has(user, Permission.POST_UPDATES), has(user, Permission.PAYROLL_NOTES), has(user, Permission.VIEW_PAYROLL));
 	}
 
 	/** Every permission with its current roles, for the owner's Settings page. */
@@ -70,7 +70,7 @@ public class PermissionService {
 			Set<Role> set = EnumSet.noneOf(Role.class);
 			if (roles != null) set.addAll(roles);
 			if (set.contains(Role.CUSTOMER)) {
-				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customers can't be given schedule access");
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Customers can't be given these permissions");
 			}
 			set.add(Role.OWNER);
 			settings.save(new AppSetting(p.key(), set.stream().map(Role::name).sorted().collect(Collectors.joining(","))));

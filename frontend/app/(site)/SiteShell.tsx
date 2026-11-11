@@ -18,6 +18,9 @@ const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
 const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
 const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
 const VACATION_PAY_TABS = [{ href: '/paid-time-off', label: 'Paid Time Off' }];
+/** Who gets these follows the owner's Settings. */
+const PAYROLL_NOTES_TABS = [{ href: '/payroll-notes', label: 'Payroll notes' }];
+const PAYROLL_TABS = [{ href: '/payroll', label: 'Payroll' }];
 const ADMIN_TABS = [
   { href: '/admin/stats', label: 'Leaderboards' },
   { href: '/admin', label: 'Manage videos' },
@@ -31,7 +34,7 @@ const OWNER_TABS = [
 ];
 
 /** Pages with wide tables and card grids get a wider layout (header included, so it lines up). */
-const WIDE_PAGES = ['/my-week', '/admin/stats', '/schedule/edit'];
+const WIDE_PAGES = ['/payroll', '/my-week', '/admin/stats', '/schedule/edit'];
 const pageWidth = (pathname: string) => (WIDE_PAGES.some((p) => pathname.startsWith(p)) ? 'max-w-7xl' : 'max-w-5xl');
 
 const hasMyWeek = (r: string | undefined) => !!r && !['CUSTOMER', 'OWNER', 'RECEPTIONIST'].includes(r);
@@ -54,6 +57,8 @@ function Header() {
     ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
     ...(onSchedule(user?.roles) || perms.approveTimeOff ? TIME_OFF_TABS : []),
     ...(onSchedule(user?.roles) || isOwner ? VACATION_PAY_TABS : []),
+    ...(perms.payrollNotes ? PAYROLL_NOTES_TABS : []),
+    ...(perms.viewPayroll ? PAYROLL_TABS : []),
     ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
     ...(isOwner ? OWNER_TABS : []),
   ];
@@ -115,8 +120,8 @@ function Header() {
         <nav className="border-b border-[var(--border)] bg-[var(--surface)]">
           <div className={`mx-auto flex ${pageWidth(pathname)} items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm`}>
             {tabs.map((tab) => {
-              const active = tab.href === '/admin'
-                  ? pathname === '/admin'
+              const active = tab.href === '/admin' || tab.href === '/payroll'
+                  ? pathname === tab.href
                   : pathname.startsWith(tab.href);
               return (
                 <Link
@@ -171,6 +176,8 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsTimeOff = pathname.startsWith('/time-off');
   const needsVacationPay = pathname.startsWith('/paid-time-off');
   const needsTodos = pathname.startsWith('/todos');
+  const needsPayrollNotes = pathname.startsWith('/payroll-notes');
+  const needsPayroll = pathname === '/payroll';
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');
@@ -182,6 +189,8 @@ function Gate({ children }: { children: React.ReactNode }) {
     || (needsTimeOff && !onSchedule(user.roles) && !perms.approveTimeOff)
     || (needsVacationPay && !onSchedule(user.roles) && user.roles !== 'OWNER')
     || (needsTodos && !hasTodos(user.roles))
+    || (needsPayrollNotes && !perms.payrollNotes)
+    || (needsPayroll && !perms.viewPayroll)
     || (needsScheduleView && !seesSchedule(perms))
     || (needsScheduleEdit && !perms.editSchedule && !perms.approveSchedule));
 

@@ -22,7 +22,13 @@ public enum Permission {
 		EnumSet.of(Role.GENERAL_MANAGER)),
 	POST_UPDATES("Post on the team board",
 		"Write posts and share photos on the staff Home page. Everyone on staff can comment and like.",
-		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER));
+		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER)),
+	PAYROLL_NOTES("Add payroll notes",
+		"Use the Payroll notes tab to add deductions, additions, and comments for an employee on a pay period.",
+		EnumSet.of(Role.GENERAL_MANAGER)),
+	VIEW_PAYROLL("See the Payroll tab",
+		"See everything for a pay period in one place: payroll notes plus paid time off hours.",
+		EnumSet.noneOf(Role.class));
 
 	private final String label;
 	private final String description;

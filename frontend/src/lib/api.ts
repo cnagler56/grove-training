@@ -198,6 +198,10 @@ export interface MyPermissions {
   approveSchedule: boolean;
   approveTimeOff: boolean;
   postUpdates: boolean;
+  /** The Payroll notes tab: add deductions, additions, and comments. */
+  payrollNotes: boolean;
+  /** The Payroll tab: everything for a pay period. */
+  viewPayroll: boolean;
 }
 
 export interface TeamComment {
@@ -262,6 +266,9 @@ export interface VacationPayRequest {
   decidedByName: string | null;
   decidedAt: string | null;
   createdAt: string | null;
+  /** Set once the hours are entered into payroll. */
+  finishedByName: string | null;
+  finishedAt: string | null;
 }
 
 /** What an owner sees. */
@@ -271,7 +278,83 @@ export interface VacationPayQueue {
   approved: VacationPayRequest[];
 }
 
-export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES';
+export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES'
+  | 'PAYROLL_NOTES' | 'VIEW_PAYROLL';
+
+/** A pay period, keyed by its check date. Dates are "YYYY-MM-DD". */
+export interface PayPeriod {
+  checkDate: string;
+  workStart: string;
+  workEnd: string;
+}
+
+export interface PayPeriods {
+  /** Newest first. */
+  periods: PayPeriod[];
+  defaultCheckDate: string;
+}
+
+export type PayrollNoteStatus = 'NEW' | 'ACKNOWLEDGED' | 'FINISHED';
+
+export type PayrollNoteKind = 'ADDITION' | 'DEDUCTION' | 'COMMENT';
+
+export interface PayrollNoteInput {
+  userId: number;
+  checkDate: string;
+  kind: PayrollNoteKind;
+  amount: number | null;
+  note: string | null;
+}
+
+export interface PayrollNote extends PayrollNoteInput {
+  id: number;
+  name: string;
+  createdByName: string | null;
+  createdAt: string | null;
+  updatedByName: string | null;
+  updatedAt: string | null;
+  /** NEW until acknowledged; FINISHED once entered into payroll. */
+  status: PayrollNoteStatus;
+  acknowledgedByName: string | null;
+  acknowledgedAt: string | null;
+  finishedByName: string | null;
+  finishedAt: string | null;
+}
+
+export interface PayrollEmployee {
+  userId: number;
+  name: string;
+  /** Approved paid time off hours on this check. */
+  ptoHours: number;
+  /** Requested but not answered yet. */
+  pendingPtoHours: number;
+  /** Each paid time off request on this check. */
+  pto: PayrollPto[];
+  additions: number;
+  deductions: number;
+  notes: PayrollNote[];
+}
+
+export interface PayrollSummary {
+  period: PayPeriod;
+  employees: PayrollEmployee[];
+  ptoHours: number;
+  additions: number;
+  deductions: number;
+  pendingPtoRequests: number;
+  /** Notes not yet marked Finished. */
+  openNotes: number;
+  /** Approved paid time off not yet marked Finished. */
+  openPto: number;
+}
+
+export interface PayrollPto {
+  id: number;
+  hours: number;
+  status: 'PENDING' | 'APPROVED';
+  finishedByName: string | null;
+  finishedAt: string | null;
+}
 
 /** One permission on the owner's Settings page. */
 export interface PermissionRule {
@@ -660,6 +743,19 @@ export const api = {
   approveVacationPay: (id: number) => send<VacationPayRequest>(`/api/vacation-pay/${id}/approve`, 'PUT', {}),
   sendBackVacationPay: (id: number, message: string) =>
     send<VacationPayRequest>(`/api/vacation-pay/${id}/send-back`, 'PUT', { message }),
+
+  payPeriods: () => send<PayPeriods>('/api/payroll/periods'),
+  payrollEmployees: () => send<Person[]>('/api/payroll/employees'),
+  payrollNotes: (checkDate: string) => send<PayrollNote[]>(`/api/payroll/notes?checkDate=${checkDate}`),
+  addPayrollNote: (n: PayrollNoteInput) => send<PayrollNote>('/api/payroll/notes', 'POST', n),
+  updatePayrollNote: (id: number, n: PayrollNoteInput) => send<PayrollNote>(`/api/payroll/notes/${id}`, 'PUT', n),
+  deletePayrollNote: (id: number) => send<void>(`/api/payroll/notes/${id}`, 'DELETE'),
+  acknowledgePayrollNote: (id: number) => send<PayrollNote>(`/api/payroll/notes/${id}/acknowledge`, 'PUT', {}),
+  finishPayrollNote: (id: number) => send<PayrollNote>(`/api/payroll/notes/${id}/finish`, 'PUT', {}),
+  reopenPayrollNote: (id: number) => send<PayrollNote>(`/api/payroll/notes/${id}/reopen`, 'PUT', {}),
+  finishPto: (id: number) => send<void>(`/api/payroll/pto/${id}/finish`, 'PUT', {}),
+  reopenPto: (id: number) => send<void>(`/api/payroll/pto/${id}/reopen`, 'PUT', {}),
+  payrollSummary: (checkDate: string) => send<PayrollSummary>(`/api/payroll/summary?checkDate=${checkDate}`),
 
   myPermissions: () => send<MyPermissions>('/api/me/permissions'),
   celebrations: () => send<Celebrations>('/api/celebrations'),

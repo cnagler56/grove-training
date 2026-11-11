@@ -52,6 +52,13 @@ public class VacationPayRequest {
 	@Column(name = "decided_at")
 	private LocalDateTime decidedAt;
 
+	/** Set when the hours have been entered into payroll. The request is then closed. */
+	@Column(name = "finished_by")
+	private Long finishedBy;
+
+	@Column(name = "finished_at")
+	private LocalDateTime finishedAt;
+
 	@Column(name = "created_at")
 	private LocalDateTime createdAt;
 
@@ -77,6 +84,14 @@ public class VacationPayRequest {
 
 	public LocalDateTime getDecidedAt() { return decidedAt; }
 	public void setDecidedAt(LocalDateTime decidedAt) { this.decidedAt = decidedAt; }
+
+	public Long getFinishedBy() { return finishedBy; }
+	public void setFinishedBy(Long finishedBy) { this.finishedBy = finishedBy; }
+
+	public LocalDateTime getFinishedAt() { return finishedAt; }
+	public void setFinishedAt(LocalDateTime finishedAt) { this.finishedAt = finishedAt; }
+
+	public boolean isFinished() { return finishedAt != null; }
 
 	public LocalDateTime getCreatedAt() { return createdAt; }
 	public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

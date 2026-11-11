@@ -19,6 +19,8 @@ public interface VacationPayRequestRepository extends JpaRepository<VacationPayR
 
 	List<VacationPayRequest> findByStatusOrderByCheckDateAsc(VacationPayRequest.Status status);
 
+	List<VacationPayRequest> findByCheckDateAndStatusIn(LocalDate checkDate, Collection<VacationPayRequest.Status> statuses);
+
 	boolean existsByUserIdAndCheckDateAndStatusIn(Long userId, LocalDate checkDate, Collection<VacationPayRequest.Status> statuses);
 
 	@Modifying

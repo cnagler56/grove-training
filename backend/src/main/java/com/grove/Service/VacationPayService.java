@@ -119,6 +119,7 @@ public class VacationPayService {
 		VacationPayRequest r = find(id);
 		if (!r.getUserId().equals(employee.getUserId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found");
 		if (r.getStatus() == Status.SENT_BACK) throw bad("This request was already sent back");
+		if (r.isFinished()) throw bad("This was already entered into payroll");
 		boolean wasApproved = r.getStatus() == Status.APPROVED;
 		if (wasApproved && !r.getCheckDate().isAfter(LocalDate.now(zone))) throw bad("That check has already gone out");
 		requests.delete(r);
@@ -159,6 +160,7 @@ public class VacationPayService {
 		if (note == null) throw bad("Add a message for them");
 		VacationPayRequest r = find(id);
 		if (r.getStatus() == Status.SENT_BACK) throw bad("This request was already sent back");
+		if (r.isFinished()) throw bad("This was already entered into payroll. Reopen it on the Payroll tab first.");
 		decide(r, Status.SENT_BACK, owner, note);
 		VacationPayRequest saved = requests.save(r);
 		tell(saved, "Paid time off sent back: " + summary(saved),
@@ -190,7 +192,9 @@ public class VacationPayService {
 		return new VacationPayView(r.getId(), r.getUserId(), u == null ? "Former employee" : name(u), r.getHours(), r.getCheckDate(),
 			r.getStatus().name(), r.getResponseNote(),
 			r.getDecidedBy() == null ? null : users.findById(r.getDecidedBy()).map(VacationPayService::name).orElse(null),
-			r.getDecidedAt(), r.getCreatedAt());
+			r.getDecidedAt(), r.getCreatedAt(),
+			r.getFinishedBy() == null ? null : users.findById(r.getFinishedBy()).map(VacationPayService::name).orElse(null),
+			r.getFinishedAt());
 	}
 
 	private static String summary(VacationPayRequest r) {
