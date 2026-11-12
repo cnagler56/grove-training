@@ -1,5 +1,6 @@
 package com.grove.Controller;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
@@ -12,8 +13,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.grove.Domain.Dtos.BlackoutInput;
+import com.grove.Domain.Dtos.BlackoutView;
+import com.grove.Domain.Dtos.TimeOffCalendar;
 import com.grove.Domain.Dtos.TimeOffDecision;
 import com.grove.Domain.Dtos.TimeOffInput;
 import com.grove.Domain.Dtos.TimeOffQueue;
@@ -49,6 +54,33 @@ public class TimeOffController {
 	public ResponseEntity<Void> cancel(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
 			@PathVariable Long id) {
 		timeOff.cancel(sessions.requireUser(token), id);
+		return ResponseEntity.noContent().build();
+	}
+
+	/** Blacked-out days from today on, for anyone asking for time off. */
+	@GetMapping("/blackouts")
+	public List<BlackoutView> blackouts(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireUser(token);
+		return timeOff.upcomingBlackouts();
+	}
+
+	/** The time off calendar: blackouts and time off between two dates. */
+	@GetMapping("/calendar")
+	public TimeOffCalendar calendar(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestParam LocalDate from, @RequestParam LocalDate to) {
+		return timeOff.calendar(sessions.requireUser(token), from, to);
+	}
+
+	@PutMapping("/blackouts/{date}")
+	public BlackoutView blackOut(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable LocalDate date, @RequestBody(required = false) BlackoutInput body) {
+		return timeOff.blackOut(sessions.requireUser(token), date, body == null ? null : body.note());
+	}
+
+	@DeleteMapping("/blackouts/{date}")
+	public ResponseEntity<Void> clearBlackout(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable LocalDate date) {
+		timeOff.clearBlackout(sessions.requireUser(token), date);
 		return ResponseEntity.noContent().build();
 	}
 

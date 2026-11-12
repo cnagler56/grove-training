@@ -20,10 +20,14 @@ import com.grove.Domain.Dtos.TimeOffQueue;
 import com.grove.Domain.Dtos.TimeOffView;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Shift;
+import com.grove.Domain.BlackoutDate;
+import com.grove.Domain.Dtos.BlackoutView;
+import com.grove.Domain.Dtos.TimeOffCalendar;
 import com.grove.Domain.TimeOffRequest;
 import com.grove.Domain.TimeOffRequest.Status;
 import com.grove.Domain.User;
 import com.grove.Repository.ShiftRepository;
+import com.grove.Repository.BlackoutDateRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserRepository;
 
@@ -43,6 +47,7 @@ public class TimeOffService {
 	private static final DateTimeFormatter EMAIL_DATE = DateTimeFormatter.ofPattern("MMM d");
 
 	private final TimeOffRequestRepository requests;
+	private final BlackoutDateRepository blackouts;
 	private final UserRepository users;
 	private final ShiftRepository shifts;
 	private final PermissionService perms;
@@ -50,9 +55,10 @@ public class TimeOffService {
 	private final PushService push;
 	private final ZoneId zone;
 
-	public TimeOffService(TimeOffRequestRepository requests, UserRepository users, ShiftRepository shifts,
+	public TimeOffService(TimeOffRequestRepository requests, BlackoutDateRepository blackouts, UserRepository users, ShiftRepository shifts,
 			PermissionService perms, Mailer mailer, PushService push, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.requests = requests;
+		this.blackouts = blackouts;
 		this.users = users;
 		this.shifts = shifts;
 		this.perms = perms;
@@ -77,6 +83,11 @@ public class TimeOffService {
 		if (end.isBefore(start)) throw bad("The last day can't be before the first day");
 		if (start.isBefore(LocalDate.now(zone))) throw bad("Time off can't start in the past");
 		if (ChronoUnit.DAYS.between(start, end) + 1 > MAX_DAYS) throw bad("Ask for " + MAX_DAYS + " days or fewer at a time");
+		List<BlackoutDate> blocked = blackouts.findByDateBetweenOrderByDateAsc(start, end);
+		if (!blocked.isEmpty()) {
+			throw bad((blocked.size() == 1 ? "This day is blacked out, so it can't be requested: " : "These days are blacked out, so they can't be requested: ")
+				+ String.join(", ", blocked.stream().map(b -> b.getDate().format(EMAIL_DATE)).toList()));
+		}
 		boolean overlaps = requests.overlapping(List.of(Status.PENDING, Status.APPROVED), start, end).stream()
 			.anyMatch(r -> r.getUserId().equals(employee.getUserId()));
 		if (overlaps) {
@@ -103,6 +114,47 @@ public class TimeOffService {
 			"Approve it or send it back:",
 			mailer.link("/time-off")));
 		return view(saved);
+	}
+
+	/** Blacked-out days from today on, for the request form. Anyone signed in can see these. */
+	public List<BlackoutView> upcomingBlackouts() {
+		return blackouts.findByDateGreaterThanEqualOrderByDateAsc(LocalDate.now(zone)).stream().map(TimeOffService::view).toList();
+	}
+
+	/**
+	 * The time off calendar from {@code from} to {@code to}: blackouts plus every waiting or
+	 * approved request touching those days. For people who approve time off.
+	 */
+	public TimeOffCalendar calendar(User viewer, LocalDate from, LocalDate to) {
+		requireApprover(viewer);
+		if (from == null || to == null || to.isBefore(from)) throw bad("Pick the dates to show");
+		if (ChronoUnit.DAYS.between(from, to) > 62) throw bad("Show two months or less at a time");
+		return new TimeOffCalendar(from, to,
+			blackouts.findByDateBetweenOrderByDateAsc(from, to).stream().map(TimeOffService::view).toList(),
+			requests.overlapping(List.of(Status.PENDING, Status.APPROVED), from, to).stream()
+				.sorted(java.util.Comparator.comparing(TimeOffRequest::getStartDate))
+				.map(this::view).toList());
+	}
+
+	/** Black out a day (or change its reason). Requests already made for it are left alone. */
+	public BlackoutView blackOut(User approver, LocalDate date, String note) {
+		requireApprover(approver);
+		if (date == null) throw bad("Pick a day");
+		String reason = note == null || note.isBlank() ? null : note.trim();
+		if (reason != null && reason.length() > 200) reason = reason.substring(0, 200);
+		BlackoutDate b = blackouts.findById(date).orElse(null);
+		if (b == null) b = new BlackoutDate(date, reason, approver.getUserId(), LocalDateTime.now(zone));
+		else b.setNote(reason);
+		return view(blackouts.save(b));
+	}
+
+	public void clearBlackout(User approver, LocalDate date) {
+		requireApprover(approver);
+		blackouts.findById(date).ifPresent(blackouts::delete);
+	}
+
+	private static BlackoutView view(BlackoutDate b) {
+		return new BlackoutView(b.getDate(), b.getNote());
 	}
 
 	/**

@@ -14,9 +14,9 @@ type MenuItem = { href: string; label: string; count?: number };
 /** A menu across the top. With one page it's a plain link; with more it opens a list. */
 type MenuGroup = { label: string; items: MenuItem[] };
 
-/** Manage videos (/admin) and Payroll (/payroll) only match exactly; they're prefixes of other pages. */
-const isOn = (pathname: string, href: string) =>
-  (href === '/admin' || href === '/payroll' ? pathname === href : pathname.startsWith(href));
+/** Manage videos, Payroll, and Time off only match exactly; they're prefixes of other pages. */
+const EXACT = ['/admin', '/payroll', '/time-off'];
+const isOn = (pathname: string, href: string) => (EXACT.includes(href) ? pathname === href : pathname.startsWith(href));
 
 const pill = (active: boolean) => `whitespace-nowrap rounded-full px-3.5 py-1.5 font-semibold transition-colors ${
   active ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'opacity-70 hover:bg-[var(--surface-2)] hover:opacity-100'
@@ -36,7 +36,7 @@ function Count({ n, label, tone = 'accent' }: { n: number; label: string; tone?:
 }
 
 /** Pages with wide tables and card grids get a wider layout (header included, so it lines up). */
-const WIDE_PAGES = ['/payroll', '/my-week', '/admin/stats', '/schedule/edit'];
+const WIDE_PAGES = ['/payroll', '/my-week', '/admin/stats', '/schedule/edit', '/time-off/calendar'];
 const pageWidth = (pathname: string) => (WIDE_PAGES.some((p) => pathname.startsWith(p)) ? 'max-w-7xl' : 'max-w-5xl');
 
 const hasMyWeek = (r: string | undefined) => !!r && !['CUSTOMER', 'OWNER', 'RECEPTIONIST'].includes(r);
@@ -87,6 +87,7 @@ function Header() {
     { label: 'Schedule', items: [
       ...page(seesSchedule(perms), '/schedule', 'Schedule'),
       ...page(onSchedule(role) || perms.approveTimeOff, '/time-off', 'Time off'),
+      ...page(perms.approveTimeOff, '/time-off/calendar', 'Time off calendar'),
       ...page(onSchedule(role) || isOwner, '/paid-time-off', 'Paid Time Off'),
     ] },
     { label: 'Training', items: [
@@ -255,6 +256,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || pathname.startsWith('/notifications');
   const needsMyWeek = pathname.startsWith('/my-week');
   const needsTimeOff = pathname.startsWith('/time-off');
+  const needsTimeOffCalendar = pathname.startsWith('/time-off/calendar');
   const needsVacationPay = pathname.startsWith('/paid-time-off');
   const needsTodos = pathname.startsWith('/todos');
   const needsPayrollNotes = pathname.startsWith('/payroll-notes');
@@ -268,6 +270,7 @@ function Gate({ children }: { children: React.ReactNode }) {
     || (needsStaff && user.roles === 'CUSTOMER')
     || (needsMyWeek && !hasMyWeek(user.roles))
     || (needsTimeOff && !onSchedule(user.roles) && !perms.approveTimeOff)
+    || (needsTimeOffCalendar && !perms.approveTimeOff)
     || (needsVacationPay && !onSchedule(user.roles) && user.roles !== 'OWNER')
     || (needsTodos && !hasTodos(user.roles))
     || (needsPayrollNotes && !perms.payrollNotes)

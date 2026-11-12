@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, type TimeOffQueue, type TimeOffRequest } from '@/src/lib/api';
+import { api, type BlackoutDay, type TimeOffQueue, type TimeOffRequest } from '@/src/lib/api';
 import { onSchedule } from '@/src/lib/roles';
 import { longDayLabel, timeOffRange } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
@@ -36,6 +36,15 @@ export default function TimeOffPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Days no one can ask for, so the form can say so before they send.
+  const [blackouts, setBlackouts] = useState<BlackoutDay[]>([]);
+  useEffect(() => {
+    if (asks) api.timeOffBlackouts().then(setBlackouts).catch(() => {});
+  }, [asks]);
+  const blockedPicked = start
+    ? blackouts.filter((b) => b.date >= start && b.date <= (end && end >= start ? end : start))
+    : [];
 
   const load = useCallback(() => {
     if (asks) api.myTimeOff().then(setMine).catch((e) => setError(e.message));
@@ -139,6 +148,18 @@ export default function TimeOffPage() {
       {asks && (
         <form onSubmit={submit} className="card space-y-3 p-5">
           <h2 className="text-lg font-extrabold">Ask for time off</h2>
+          {blackouts.length > 0 && (
+            <div className="rounded-xl bg-red-50 px-3 py-2 text-sm">
+              <div className="font-semibold text-[var(--danger)]">These days are blacked out and can&apos;t be requested:</div>
+              <ul className="mt-1 space-y-0.5">
+                {blackouts.map((b) => (
+                  <li key={b.date}>{longDayLabel(b.date)}{b.date.slice(0, 4) !== today().slice(0, 4) ? `, ${b.date.slice(0, 4)}` : ''}
+                    {b.note && <span className="opacity-70"> · {b.note}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div key={formKey} className="grid gap-3 sm:grid-cols-2">
             <DateField label="First day off" value={start} onChange={setStart} />
             <DateField label="Last day off" value={end} onChange={setEnd} hint="Leave blank for just one day" />
@@ -148,7 +169,15 @@ export default function TimeOffPage() {
             <textarea className="input min-h-16" value={note} maxLength={500} onChange={(e) => setNote(e.target.value)}
               placeholder="Anything they should know" />
           </label>
-          <button type="submit" className="btn" disabled={busy || !start}>{busy ? 'Sending…' : 'Send request'}</button>
+          {blockedPicked.length > 0 && (
+            <p className="text-sm font-semibold text-[var(--danger)]">
+              Your dates include {blockedPicked.map((b) => longDayLabel(b.date)).join(', ')}, which{' '}
+              {blockedPicked.length === 1 ? 'is' : 'are'} blacked out. Pick dates around {blockedPicked.length === 1 ? 'it' : 'them'}.
+            </p>
+          )}
+          <button type="submit" className="btn" disabled={busy || !start || blockedPicked.length > 0}>
+            {busy ? 'Sending…' : 'Send request'}
+          </button>
         </form>
       )}
 

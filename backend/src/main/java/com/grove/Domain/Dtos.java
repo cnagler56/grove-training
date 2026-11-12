@@ -235,6 +235,15 @@ public final class Dtos {
 		LocalDateTime decidedAt,
 		LocalDateTime createdAt) {}
 
+	/** A day no one can ask for off, with the reason staff see. */
+	public record BlackoutView(LocalDate date, String note) {}
+
+	/** Setting a blackout's reason (optional). */
+	public record BlackoutInput(String note) {}
+
+	/** The time off calendar for some dates: blacked-out days, and waiting or approved time off that touches them. */
+	public record TimeOffCalendar(LocalDate from, LocalDate to, List<BlackoutView> blackouts, List<TimeOffView> timeOff) {}
+
 	/** What an approver sees: requests waiting on them, and approved time off still to come. */
 	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}
 

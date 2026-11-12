@@ -54,6 +54,7 @@ class TimeOffTests {
 	@Autowired UserRepository users;
 	@Autowired UserSessionRepository sessions;
 	@Autowired TimeOffRequestRepository requests;
+	@Autowired com.grove.Repository.BlackoutDateRepository blackouts;
 	@Autowired ScheduleNoteRepository scheduleNotes;
 	@Autowired ShiftRepository shifts;
 	@Autowired ScheduleWeekRepository weeks;
@@ -70,6 +71,7 @@ class TimeOffTests {
 	@BeforeEach
 	void setUp() throws Exception {
 		requests.deleteAll();
+		blackouts.deleteAll();
 		scheduleNotes.deleteAll();
 		shifts.deleteAll();
 		weeks.deleteAll();
@@ -291,6 +293,49 @@ class TimeOffTests {
 		mvc.perform(put("/api/schedule/" + start).cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"shifts\":[" + shiftJson + "]}"))
 			.andExpect(status().isOk());
+	}
+
+	@Test
+	void blackedOutDaysCantBeRequestedAndShowOnTheCalendar() throws Exception {
+		Cookie gm = signUp("gm@grove.test", "Gia", "Ray");
+		setRole("gm@grove.test", Role.GENERAL_MANAGER);
+		LocalDate holiday = week.plusDays(4);
+		long earlier = request(ava, week.plusDays(1), week.plusDays(1), null);
+
+		// Only time off approvers black out days and see the calendar.
+		mvc.perform(put("/api/time-off/blackouts/" + holiday).cookie(ava).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"x\"}"))
+			.andExpect(status().isForbidden());
+		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(6).toString()).cookie(ava))
+			.andExpect(status().isForbidden());
+		mvc.perform(put("/api/time-off/blackouts/" + holiday).cookie(gm).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"Holiday rush\"}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.note").value("Holiday rush"));
+
+		// A request touching it is turned away, naming the day; one around it is fine.
+		mvc.perform(post("/api/time-off").cookie(ava).contentType(MediaType.APPLICATION_JSON)
+				.content(json(week.plusDays(3), week.plusDays(5), null)))
+			.andExpect(status().isBadRequest())
+			.andExpect(status().reason(org.hamcrest.Matchers.containsString("blacked out")));
+		request(ava, week.plusDays(5), week.plusDays(5), null);
+
+		// Everyone can see upcoming blackouts; approvers see them on the calendar with the time off.
+		mvc.perform(get("/api/time-off/blackouts").cookie(ava))
+			.andExpect(jsonPath("$[0].date").value(holiday.toString()))
+			.andExpect(jsonPath("$[0].note").value("Holiday rush"));
+		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(6).toString()).cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.blackouts.length()").value(1))
+			.andExpect(jsonPath("$.timeOff.length()").value(2))
+			.andExpect(jsonPath("$.timeOff[0].id").value(earlier))
+			.andExpect(jsonPath("$.timeOff[0].name").value("Ava Stone"));
+
+		// Clearing it lets the day be asked for again.
+		mvc.perform(delete("/api/time-off/blackouts/" + holiday).cookie(gm)).andExpect(status().isNoContent());
+		request(ava, holiday, holiday, null);
+		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(200).toString()).cookie(owner))
+			.andExpect(status().isBadRequest());
 	}
 
 	private long request(Cookie who, LocalDate start, LocalDate end, String note) throws Exception {

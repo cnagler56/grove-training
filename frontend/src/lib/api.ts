@@ -247,6 +247,21 @@ export interface TimeOffRequest {
   createdAt: string | null;
 }
 
+/** A day no one can ask for off. date is "YYYY-MM-DD". */
+export interface BlackoutDay {
+  date: string;
+  note: string | null;
+}
+
+/** The time off calendar for a range of days. */
+export interface TimeOffCalendar {
+  from: string;
+  to: string;
+  blackouts: BlackoutDay[];
+  /** Waiting or approved time off touching the range. */
+  timeOff: TimeOffRequest[];
+}
+
 /** What an approver sees. */
 export interface TimeOffQueue {
   waiting: TimeOffRequest[];
@@ -820,6 +835,10 @@ export const api = {
   requestTimeOff: (r: { startDate: string; endDate: string; note: string | null }) =>
     send<TimeOffRequest>('/api/time-off', 'POST', r),
   cancelTimeOff: (id: number) => send<void>(`/api/time-off/${id}`, 'DELETE'),
+  timeOffBlackouts: () => send<BlackoutDay[]>('/api/time-off/blackouts'),
+  timeOffCalendar: (from: string, to: string) => send<TimeOffCalendar>(`/api/time-off/calendar?from=${from}&to=${to}`),
+  blackOutDay: (date: string, note: string | null) => send<BlackoutDay>(`/api/time-off/blackouts/${date}`, 'PUT', { note }),
+  clearBlackout: (date: string) => send<void>(`/api/time-off/blackouts/${date}`, 'DELETE'),
   timeOffQueue: () => send<TimeOffQueue>('/api/time-off/queue'),
   approveTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/approve`, 'PUT', {}),
   sendBackTimeOff: (id: number, message: string) =>
