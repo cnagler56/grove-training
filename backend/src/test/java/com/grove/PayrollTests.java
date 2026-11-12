@@ -90,6 +90,9 @@ class PayrollTests {
 		var periods = PayrollService.periodsAround(LocalDate.of(2026, 11, 11));
 		assertThat(periods.periods()).extracting(x -> x.checkDate()).contains(LocalDate.of(2026, 11, 13), LocalDate.of(2026, 10, 30));
 		assertThat(periods.periods().get(0).checkDate()).isAfter(periods.periods().get(1).checkDate());
+		// Five periods ahead of the current one (Nov 13), for notes entered early.
+		assertThat(periods.periods().get(0).checkDate()).isEqualTo(LocalDate.of(2027, 1, 22));
+		assertThat(periods.periods().get(5).checkDate()).isEqualTo(LocalDate.of(2026, 11, 13));
 		assertThat(PayrollService.isCheckDate(LocalDate.of(2026, 10, 30))).isTrue();
 		assertThat(PayrollService.isCheckDate(LocalDate.of(2026, 11, 12))).isFalse();
 	}

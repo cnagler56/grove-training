@@ -62,7 +62,7 @@ public class PayrollService {
 	/** How many past periods the picker goes back. */
 	static final int PAST_PERIODS = 12;
 	/** How many periods after the default one the picker offers, for notes entered early. */
-	static final int UPCOMING_PERIODS = 3;
+	static final int UPCOMING_PERIODS = 5;
 	private static final BigDecimal MAX_AMOUNT = new BigDecimal("100000");
 	private static final int MAX_NOTE = 500;
 

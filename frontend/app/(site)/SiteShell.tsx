@@ -92,9 +92,11 @@ function Header() {
     { label: 'Training', items: [
       ...page(isStaff, '/videos', 'Videos'),
       ...page(isStaff, '/contests', 'Contests'),
+      ...page(manages, '/admin', 'Manage videos'),
+    ] },
+    { label: 'Numbers', items: [
       ...page(hasMyWeek(role), '/my-week', 'My week'),
       ...page(manages, '/admin/stats', 'Leaderboards'),
-      ...page(manages, '/admin', 'Manage videos'),
     ] },
     { label: 'Payroll', items: [
       ...page(perms.viewPayroll, '/payroll', 'Payroll'),
