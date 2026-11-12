@@ -26,10 +26,22 @@ function saveSpot(checkDate: string, i: number) {
   }
 }
 
-/** Opens (or brings back) ADP's sign-in on the right half of the screen. */
+/** Edge says "Edg/" in its user agent; Chrome and others don't. */
+const inEdge = () => /\bEdg\//.test(navigator.userAgent);
+
+/**
+ * Opens ADP's sign-in in Microsoft Edge, the only browser the owner's ADP login works in.
+ * From Edge it opens on the right half of the screen. From any other browser it goes
+ * through Windows' microsoft-edge: link, which opens Edge (the browser asks once); a page
+ * can't place another browser's window, so that one opens wherever Edge puts it.
+ */
 function openAdp() {
-  const w = window.open(ADP_SIGN_IN_URL, 'grove-adp', halfScreen('right').features);
-  w?.focus();
+  if (inEdge()) {
+    const w = window.open(ADP_SIGN_IN_URL, 'grove-adp', halfScreen('right').features);
+    w?.focus();
+  } else {
+    window.location.assign(`microsoft-edge:${ADP_SIGN_IN_URL}`);
+  }
 }
 
 /**
@@ -92,7 +104,10 @@ export default function PayrollEntryPage() {
           Work {formatDate(entry.period.workStart, false)} – {formatDate(entry.period.workEnd, false)}
           {' · '}check {formatDate(entry.period.checkDate, false)}
         </div>
-        <button className="btn-ghost px-3 py-1 text-xs" onClick={openAdp}>Open ADP</button>
+        <button className="btn-ghost px-3 py-1 text-xs" onClick={openAdp}
+          title="Opens ADP in Microsoft Edge. Outside Edge, press Windows key + Right arrow to snap it beside this window.">
+          Open ADP in Edge
+        </button>
       </div>
 
       {!entry.ratesLoaded && (
