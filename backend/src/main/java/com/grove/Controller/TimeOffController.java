@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.grove.Domain.Dtos.BlackoutInput;
 import com.grove.Domain.Dtos.BlackoutView;
+import com.grove.Domain.Dtos.DayNote;
 import com.grove.Domain.Dtos.TimeOffCalendar;
 import com.grove.Domain.Dtos.TimeOffDecision;
 import com.grove.Domain.Dtos.TimeOffInput;
@@ -82,6 +83,13 @@ public class TimeOffController {
 			@PathVariable LocalDate date) {
 		timeOff.clearBlackout(sessions.requireUser(token), date);
 		return ResponseEntity.noContent().build();
+	}
+
+	/** The note on a day of the calendar; a blank note removes it. */
+	@PutMapping("/notes/{date}")
+	public DayNote note(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable LocalDate date, @RequestBody(required = false) BlackoutInput body) {
+		return timeOff.setNote(sessions.requireUser(token), date, body == null ? null : body.note());
 	}
 
 	@GetMapping("/queue")

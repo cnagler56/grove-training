@@ -241,8 +241,12 @@ public final class Dtos {
 	/** Setting a blackout's reason (optional). */
 	public record BlackoutInput(String note) {}
 
-	/** The time off calendar for some dates: blacked-out days, and waiting or approved time off that touches them. */
-	public record TimeOffCalendar(LocalDate from, LocalDate to, List<BlackoutView> blackouts, List<TimeOffView> timeOff) {}
+	/** A note on one day of the calendar. */
+	public record DayNote(LocalDate date, String text) {}
+
+	/** The time off calendar for some dates: blacked-out days, waiting or approved time off that touches them, and notes on days. */
+	public record TimeOffCalendar(LocalDate from, LocalDate to, List<BlackoutView> blackouts, List<TimeOffView> timeOff,
+		List<DayNote> notes) {}
 
 	/** What an approver sees: requests waiting on them, and approved time off still to come. */
 	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}

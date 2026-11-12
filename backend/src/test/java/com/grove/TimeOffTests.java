@@ -55,6 +55,7 @@ class TimeOffTests {
 	@Autowired UserSessionRepository sessions;
 	@Autowired TimeOffRequestRepository requests;
 	@Autowired com.grove.Repository.BlackoutDateRepository blackouts;
+	@Autowired com.grove.Repository.CalendarNoteRepository calendarNotes;
 	@Autowired ScheduleNoteRepository scheduleNotes;
 	@Autowired ShiftRepository shifts;
 	@Autowired ScheduleWeekRepository weeks;
@@ -72,6 +73,7 @@ class TimeOffTests {
 	void setUp() throws Exception {
 		requests.deleteAll();
 		blackouts.deleteAll();
+		calendarNotes.deleteAll();
 		scheduleNotes.deleteAll();
 		shifts.deleteAll();
 		weeks.deleteAll();
@@ -336,6 +338,31 @@ class TimeOffTests {
 		request(ava, holiday, holiday, null);
 		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(200).toString()).cookie(owner))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void approversWriteNotesOnCalendarDays() throws Exception {
+		LocalDate day = week.plusDays(2);
+		mvc.perform(put("/api/time-off/notes/" + day).cookie(ava).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"x\"}"))
+			.andExpect(status().isForbidden());
+		mvc.perform(put("/api/time-off/notes/" + day).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"Staff meeting 9am\"}"))
+			.andExpect(jsonPath("$.text").value("Staff meeting 9am"));
+		mvc.perform(put("/api/time-off/notes/" + day).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"Staff meeting 10am\"}"))
+			.andExpect(jsonPath("$.text").value("Staff meeting 10am"));
+		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(6).toString()).cookie(owner))
+			.andExpect(jsonPath("$.notes.length()").value(1))
+			.andExpect(jsonPath("$.notes[0].date").value(day.toString()))
+			.andExpect(jsonPath("$.notes[0].text").value("Staff meeting 10am"));
+
+		// A blank note removes it.
+		mvc.perform(put("/api/time-off/notes/" + day).cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"note\":\"  \"}"))
+			.andExpect(status().isOk());
+		mvc.perform(get("/api/time-off/calendar").param("from", week.toString()).param("to", week.plusDays(6).toString()).cookie(owner))
+			.andExpect(jsonPath("$.notes.length()").value(0));
 	}
 
 	private long request(Cookie who, LocalDate start, LocalDate end, String note) throws Exception {

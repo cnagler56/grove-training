@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import { api, type TimeOffCalendar, type TimeOffRequest } from '@/src/lib/api';
 import { addDays, longDayLabel, timeOffRange, todayIso, weekday } from '@/src/lib/schedule';
-import { useDialogs } from '@/src/components/Dialogs';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
   'November', 'December'];
 const DAY_HEADS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Blacked-out days are dark so they stand out from the rest of the month. */
+const DARK = 'bg-slate-800 text-white hover:bg-slate-700';
 
 /** "2026-11" → the first day "2026-11-01". */
 const firstOf = (month: string) => `${month}-01`;
@@ -24,14 +26,14 @@ function gridStart(month: string) {
 }
 
 /**
- * A month calendar of everyone's time off, for the people who approve it. Days can be
- * blacked out here; no one can ask for a blacked-out day off.
+ * A month calendar of everyone's time off, for the people who approve it. Click a day to
+ * write a note on it, or to black it out so no one can ask for it off.
  */
 export default function TimeOffCalendarPage() {
-  const dialogs = useDialogs();
   const today = todayIso();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [cal, setCal] = useState<TimeOffCalendar | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export default function TimeOffCalendarPage() {
   const to = addDays(from, 41);
   const days = Array.from({ length: 42 }, (_, i) => addDays(from, i));
 
-  // Reloads when the month changes, and after each blackout change (version goes up).
+  // Reloads when the month changes, and after each change (version goes up).
   const [version, setVersion] = useState(0);
   const load = () => setVersion((v) => v + 1);
   useEffect(() => {
@@ -47,42 +49,8 @@ export default function TimeOffCalendarPage() {
   }, [from, to, version]);
 
   const blackout = (d: string) => cal?.blackouts.find((b) => b.date === d) ?? null;
+  const noteOn = (d: string) => cal?.notes.find((n) => n.date === d)?.text ?? null;
   const offOn = (d: string) => (cal?.timeOff ?? []).filter((r) => r.startDate <= d && r.endDate >= d);
-
-  async function clickDay(d: string) {
-    setError(null);
-    setNotice(null);
-    const b = blackout(d);
-    const off = offOn(d);
-    try {
-      if (b) {
-        if (!(await dialogs.confirm({
-          title: `Clear the blackout on ${longDayLabel(d)}?`,
-          message: 'Staff will be able to ask for this day off again.',
-          confirmLabel: 'Clear blackout',
-        }))) return;
-        await api.clearBlackout(d);
-        setNotice(`${longDayLabel(d)} is open for time off requests again.`);
-      } else {
-        const note = await dialogs.prompt({
-          title: `Black out ${longDayLabel(d)}?`,
-          message: off.length > 0
-            ? `No one will be able to ask for this day off. Already requested: ${off.map((r) => r.name).join(', ')}. Those stay as they are.`
-            : 'No one will be able to ask for this day off.',
-          placeholder: 'Reason staff will see (optional), like "Holiday rush"',
-          minLength: 0,
-          confirmLabel: 'Black out',
-          danger: true,
-        });
-        if (note === null) return;
-        await api.blackOutDay(d, note.trim() || null);
-        setNotice(`${longDayLabel(d)} is blacked out.`);
-      }
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
-    }
-  }
 
   const [y, m] = month.split('-').map(Number);
 
@@ -91,7 +59,7 @@ export default function TimeOffCalendarPage() {
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight">Time off calendar</h1>
         <p className="mt-1 text-sm opacity-70">
-          Everyone&apos;s time off by day. Click a day to black it out so no one can ask for it off, or to clear a blackout.
+          Everyone&apos;s time off by day. Click a day to add a note, or to black it out so no one can ask for it off.
         </p>
       </div>
 
@@ -105,7 +73,7 @@ export default function TimeOffCalendarPage() {
         <div className="ml-auto flex flex-wrap gap-3 text-xs">
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-[var(--accent)]" />Approved</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-[var(--warn)]" />Waiting for an answer</span>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-100 ring-1 ring-red-300" />Blacked out</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-slate-800" />Blacked out</span>
         </div>
       </div>
 
@@ -120,20 +88,26 @@ export default function TimeOffCalendarPage() {
           {days.map((d) => {
             const inMonth = d.slice(0, 7) === month;
             const b = blackout(d);
+            const note = noteOn(d);
             const off = offOn(d);
             const isToday = d === today;
             return (
-              <button key={d} type="button" onClick={() => void clickDay(d)}
-                title={b ? `Blacked out${b.note ? `: ${b.note}` : ''}. Click to clear.` : 'Click to black out this day'}
-                className={`flex min-h-24 min-w-0 flex-col justify-start border-b border-r border-[var(--border)] p-1.5 text-left transition-colors hover:bg-[var(--surface-2)] sm:min-h-28 ${
-                  b ? 'bg-red-50 hover:bg-red-100' : ''} ${inMonth ? '' : 'opacity-40'}`}>
+              <button key={d} type="button" onClick={() => { setNotice(null); setError(null); setSelected(d); }}
+                className={`flex min-h-24 min-w-0 flex-col justify-start border-b border-r border-[var(--border)] p-1.5 text-left transition-colors sm:min-h-28 ${
+                  b ? DARK : 'hover:bg-[var(--surface-2)]'} ${inMonth ? '' : 'opacity-40'}`}>
                 <div className="flex items-center justify-between gap-1">
                   <span className={`text-sm font-bold ${isToday ? 'rounded-full bg-[var(--accent)] px-1.5 text-white' : ''}`}>
                     {Number(d.slice(8, 10))}
                   </span>
-                  {b && <span className="truncate text-[10px] font-bold uppercase text-[var(--danger)]">Blacked out</span>}
+                  {b && <span className="truncate text-[10px] font-bold uppercase tracking-wide">Blacked out</span>}
                 </div>
-                {b?.note && <div className="mt-0.5 truncate text-[11px] font-semibold text-[var(--danger)]">{b.note}</div>}
+                {b?.note && <div className="mt-0.5 truncate text-[11px] font-semibold opacity-80">{b.note}</div>}
+                {note && (
+                  <div className={`mt-0.5 truncate rounded px-1 text-[11px] font-semibold ${b ? 'bg-white/15' : 'bg-[var(--surface-2)]'}`}
+                    title={note}>
+                    {note}
+                  </div>
+                )}
                 <ul className="mt-1 space-y-0.5">
                   {off.map((r) => <Person key={r.id} r={r} />)}
                 </ul>
@@ -144,6 +118,133 @@ export default function TimeOffCalendarPage() {
       </div>
 
       {!cal && !error && <p className="text-sm opacity-60">Loading…</p>}
+
+      {selected && (
+        <DayPanel
+          key={selected}
+          date={selected}
+          blackoutNote={blackout(selected)?.note ?? null}
+          blackedOut={!!blackout(selected)}
+          note={noteOn(selected)}
+          off={offOn(selected)}
+          onClose={() => setSelected(null)}
+          onSaved={(message) => { setNotice(message); setSelected(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The panel for one day: who's off, its note, and its blackout. */
+function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved }: {
+  date: string;
+  blackedOut: boolean;
+  blackoutNote: string | null;
+  note: string | null;
+  off: TimeOffRequest[];
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [noteText, setNoteText] = useState(note ?? '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label = longDayLabel(date);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function act(action: () => Promise<unknown>, message: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onSaved(message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setBusy(false);
+    }
+  }
+
+  const noteChanged = noteText.trim() !== (note ?? '');
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onMouseDown={onClose}>
+      <div role="dialog" aria-label={label} className="card w-full max-w-md space-y-4 p-5" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-xl font-extrabold">{label}</h2>
+          <button className="text-sm font-semibold hover:underline" onClick={onClose}>Close</button>
+        </div>
+
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">Time off</h3>
+          {off.length === 0 ? (
+            <p className="mt-1 text-sm opacity-70">No one is off this day.</p>
+          ) : (
+            <ul className="mt-1 space-y-1 text-sm">
+              {off.map((r) => (
+                <li key={r.id}>
+                  <b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}
+                  {r.status === 'PENDING' && <span className="font-semibold text-[var(--warn)]"> (waiting for an answer)</span>}
+                  {r.note && <div className="text-xs opacity-70">{r.note}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">Note</h3>
+          <textarea className="input min-h-20" maxLength={500} value={noteText} placeholder="Staff meeting 9am, inventory, etc."
+            onChange={(e) => setNoteText(e.target.value)} />
+          <div className="flex gap-2">
+            <button className="btn" disabled={busy || !noteChanged}
+              onClick={() => void act(() => api.setDayNote(date, noteText.trim() || null),
+                noteText.trim() ? `Saved the note on ${label}.` : `Removed the note on ${label}.`)}>
+              Save note
+            </button>
+            {note && (
+              <button className="btn-ghost" disabled={busy}
+                onClick={() => void act(() => api.setDayNote(date, null), `Removed the note on ${label}.`)}>
+                Remove note
+              </button>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-2 border-t border-[var(--border)] pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">Blackout</h3>
+          {blackedOut ? (
+            <>
+              <p className="text-sm">
+                Blacked out{blackoutNote ? `: ${blackoutNote}` : ''}. No one can ask for this day off.
+              </p>
+              <button className="btn-ghost" disabled={busy}
+                onClick={() => void act(() => api.clearBlackout(date), `${label} is open for time off requests again.`)}>
+                Clear blackout
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm opacity-70">
+                Black out this day so no one can ask for it off.
+                {off.length > 0 && ' Time off already requested for it stays as it is.'}
+              </p>
+              <input className="input" maxLength={200} value={reason} placeholder='Reason staff will see (optional), like "Holiday rush"'
+                onChange={(e) => setReason(e.target.value)} />
+              <button className="btn bg-slate-800 hover:bg-slate-700" disabled={busy}
+                onClick={() => void act(() => api.blackOutDay(date, reason.trim() || null), `${label} is blacked out.`)}>
+                Black out this day
+              </button>
+            </>
+          )}
+        </section>
+
+        {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      </div>
     </div>
   );
 }

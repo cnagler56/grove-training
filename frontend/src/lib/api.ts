@@ -260,6 +260,8 @@ export interface TimeOffCalendar {
   blackouts: BlackoutDay[];
   /** Waiting or approved time off touching the range. */
   timeOff: TimeOffRequest[];
+  /** Notes written on days. */
+  notes: { date: string; text: string }[];
 }
 
 /** What an approver sees. */
@@ -838,6 +840,7 @@ export const api = {
   timeOffBlackouts: () => send<BlackoutDay[]>('/api/time-off/blackouts'),
   timeOffCalendar: (from: string, to: string) => send<TimeOffCalendar>(`/api/time-off/calendar?from=${from}&to=${to}`),
   blackOutDay: (date: string, note: string | null) => send<BlackoutDay>(`/api/time-off/blackouts/${date}`, 'PUT', { note }),
+  setDayNote: (date: string, note: string | null) => send<{ date: string; text: string | null }>(`/api/time-off/notes/${date}`, 'PUT', { note }),
   clearBlackout: (date: string) => send<void>(`/api/time-off/blackouts/${date}`, 'DELETE'),
   timeOffQueue: () => send<TimeOffQueue>('/api/time-off/queue'),
   approveTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/approve`, 'PUT', {}),

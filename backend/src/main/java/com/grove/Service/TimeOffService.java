@@ -21,6 +21,8 @@ import com.grove.Domain.Dtos.TimeOffView;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Shift;
 import com.grove.Domain.BlackoutDate;
+import com.grove.Domain.CalendarNote;
+import com.grove.Domain.Dtos.DayNote;
 import com.grove.Domain.Dtos.BlackoutView;
 import com.grove.Domain.Dtos.TimeOffCalendar;
 import com.grove.Domain.TimeOffRequest;
@@ -28,6 +30,7 @@ import com.grove.Domain.TimeOffRequest.Status;
 import com.grove.Domain.User;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.BlackoutDateRepository;
+import com.grove.Repository.CalendarNoteRepository;
 import com.grove.Repository.TimeOffRequestRepository;
 import com.grove.Repository.UserRepository;
 
@@ -48,6 +51,7 @@ public class TimeOffService {
 
 	private final TimeOffRequestRepository requests;
 	private final BlackoutDateRepository blackouts;
+	private final CalendarNoteRepository notes;
 	private final UserRepository users;
 	private final ShiftRepository shifts;
 	private final PermissionService perms;
@@ -55,10 +59,12 @@ public class TimeOffService {
 	private final PushService push;
 	private final ZoneId zone;
 
-	public TimeOffService(TimeOffRequestRepository requests, BlackoutDateRepository blackouts, UserRepository users, ShiftRepository shifts,
+	public TimeOffService(TimeOffRequestRepository requests, BlackoutDateRepository blackouts, CalendarNoteRepository notes,
+			UserRepository users, ShiftRepository shifts,
 			PermissionService perms, Mailer mailer, PushService push, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.requests = requests;
 		this.blackouts = blackouts;
+		this.notes = notes;
 		this.users = users;
 		this.shifts = shifts;
 		this.perms = perms;
@@ -133,7 +139,30 @@ public class TimeOffService {
 			blackouts.findByDateBetweenOrderByDateAsc(from, to).stream().map(TimeOffService::view).toList(),
 			requests.overlapping(List.of(Status.PENDING, Status.APPROVED), from, to).stream()
 				.sorted(java.util.Comparator.comparing(TimeOffRequest::getStartDate))
-				.map(this::view).toList());
+				.map(this::view).toList(),
+			notes.findByDateBetweenOrderByDateAsc(from, to).stream().map(n -> new DayNote(n.getDate(), n.getText())).toList());
+	}
+
+	/** Write, change, or (with a blank note) remove the note on a day. */
+	public DayNote setNote(User approver, LocalDate date, String text) {
+		requireApprover(approver);
+		if (date == null) throw bad("Pick a day");
+		String t = text == null || text.isBlank() ? null : text.trim();
+		if (t == null) {
+			notes.findById(date).ifPresent(notes::delete);
+			return new DayNote(date, null);
+		}
+		if (t.length() > 500) t = t.substring(0, 500);
+		CalendarNote n = notes.findById(date).orElse(null);
+		LocalDateTime now = LocalDateTime.now(zone);
+		if (n == null) n = new CalendarNote(date, t, approver.getUserId(), now);
+		else {
+			n.setText(t);
+			n.setUpdatedBy(approver.getUserId());
+			n.setUpdatedAt(now);
+		}
+		CalendarNote saved = notes.save(n);
+		return new DayNote(saved.getDate(), saved.getText());
 	}
 
 	/** Black out a day (or change its reason). Requests already made for it are left alone. */
