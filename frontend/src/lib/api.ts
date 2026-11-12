@@ -523,6 +523,27 @@ export interface PayrollPayRow {
   week2: PayrollPayWeek | null;
 }
 
+/** One person on the ADP entry window. A week is null when they weren't in that week's report. */
+export interface PayrollEntryPerson {
+  /** "Last, First". */
+  name: string;
+  role: UserRole | null;
+  problem: string | null;
+  week1: PayrollPayWeek | null;
+  week2: PayrollPayWeek | null;
+  ptoHours: number;
+  pendingPtoHours: number;
+  additions: number;
+  deductions: number;
+  notes: PayrollNote[];
+}
+
+export interface PayrollEntry {
+  period: PayPeriod;
+  ratesLoaded: boolean;
+  people: PayrollEntryPerson[];
+}
+
 export interface PayrollReport {
   ratesLoaded: boolean;
   salonUltimateConfigured: boolean;
@@ -888,6 +909,8 @@ export const api = {
   setMinimumRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/minimum', 'PUT', { amount }),
   setReceptionistRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/receptionist-rate', 'PUT', { amount }),
   setBaseRate: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
+  removePayPerson: (name: string) => send<PayRules>(`/api/owner/pay-rules/people?name=${encodeURIComponent(name)}`, 'DELETE'),
+  payrollEntry: (checkDate: string) => send<PayrollEntry>(`/api/payroll/entry?checkDate=${checkDate}`),
   payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),
   pullPayrollWeek: (week: string) => send<StatsImport>(`/api/payroll/pull?week=${week}`, 'POST'),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),

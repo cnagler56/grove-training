@@ -4,13 +4,19 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, type PayPeriods, type PayrollSummary } from '@/src/lib/api';
 import { moneyCents } from '@/src/lib/format';
-import { NOTE_KIND, signedAmount } from '@/src/lib/payroll';
+import { NOTE_KIND, halfScreen, signedAmount } from '@/src/lib/payroll';
 import { longDayLabel } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 import PayPeriodPicker, { workRange } from '@/src/components/PayPeriodPicker';
 import PayrollHoursCard from '@/src/components/PayrollHoursCard';
 
 const hrs = (h: number) => `${Number(h.toFixed(2))}`;
+
+/** The ADP entry window for this pay period, on the left half of the screen. */
+function openEntry(checkDate: string) {
+  const w = window.open(`/payroll/entry?checkDate=${checkDate}`, 'grove-payroll-entry', halfScreen('left').features);
+  w?.focus();
+}
 
 /**
  * Everything for one pay period in one place: approved paid time off hours on
@@ -66,6 +72,10 @@ export default function PayrollPage() {
           </p>
         </div>
         <div className="flex gap-2 print:hidden">
+          <button className="btn" disabled={!checkDate} onClick={() => openEntry(checkDate)}
+            title="Opens one person at a time on the left half of the screen, with a button there to open ADP on the right">
+            Open with ADP
+          </button>
           {perms.payrollNotes && <Link href="/payroll-notes" className="btn-ghost">Add a payroll note</Link>}
           <button className="btn-ghost" onClick={() => window.print()} disabled={!summary}>Print</button>
         </div>

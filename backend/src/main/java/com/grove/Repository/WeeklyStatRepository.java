@@ -23,6 +23,15 @@ public interface WeeklyStatRepository extends JpaRepository<WeeklyStat, Long> {
 	@Query("select distinct s.weekStart from WeeklyStat s order by s.weekStart desc")
 	List<LocalDate> weeks();
 
+	/** Each name Salon Ultimate has reported, with the start of the latest week they were in. */
+	@Query("select s.suName as name, max(s.weekStart) as lastWeek from WeeklyStat s group by s.suName")
+	List<LastSeen> lastSeen();
+
+	interface LastSeen {
+		String getName();
+		LocalDate getLastWeek();
+	}
+
 	/** Every name Salon Ultimate has reported, A–Z. */
 	@Query("select distinct s.suName from WeeklyStat s order by s.suName")
 	List<String> names();

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.grove.Domain.Dtos.PayPeriods;
 import com.grove.Domain.Dtos.PayrollNoteInput;
 import com.grove.Domain.Dtos.PayrollNoteView;
+import com.grove.Domain.Dtos.PayrollEntry;
 import com.grove.Domain.Dtos.PayrollReport;
 import com.grove.Domain.Dtos.PayrollSummary;
 import com.grove.Domain.Dtos.StatsImportView;
@@ -118,6 +119,14 @@ public class PayrollController {
 			@RequestParam LocalDate checkDate) {
 		payrollUser(token);
 		return payroll.report(checkDate);
+	}
+
+	/** Everything to enter into ADP for each person, one at a time on the entry window. */
+	@GetMapping("/entry")
+	public PayrollEntry entry(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestParam LocalDate checkDate) {
+		payrollUser(token);
+		return payroll.entry(checkDate);
 	}
 
 	/** Pull one of the period's weeks from Salon Ultimate again (e.g. after closing an open timecard). */

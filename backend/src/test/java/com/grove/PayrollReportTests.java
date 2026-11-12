@@ -1,6 +1,7 @@
 package com.grove;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -50,6 +51,8 @@ class PayrollReportTests {
 	@Autowired PayMatrixRepository matrix;
 	@Autowired PayCodeRepository codes;
 	@Autowired AppSettingRepository settings;
+	@Autowired com.grove.Repository.VacationPayRequestRepository vacationPay;
+	@Autowired com.grove.Repository.PayrollNoteRepository payrollNotes;
 	@MockBean JavaMailSender mailSender;
 
 	private Cookie owner;
@@ -60,12 +63,15 @@ class PayrollReportTests {
 	@BeforeEach
 	void setUp() throws Exception {
 		stats.deleteAll();
+		payrollNotes.deleteAll();
+		vacationPay.deleteAll();
 		matrix.deleteAll();
 		codes.deleteAll();
 		settings.findById("pay.leadBump").ifPresent(settings::delete);
 		settings.findById("pay.managerBump").ifPresent(settings::delete);
 		settings.findById("pay.minimumRate").ifPresent(settings::delete);
 		settings.findById("pay.receptionistRate").ifPresent(settings::delete);
+		settings.findAll().stream().filter(x -> x.getKey().startsWith("pay.removed.")).forEach(settings::delete);
 		sessions.deleteAll();
 		users.deleteAll();
 		owner = signUp("owner@grove.test", "Owner", "Person");
@@ -193,6 +199,74 @@ class PayrollReportTests {
 		mvc.perform(put("/api/owner/pay-rules/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"role\":\"STYLIST\",\"amount\":1}"))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void theEntryWindowPutsHoursPaidTimeOffAndNotesTogetherPerPerson() throws Exception {
+		person("ava@grove.test", "Ava", "Stone", Role.STYLIST);
+		person("lena@grove.test", "Lena", "Park", Role.LEAD);
+		stats.save(stat(week1, "Ava Stone", "10", "400", "400", "80", "1.00", "25.50"));
+		stats.save(stat(week2, "Ava Stone", "10", "400", "400", "0", "0", "10"));
+		Long avaId = users.findByEmail("ava@grove.test").orElseThrow().getUserId();
+		Long lenaId = users.findByEmail("lena@grove.test").orElseThrow().getUserId();
+		// Ava: approved paid time off and a deduction. Lena: no hours, just a note.
+		var pto = new com.grove.Domain.VacationPayRequest();
+		pto.setUserId(avaId);
+		pto.setHours(new BigDecimal("8"));
+		pto.setCheckDate(check);
+		pto.setStatus(com.grove.Domain.VacationPayRequest.Status.APPROVED);
+		vacationPay.save(pto);
+		note(avaId, "DEDUCTION", "25.50", "Uniform shirt");
+		note(lenaId, "COMMENT", null, "New address");
+
+		mvc.perform(get("/api/payroll/entry").param("checkDate", check.toString()).cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.period.checkDate").value(check.toString()))
+			.andExpect(jsonPath("$.people.length()").value(2))
+			.andExpect(jsonPath("$.people[0].name").value("Park, Lena"))
+			.andExpect(jsonPath("$.people[0].week1").doesNotExist())
+			.andExpect(jsonPath("$.people[0].problem").value(org.hamcrest.Matchers.startsWith("No hours")))
+			.andExpect(jsonPath("$.people[0].notes[0].note").value("New address"))
+			.andExpect(jsonPath("$.people[1].name").value("Stone, Ava"))
+			.andExpect(jsonPath("$.people[1].week1.rate").value(16.50))
+			.andExpect(jsonPath("$.people[1].week2.tips").value(10))
+			.andExpect(jsonPath("$.people[1].ptoHours").value(8))
+			.andExpect(jsonPath("$.people[1].deductions").value(25.5));
+
+		Cookie gm = signUp("gm@grove.test", "Gia", "Ray");
+		mvc.perform(get("/api/payroll/entry").param("checkDate", check.toString()).cookie(gm)).andExpect(status().isForbidden());
+	}
+
+	private void note(Long userId, String kind, String amount, String text) throws Exception {
+		mvc.perform(post("/api/payroll/notes").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"userId\":" + userId + ",\"checkDate\":\"" + check + "\",\"kind\":\"" + kind + "\",\"amount\":" + amount
+					+ ",\"note\":\"" + text + "\"}"))
+			.andExpect(status().isCreated());
+	}
+
+	@Test
+	void removingSomeoneHidesThemUntilTheyShowUpAgain() throws Exception {
+		stats.save(stat(week1, "Ava Stone", "10", "300", "300", "0", "0", "0"));
+		stats.save(stat(week1, "Ben Cole", "10", "300", "300", "0", "0", "0"));
+		flat("Ava Stone", "18");
+
+		mvc.perform(delete("/api/owner/pay-rules/people").param("name", "ava stone").cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.people.length()").value(1))
+			.andExpect(jsonPath("$.people[0].name").value("Ben Cole"));
+		// Her own rate went with her.
+		assertThat(codes.findAll()).isEmpty();
+		// Her past hours still count on the Payroll tab.
+		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
+			.andExpect(jsonPath("$.rows.length()").value(2));
+
+		// A week that starts after today brings her back.
+		stats.save(stat(LocalDate.now().plusWeeks(1), "Ava Stone", "10", "300", "300", "0", "0", "0"));
+		mvc.perform(get("/api/owner/pay-rules").cookie(owner))
+			.andExpect(jsonPath("$.people.length()").value(2));
+
+		Cookie gm = signUp("gm@grove.test", "Gia", "Ray");
+		mvc.perform(delete("/api/owner/pay-rules/people").param("name", "Ben Cole").cookie(gm)).andExpect(status().isForbidden());
 	}
 
 	private void person(String email, String first, String last, Role role) throws Exception {

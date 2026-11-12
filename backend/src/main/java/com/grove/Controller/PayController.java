@@ -1,7 +1,9 @@
 package com.grove.Controller;
 
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,10 +25,13 @@ public class PayController {
 
 	private final PayService pay;
 	private final SessionService sessions;
+	private final java.time.ZoneId zone;
 
-	public PayController(PayService pay, SessionService sessions) {
+	public PayController(PayService pay, SessionService sessions,
+			@org.springframework.beans.factory.annotation.Value("${app.time-zone:America/Chicago}") String zone) {
 		this.pay = pay;
 		this.sessions = sessions;
+		this.zone = java.time.ZoneId.of(zone);
 	}
 
 	@GetMapping("/api/owner/pay-rules")
@@ -65,6 +70,14 @@ public class PayController {
 			@RequestBody PayPersonInput body) {
 		sessions.requireOwner(token);
 		return pay.setBaseRate(body);
+	}
+
+	/** Take someone off the pay list (they come back if Salon Ultimate reports them again). */
+	@DeleteMapping("/api/owner/pay-rules/people")
+	public PayRules remove(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestParam String name) {
+		sessions.requireOwner(token);
+		return pay.remove(name, java.time.LocalDate.now(zone));
 	}
 
 	@PutMapping("/api/owner/pay-rules")

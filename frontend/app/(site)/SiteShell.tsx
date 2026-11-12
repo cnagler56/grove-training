@@ -177,7 +177,7 @@ function Gate({ children }: { children: React.ReactNode }) {
   const needsVacationPay = pathname.startsWith('/paid-time-off');
   const needsTodos = pathname.startsWith('/todos');
   const needsPayrollNotes = pathname.startsWith('/payroll-notes');
-  const needsPayroll = pathname === '/payroll';
+  const needsPayroll = pathname === '/payroll' || pathname.startsWith('/payroll/');
   // Schedule access follows the owner's Settings.
   const needsScheduleView = pathname.startsWith('/schedule');
   const needsScheduleEdit = pathname.startsWith('/schedule/edit');
@@ -207,8 +207,14 @@ function Gate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Pages shown in a small window of their own, without the header, tabs, or pop-ups. */
+const isBare = (pathname: string) => pathname.startsWith('/payroll/entry');
+
 function Main({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  if (isBare(pathname)) {
+    return <main className="px-3 py-3"><Gate>{children}</Gate></main>;
+  }
   return (
     <main className={`mx-auto ${pageWidth(pathname)} px-4 py-8 print:max-w-none print:p-0`}>
       <Gate>{children}</Gate>
@@ -217,11 +223,12 @@ function Main({ children }: { children: React.ReactNode }) {
 }
 
 export default function SiteShell({ children }: { children: React.ReactNode }) {
+  const bare = isBare(usePathname());
   return (
     <UserProvider>
-      <Header />
+      {!bare && <Header />}
       <Main>{children}</Main>
-      <TodoPopup />
+      {!bare && <TodoPopup />}
     </UserProvider>
   );
 }

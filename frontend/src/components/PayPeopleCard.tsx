@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { api, type PayPerson, type PayRules } from '@/src/lib/api';
 import { moneyCents } from '@/src/lib/format';
 import { roleLabel } from '@/src/lib/roles';
+import { useDialogs } from '@/src/components/Dialogs';
 
 type Setting = 'MINIMUM' | 'RECEPTIONIST' | 'LEAD' | 'MANAGER';
 const SETTINGS: { key: Setting; label: string; name: string }[] = [
@@ -32,6 +33,18 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const dialogs = useDialogs();
+
+  async function remove(p: PayPerson) {
+    if (!(await dialogs.confirm({
+      title: `Remove ${p.name} from the pay list?`,
+      message: 'Any rate set just for them is cleared. Their past hours stay on old pay periods, and they come back '
+        + 'on their own if Salon Ultimate reports them again.',
+      confirmLabel: 'Remove',
+      danger: true,
+    }))) return;
+    await run(() => api.removePayPerson(p.name), `Removed ${p.name}.`);
+  }
 
   async function run(action: () => Promise<PayRules>, done: string) {
     setBusy(true);
@@ -94,7 +107,7 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
             <div key={key} className="flex items-end gap-2">
               <label className="block text-sm">
                 <span className="mb-1 block font-semibold opacity-80">{label} ($/hr)</span>
-                <input className="input w-28" type="number" step="0.01" min="0" value={values[key]}
+                <input className="input w-28" type="number" step="0.25" min="0" value={values[key]}
                   onChange={(e) => setValues({ ...values, [key]: e.target.value })} />
               </label>
               <button className="btn" disabled={busy || values[key] === '' || Number(values[key]) === saved[key]}
@@ -133,7 +146,7 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
                     </div>
                   </td>
                   <td className="px-2 py-2">
-                    <input className="input w-24 py-1" type="number" step="0.01" min="0" aria-label={`${p.name}'s base rate`}
+                    <input className="input w-24 py-1" type="number" step="0.25" min="0" aria-label={`${p.name}'s base rate`}
                       value={value} onChange={(e) => setBases({ ...bases, [p.name]: e.target.value })} />
                   </td>
                   <td className="px-2 py-2">
@@ -151,6 +164,8 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
                         Use default ({moneyCents(p.defaultRate)})
                       </button>
                     )}
+                    <button className="ml-3 text-xs font-semibold text-[var(--danger)] hover:underline" disabled={busy}
+                      onClick={() => void remove(p)}>Remove</button>
                   </td>
                 </tr>
               );
@@ -164,7 +179,7 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
           <span className="mb-1 block font-semibold opacity-80">Add someone not listed (name as Salon Ultimate shows it)</span>
           <input className="input w-64" placeholder="First Last" value={newName} onChange={(e) => setNewName(e.target.value)} />
         </label>
-        <input className="input w-24" type="number" step="0.01" min="0" placeholder="$ / hr" aria-label="Base rate"
+        <input className="input w-24" type="number" step="0.25" min="0" placeholder="$ / hr" aria-label="Base rate"
           value={newRate} onChange={(e) => setNewRate(e.target.value)} />
         <button className="btn-ghost" disabled={busy || !newName.trim() || !newRate} onClick={() => void addPerson()}>Add</button>
       </div>

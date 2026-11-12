@@ -20,6 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.Dtos.PayPeriod;
 import com.grove.Domain.Dtos.PayPeriods;
+import com.grove.Domain.Dtos.PayrollEntry;
+import com.grove.Domain.Dtos.PayrollEntryPerson;
 import com.grove.Domain.Dtos.PayrollPayRow;
 import com.grove.Domain.Dtos.PayrollPayWeek;
 import com.grove.Domain.Dtos.PayrollReport;
@@ -344,6 +346,49 @@ public class PayrollService {
 			rows,
 			sum(all, PayrollPayWeek::floorHours), sum(all, PayrollPayWeek::offFloorHours),
 			sum(all, PayrollPayWeek::tips), sum(all, PayrollPayWeek::commission));
+	}
+
+	/**
+	 * The ADP entry window: each person's hours and pay with their paid time off and notes
+	 * alongside, by last name. People with paid time off or notes but no hours (or no linked
+	 * Salon Ultimate name) are listed too, so nothing is missed.
+	 */
+	public PayrollEntry entry(LocalDate checkDate) {
+		PayrollReport report = report(checkDate);
+		PayrollSummary summary = summary(checkDate);
+		Map<Long, String> suNames = new HashMap<>();
+		users.findAll().forEach(u -> {
+			if (u.getSalonUltimateName() != null) suNames.put(u.getUserId(), u.getSalonUltimateName().toLowerCase());
+		});
+		Map<String, PayrollEmployee> extras = new HashMap<>();
+		List<PayrollEmployee> unmatched = new ArrayList<>();
+		for (PayrollEmployee e : summary.employees()) {
+			String su = suNames.get(e.userId());
+			if (su != null) extras.put(su, e);
+			else unmatched.add(e);
+		}
+
+		List<PayrollEntryPerson> people = new ArrayList<>();
+		for (PayrollPayRow r : report.rows()) {
+			PayrollEmployee e = extras.remove(r.suName().toLowerCase());
+			people.add(person(r.name(), r.role(), r.problem(), r.week1(), r.week2(), e));
+		}
+		// Paid time off or notes for someone with no hours this period.
+		extras.values().forEach(unmatched::add);
+		for (PayrollEmployee e : unmatched) {
+			Role role = users.findById(e.userId()).map(User::getRoles).orElse(null);
+			people.add(person(PayService.lastFirst(e.name()), role, "No hours from Salon Ultimate this pay period", null, null, e));
+		}
+		people.sort(Comparator.comparing(PayrollEntryPerson::name, String.CASE_INSENSITIVE_ORDER));
+		return new PayrollEntry(period(checkDate), report.ratesLoaded(), people);
+	}
+
+	private static PayrollEntryPerson person(String name, Role role, String problem, PayrollPayWeek w1, PayrollPayWeek w2,
+			PayrollEmployee e) {
+		return new PayrollEntryPerson(name, role, problem, w1, w2,
+			e == null ? BigDecimal.ZERO : e.ptoHours(), e == null ? BigDecimal.ZERO : e.pendingPtoHours(),
+			e == null ? BigDecimal.ZERO : e.additions(), e == null ? BigDecimal.ZERO : e.deductions(),
+			e == null ? List.of() : e.notes());
 	}
 
 	/** Pull (or re-pull) one of the period's weeks from Salon Ultimate now. */

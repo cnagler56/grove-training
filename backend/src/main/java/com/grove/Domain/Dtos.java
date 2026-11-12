@@ -442,6 +442,27 @@ public final class Dtos {
 		String finishedByName,
 		LocalDateTime finishedAt) {}
 
+	/**
+	 * One person on the ADP entry window: everything to enter for them this pay period. Hours come
+	 * from Salon Ultimate; paid time off and notes from the site, matched through their linked
+	 * Salon Ultimate name. A week is null when they weren't in that week's report.
+	 */
+	public record PayrollEntryPerson(
+		/** "Last, First". */
+		String name,
+		Role role,
+		String problem,
+		PayrollPayWeek week1,
+		PayrollPayWeek week2,
+		BigDecimal ptoHours,
+		BigDecimal pendingPtoHours,
+		BigDecimal additions,
+		BigDecimal deductions,
+		List<PayrollNoteView> notes) {}
+
+	/** The ADP entry window for one pay period: everyone, in the same order as the payroll report. */
+	public record PayrollEntry(PayPeriod period, boolean ratesLoaded, List<PayrollEntryPerson> people) {}
+
 	/** One employee on the Payroll tab: their paid time off and notes for the period. */
 	public record PayrollEmployee(
 		Long userId,

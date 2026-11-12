@@ -2,6 +2,7 @@ package com.grove.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,8 @@ public class PayService {
 	static final String MINIMUM_KEY = "pay.minimumRate";
 	static final BigDecimal DEFAULT_RECEPTIONIST_RATE = new BigDecimal("13.00");
 	static final String RECEPTIONIST_KEY = "pay.receptionistRate";
+	/** "pay.removed.ava stone" = the date the owner took Ava off the pay list. */
+	static final String REMOVED_PREFIX = "pay.removed.";
 	static final BigDecimal DISCOUNT_SHARE = new BigDecimal("0.2");
 	/** The roles that get a bump on the matrix rate, and where each amount is kept. */
 	static final Map<Role, String> BUMP_KEYS = Map.of(Role.LEAD, "pay.leadBump", Role.MANAGER, "pay.managerBump");
@@ -219,6 +222,22 @@ public class PayService {
 	}
 
 	/**
+	 * Take someone off the pay list: clears any base rate set just for them and hides them
+	 * until Salon Ultimate reports them in a week that starts after today.
+	 */
+	@Transactional
+	public PayRules remove(String name, LocalDate today) {
+		String n = name == null ? "" : name.trim();
+		if (n.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick who to remove");
+		List<PayCode> old = codes.findAll().stream().filter(c -> c.getSuName().equalsIgnoreCase(n)).toList();
+		codes.deleteAll(old);
+		String key = REMOVED_PREFIX + n.toLowerCase();
+		if (key.length() > 100) key = key.substring(0, 100);
+		settings.save(new AppSetting(key, today.toString()));
+		return rules();
+	}
+
+	/**
 	 * A stylist's rate: the highest matrix step at or below PPH, but never under their base rate
 	 * ({@code minimum}), plus their lead or manager bump (0 for everyone else).
 	 */
@@ -257,7 +276,22 @@ public class PayService {
 		List<PayCode> flats = codes.findAll().stream().filter(c -> c.getFlatRate() != null).toList();
 		java.util.Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 		flats.forEach(c -> names.add(c.getSuName()));
-		names.addAll(stats.names());
+		// Everyone Salon Ultimate has reported, except people the owner removed who haven't been
+		// in a week that started after they were removed.
+		Map<String, LocalDate> removed = new java.util.HashMap<>();
+		settings.findAll().stream().filter(s -> s.getKey().startsWith(REMOVED_PREFIX)).forEach(s -> {
+			try {
+				removed.put(s.getKey().substring(REMOVED_PREFIX.length()), LocalDate.parse(s.getValue()));
+			} catch (RuntimeException e) {
+				// A bad date: ignore it.
+			}
+		});
+		stats.lastSeen().stream()
+			.filter(l -> {
+				LocalDate gone = removed.get(l.getName().toLowerCase());
+				return gone == null || l.getLastWeek().isAfter(gone);
+			})
+			.forEach(l -> names.add(l.getName()));
 		List<PayPerson> people = names.stream()
 			.map(n -> {
 				PayCode c = flats.stream().filter(x -> x.getSuName().equalsIgnoreCase(n)).findFirst().orElse(null);
