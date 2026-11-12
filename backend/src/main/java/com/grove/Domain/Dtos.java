@@ -356,17 +356,19 @@ public final class Dtos {
 
 
 	/** What's loaded, for the owner's Settings page. */
-	public record PayRules(List<PayMatrixEntry> matrix, BigDecimal minimumRate, BigDecimal leadBump, BigDecimal managerBump,
+	public record PayRules(List<PayMatrixEntry> matrix, BigDecimal minimumRate, BigDecimal receptionistRate,
+		BigDecimal leadBump, BigDecimal managerBump,
 		List<PayPerson> people) {}
 
 	/**
 	 * Someone on the owner's pay table. {@code role} is their site role when linked (LEAD and MANAGER
-	 * get a bump). A null {@code flatRate} means they're paid on the matrix.
+	 * get a bump). {@code ownRate} is a base rate set just for them (null: they use {@code defaultRate},
+	 * their role's). {@code paidRate} is their base plus any bump: the least they're paid an hour.
 	 */
-	public record PayPerson(String name, Role role, BigDecimal flatRate) {}
+	public record PayPerson(String name, Role role, BigDecimal ownRate, BigDecimal defaultRate, BigDecimal paidRate) {}
 
-	/** The owner setting one person's flat rate; null puts them back on the matrix. */
-	public record PayPersonInput(String name, BigDecimal flatRate) {}
+	/** The owner setting one person's base rate; null puts them back on their role's default. */
+	public record PayPersonInput(String name, BigDecimal baseRate) {}
 
 	public record MinimumInput(BigDecimal amount) {}
 
@@ -394,8 +396,6 @@ public final class Dtos {
 		String name,
 		/** Their site role when linked; leads and managers get a bump. */
 		Role role,
-		/** Their flat rate, or null when paid on the matrix. */
-		BigDecimal flatRate,
 		/** Something to fix before trusting the rate, e.g. not linked to a site account; null when fine. */
 		String problem,
 		PayrollPayWeek week1,

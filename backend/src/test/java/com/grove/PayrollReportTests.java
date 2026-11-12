@@ -65,6 +65,7 @@ class PayrollReportTests {
 		settings.findById("pay.leadBump").ifPresent(settings::delete);
 		settings.findById("pay.managerBump").ifPresent(settings::delete);
 		settings.findById("pay.minimumRate").ifPresent(settings::delete);
+		settings.findById("pay.receptionistRate").ifPresent(settings::delete);
 		sessions.deleteAll();
 		users.deleteAll();
 		owner = signUp("owner@grove.test", "Owner", "Person");
@@ -97,8 +98,9 @@ class PayrollReportTests {
 			.andExpect(jsonPath("$.weeks[1].weekStart").value(week2.toString()))
 			.andExpect(jsonPath("$.rows.length()").value(5))
 			.andExpect(jsonPath("$.rows[0].name").value("Desk, Dee"))
-			.andExpect(jsonPath("$.rows[0].week1.rate").doesNotExist())
-			.andExpect(jsonPath("$.rows[0].problem").value(org.hamcrest.Matchers.startsWith("Receptionist with no flat rate")))
+			// Receptionists get the receptionist rate ($13 to start), never the matrix.
+			.andExpect(jsonPath("$.rows[0].week1.rate").value(13.00))
+			.andExpect(jsonPath("$.rows[0].problem").doesNotExist())
 			.andExpect(jsonPath("$.rows[1].name").value("Diaz, Cara"))
 			.andExpect(jsonPath("$.rows[1].week1.rate").value(16.00))
 			.andExpect(jsonPath("$.rows[1].problem").value(org.hamcrest.Matchers.startsWith("Not linked")))
@@ -120,14 +122,21 @@ class PayrollReportTests {
 			.andExpect(jsonPath("$.floorHours").value(60))
 			.andExpect(jsonPath("$.commission").value(8.00));
 
-		// Flat rates: exactly that, no bump, and the receptionist's flag goes away.
+		// Personal base rates: a receptionist gets exactly theirs; a manager's replaces the minimum
+		// under the matrix, and the bump still goes on top ($20 + $1, since $17.25 is lower).
 		flat("Dee Desk", "14");
 		flat("Max Hill", "20");
 		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
 			.andExpect(jsonPath("$.rows[0].week1.rate").value(14.00))
-			.andExpect(jsonPath("$.rows[0].flatRate").value(14))
-			.andExpect(jsonPath("$.rows[0].problem").doesNotExist())
-			.andExpect(jsonPath("$.rows[2].week1.rate").value(20.00));
+			.andExpect(jsonPath("$.rows[2].week1.rate").value(21.00));
+		mvc.perform(get("/api/owner/pay-rules").cookie(owner))
+			// People are listed by last name: Desk, Diaz, Hill, Park, Stone.
+			.andExpect(jsonPath("$.people[0].ownRate").value(14))
+			.andExpect(jsonPath("$.people[0].defaultRate").value(13))
+			.andExpect(jsonPath("$.people[0].paidRate").value(14))
+			.andExpect(jsonPath("$.people[2].paidRate").value(21))
+			.andExpect(jsonPath("$.people[3].ownRate").doesNotExist())
+			.andExpect(jsonPath("$.people[3].paidRate").value(16.5));
 	}
 
 	@Test
@@ -139,8 +148,10 @@ class PayrollReportTests {
 			.andExpect(jsonPath("$.minimumRate").value(16.0))
 			.andExpect(jsonPath("$.leadBump").value(0.5))
 			.andExpect(jsonPath("$.managerBump").value(1.0))
+			.andExpect(jsonPath("$.receptionistRate").value(13.0))
 			.andExpect(jsonPath("$.people[0].name").value("Ava Stone"))
-			.andExpect(jsonPath("$.people[0].flatRate").doesNotExist());
+			.andExpect(jsonPath("$.people[0].ownRate").doesNotExist())
+			.andExpect(jsonPath("$.people[0].paidRate").value(16.0));
 
 		// Raising the minimum raises anyone under it.
 		mvc.perform(put("/api/owner/pay-rules/minimum").cookie(owner).contentType(MediaType.APPLICATION_JSON)
@@ -152,17 +163,23 @@ class PayrollReportTests {
 				.content("{\"amount\":0}"))
 			.andExpect(status().isBadRequest());
 
-		// A flat rate, then back to the matrix (case doesn't matter, and an old code row is cleared too).
+		mvc.perform(put("/api/owner/pay-rules/receptionist-rate").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":13.5}"))
+			.andExpect(jsonPath("$.receptionistRate").value(13.5));
+
+		// Her own base rate, then back to the default (case doesn't matter, and an old code row is cleared too).
 		codes.save(new PayCode("Ava Stone", 2, new BigDecimal("0.50"), null));
-		flat("Ava Stone", "21").andExpect(jsonPath("$.people[0].flatRate").value(21));
+		flat("Ava Stone", "21").andExpect(jsonPath("$.people[0].ownRate").value(21));
 		assertThat(codes.findAll()).hasSize(1);
 		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
 			.andExpect(jsonPath("$.rows[0].week1.rate").value(21.00));
 		mvc.perform(put("/api/owner/pay-rules/people").cookie(owner).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\":\"ava stone\",\"flatRate\":null}"))
-			.andExpect(jsonPath("$.people[0].flatRate").doesNotExist());
+				.content("{\"name\":\"ava stone\",\"baseRate\":null}"))
+			.andExpect(jsonPath("$.people[0].ownRate").doesNotExist());
 		assertThat(codes.findAll()).isEmpty();
 		flat("Ava Stone", "-1").andExpect(status().isBadRequest());
+		// Setting it to the default is the same as using the default.
+		flat("Ava Stone", "17").andExpect(jsonPath("$.people[0].ownRate").doesNotExist());
 
 		mvc.perform(put("/api/owner/pay-rules/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"role\":\"LEAD\",\"amount\":0.75}"))
@@ -188,7 +205,7 @@ class PayrollReportTests {
 
 	private org.springframework.test.web.servlet.ResultActions flat(String name, String rate) throws Exception {
 		return mvc.perform(put("/api/owner/pay-rules/people").cookie(owner).contentType(MediaType.APPLICATION_JSON)
-			.content("{\"name\":\"" + name + "\",\"flatRate\":" + rate + "}"));
+			.content("{\"name\":\"" + name + "\",\"baseRate\":" + rate + "}"));
 	}
 
 	@Test

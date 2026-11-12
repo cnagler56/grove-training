@@ -35,21 +35,25 @@ import com.grove.Repository.WeeklyStatRepository;
  * <ul>
  * <li>sales = after-discount service sales + 20% of the discount amount</li>
  * <li>PPH = sales ÷ floor hours</li>
- * <li>stylists: the matrix rate for the highest step at or below PPH, or the owner's minimum
- *     ($16 to start), whichever is higher</li>
+ * <li>everyone has a base rate: the stylist minimum ($16 to start), or the receptionist
+ *     rate ($13 to start) for receptionists, unless the owner sets one just for them</li>
+ * <li>stylists get the matrix rate for the highest step at or below PPH, or their base rate,
+ *     whichever is higher</li>
  * <li>leads and managers (by their role on the site) get the owner's bump for that role on top:
  *     $0.50 for leads and $1.00 for managers to start</li>
- * <li>someone with a flat rate (every receptionist) gets exactly that instead</li>
+ * <li>receptionists get their base rate, never the matrix</li>
  * </ul>
  * The matrix comes from the payroll skill's matrix.json, loaded by the owner; it and the
- * flat rates are kept only in the database (the code repository is public). Flat rates
- * live in the old pay_codes table; its code and premium columns are no longer used.
+ * base rates are kept only in the database (the code repository is public). Personal base
+ * rates live in the old pay_codes table's flat_rate column; code and premium are unused.
  */
 @Service
 public class PayService {
 
 	static final BigDecimal DEFAULT_MINIMUM = new BigDecimal("16.00");
 	static final String MINIMUM_KEY = "pay.minimumRate";
+	static final BigDecimal DEFAULT_RECEPTIONIST_RATE = new BigDecimal("13.00");
+	static final String RECEPTIONIST_KEY = "pay.receptionistRate";
 	static final BigDecimal DISCOUNT_SHARE = new BigDecimal("0.2");
 	/** The roles that get a bump on the matrix rate, and where each amount is kept. */
 	static final Map<Role, String> BUMP_KEYS = Map.of(Role.LEAD, "pay.leadBump", Role.MANAGER, "pay.managerBump");
@@ -93,13 +97,11 @@ public class PayService {
 	public Function<WeeklyStat, BigDecimal> rates(String suName) {
 		List<PayMatrixRow> steps = sortedMatrix();
 		if (steps.isEmpty()) return s -> null;
-		BigDecimal flat = flatRate(suName);
-		if (flat != null) return s -> flat.setScale(2, RoundingMode.HALF_UP);
 		Role role = roleOf(suName);
-		if (role == Role.RECEPTIONIST) return s -> null; // no flat rate set yet
-		BigDecimal minimum = minimum();
+		BigDecimal base = baseRate(suName, role);
+		if (role == Role.RECEPTIONIST) return s -> base;
 		BigDecimal bump = bump(role);
-		return s -> rate(exactPph(s), steps, minimum, bump);
+		return s -> rate(exactPph(s), steps, base, bump);
 	}
 
 	public static BigDecimal commission(WeeklyStat s) {
@@ -114,10 +116,21 @@ public class PayService {
 		return matrix.count() > 0;
 	}
 
-	/** Their flat hourly rate, matched on the Salon Ultimate name; null if they're paid on the matrix. */
-	public BigDecimal flatRate(String suName) {
+	/** The base rate the owner set just for this person, or null if they use their role's default. */
+	public BigDecimal personalRate(String suName) {
 		PayCode row = flatRow(suName);
 		return row == null ? null : row.getFlatRate();
+	}
+
+	/** The default base rate for a role: the receptionist rate for receptionists, the stylist minimum for everyone else. */
+	public BigDecimal defaultRate(Role role) {
+		return role == Role.RECEPTIONIST ? money(RECEPTIONIST_KEY, DEFAULT_RECEPTIONIST_RATE) : minimum();
+	}
+
+	/** Their base rate: what the owner set for them, or their role's default. */
+	public BigDecimal baseRate(String suName, Role role) {
+		BigDecimal own = personalRate(suName);
+		return (own != null ? own : defaultRate(role)).setScale(2, RoundingMode.HALF_UP);
 	}
 
 	private PayCode flatRow(String suName) {
@@ -131,10 +144,18 @@ public class PayService {
 	}
 
 	public PayRules setMinimum(BigDecimal amount) {
+		return saveRate(MINIMUM_KEY, amount);
+	}
+
+	public PayRules setReceptionistRate(BigDecimal amount) {
+		return saveRate(RECEPTIONIST_KEY, amount);
+	}
+
+	private PayRules saveRate(String key, BigDecimal amount) {
 		if (amount == null || amount.signum() <= 0 || amount.compareTo(new BigDecimal("100")) > 0) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a minimum rate more than $0");
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a rate more than $0");
 		}
-		settings.save(new AppSetting(MINIMUM_KEY, amount.setScale(2, RoundingMode.HALF_UP).toPlainString()));
+		settings.save(new AppSetting(key, amount.setScale(2, RoundingMode.HALF_UP).toPlainString()));
 		return rules();
 	}
 
@@ -173,15 +194,19 @@ public class PayService {
 		return rules();
 	}
 
-	/** Give someone a flat hourly rate, or with a null rate, put them back on the matrix. */
+	/**
+	 * Set someone's own base rate. A null rate, or one equal to their role's default, clears it so
+	 * they follow the default (and any later change to it).
+	 */
 	@Transactional
-	public PayRules setFlatRate(PayPersonInput input) {
+	public PayRules setBaseRate(PayPersonInput input) {
 		String name = input == null || input.name() == null ? "" : input.name().trim();
 		if (name.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick who this is for");
-		BigDecimal flat = input.flatRate();
+		BigDecimal flat = input.baseRate();
 		if (flat != null && (flat.signum() <= 0 || flat.compareTo(new BigDecimal("500")) > 0)) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A flat rate has to be more than $0");
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A rate has to be more than $0");
 		}
+		if (flat != null && flat.compareTo(defaultRate(roleOf(name))) == 0) flat = null;
 		// Clear any old row for this name, flat or from the codes file.
 		List<PayCode> old = codes.findAll().stream().filter(c -> c.getSuName().equalsIgnoreCase(name)).toList();
 		String key = old.isEmpty() ? name : old.get(0).getSuName();
@@ -194,8 +219,8 @@ public class PayService {
 	}
 
 	/**
-	 * A stylist's rate: the highest matrix step at or below PPH, but never under the minimum,
-	 * plus their lead or manager bump (0 for everyone else).
+	 * A stylist's rate: the highest matrix step at or below PPH, but never under their base rate
+	 * ({@code minimum}), plus their lead or manager bump (0 for everyone else).
 	 */
 	static BigDecimal rate(BigDecimal pph, List<PayMatrixRow> steps, BigDecimal minimum, BigDecimal bump) {
 		BigDecimal base = minimum;
@@ -224,7 +249,7 @@ public class PayService {
 		return rules();
 	}
 
-	/** The matrix and settings, plus everyone to show on the owner's pay table: anyone with a flat rate or seen in Salon Ultimate. */
+	/** The matrix and settings, plus everyone to show on the owner's pay table: anyone with a base rate of their own or seen in Salon Ultimate. */
 	public PayRules rules() {
 		Map<String, User> linked = new java.util.HashMap<>();
 		users.findAll().stream().filter(u -> u.isActive() && u.getSalonUltimateName() != null)
@@ -237,13 +262,19 @@ public class PayService {
 			.map(n -> {
 				PayCode c = flats.stream().filter(x -> x.getSuName().equalsIgnoreCase(n)).findFirst().orElse(null);
 				User u = linked.get(n.toLowerCase());
-				return new PayPerson(n, u == null ? null : u.getRoles(), c == null ? null : c.getFlatRate());
+				Role role = u == null ? null : u.getRoles();
+				BigDecimal def = defaultRate(role).setScale(2, RoundingMode.HALF_UP);
+				BigDecimal own = c == null ? null : c.getFlatRate().setScale(2, RoundingMode.HALF_UP);
+				BigDecimal base = own != null ? own : def;
+				BigDecimal paid = role == Role.RECEPTIONIST ? base : base.add(bump(role)).setScale(2, RoundingMode.HALF_UP);
+				return new PayPerson(n, role, own, def, paid);
 			})
 			.sorted(Comparator.comparing((PayPerson p) -> lastFirst(p.name()), String.CASE_INSENSITIVE_ORDER))
 			.toList();
 		return new PayRules(
 			sortedMatrix().stream().map(r -> new PayMatrixEntry(r.getPph(), r.getRate())).toList(),
 			minimum(),
+			defaultRate(Role.RECEPTIONIST),
 			bump(Role.LEAD),
 			bump(Role.MANAGER),
 			people);

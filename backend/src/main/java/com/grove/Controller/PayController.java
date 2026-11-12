@@ -51,12 +51,20 @@ public class PayController {
 		return pay.setMinimum(body == null ? null : body.amount());
 	}
 
-	/** Set someone's flat rate, or with a null rate, put them back on the matrix. */
+	/** The default rate for receptionists. */
+	@PutMapping("/api/owner/pay-rules/receptionist-rate")
+	public PayRules receptionistRate(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestBody MinimumInput body) {
+		sessions.requireOwner(token);
+		return pay.setReceptionistRate(body == null ? null : body.amount());
+	}
+
+	/** Set someone's own base rate, or with a null rate, put them back on their role's default. */
 	@PutMapping("/api/owner/pay-rules/people")
-	public PayRules flatRate(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+	public PayRules baseRate(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
 			@RequestBody PayPersonInput body) {
 		sessions.requireOwner(token);
-		return pay.setFlatRate(body);
+		return pay.setBaseRate(body);
 	}
 
 	@PutMapping("/api/owner/pay-rules")

@@ -327,13 +327,10 @@ public class PayrollService {
 				WeeklyStat a = first.get(n.toLowerCase());
 				WeeklyStat b = second.get(n.toLowerCase());
 				Role role = pay.roleOf(n);
-				BigDecimal flat = pay.flatRate(n);
-				String problem = role == Role.RECEPTIONIST && flat == null
-					? "Receptionist with no flat rate: set one on Settings"
-					: role == null && flat == null
-						? "Not linked to a site account, so paid as a stylist. Link them on the Team page."
-						: null;
-				return new PayrollPayRow(n, PayService.lastFirst(n), role, flat, problem,
+				String problem = role == null
+					? "Not linked to a site account, so paid as a stylist. Link them on the Team page."
+					: null;
+				return new PayrollPayRow(n, PayService.lastFirst(n), role, problem,
 					a == null ? null : payWeek(a, rates.apply(a)), b == null ? null : payWeek(b, rates.apply(b)));
 			})
 			.sorted(Comparator.comparing(PayrollPayRow::name, String.CASE_INSENSITIVE_ORDER))

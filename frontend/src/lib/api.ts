@@ -469,27 +469,34 @@ export interface TeamServiceWeek {
 /** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */
 export interface PayRules {
   matrix: { pph: number; rate: number }[];
-  /** The lowest a stylist is paid when their matrix rate is lower. */
+  /** Every stylist's default base rate: the least they're paid when their matrix rate is lower. */
   minimumRate: number;
+  /** Every receptionist's default rate. */
+  receptionistRate: number;
   /** Added to every lead's matrix rate. */
   leadBump: number;
   /** Added to every manager's matrix rate. */
   managerBump: number;
-  /** Everyone with a flat rate or seen in Salon Ultimate, by last name. */
+  /** Everyone with a base rate of their own or seen in Salon Ultimate, by last name. */
   people: PayPerson[];
 }
 
-/** Someone on the owner's pay table. role is their site role when linked; a null flatRate means the matrix. */
+/** Someone on the owner's pay table. role is their site role when linked. */
 export interface PayPerson {
   name: string;
   role: UserRole | null;
-  flatRate: number | null;
+  /** A base rate set just for them; null means they use defaultRate. */
+  ownRate: number | null;
+  /** Their role's default: the receptionist rate or the stylist minimum. */
+  defaultRate: number;
+  /** Base plus any lead or manager bump: the least they're paid an hour. */
+  paidRate: number;
 }
 
-/** A flat rate for someone; null puts them back on the matrix. */
+/** Someone's own base rate; null puts them back on their role's default. */
 export interface PayPersonInput {
   name: string;
-  flatRate: number | null;
+  baseRate: number | null;
 }
 
 /** Someone's numbers for one week, like the payroll skill's ADP report. rate is null until the matrix is loaded. */
@@ -510,8 +517,6 @@ export interface PayrollPayRow {
   name: string;
   /** Site role when linked; leads and managers get a bump. */
   role: UserRole | null;
-  /** Their flat rate, or null when paid on the matrix. */
-  flatRate: number | null;
   /** Something to fix before trusting the rate; null when fine. */
   problem: string | null;
   week1: PayrollPayWeek | null;
@@ -881,7 +886,8 @@ export const api = {
   loadPayRules: (u: PayRulesUpload) => send<PayRules>('/api/owner/pay-rules', 'PUT', u),
   setBump: (role: 'LEAD' | 'MANAGER', amount: number) => send<PayRules>('/api/owner/pay-rules/bump', 'PUT', { role, amount }),
   setMinimumRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/minimum', 'PUT', { amount }),
-  setFlatRate: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
+  setReceptionistRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/receptionist-rate', 'PUT', { amount }),
+  setBaseRate: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
   payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),
   pullPayrollWeek: (week: string) => send<StatsImport>(`/api/payroll/pull?week=${week}`, 'POST'),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),
