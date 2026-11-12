@@ -166,10 +166,10 @@ function Header() {
         </div>
       </div>
 
-      {/* Wide screens: one row of menus. */}
+      {/* One row of menus. Phones: it scrolls sideways, and an open menu lists its pages below the row. */}
       {user && (
-        <nav className="hidden border-b border-[var(--border)] bg-[var(--surface)] md:block" aria-label="Pages">
-          <div className={`mx-auto flex ${pageWidth(pathname)} flex-wrap items-center gap-1.5 px-3 py-2 text-sm`}>
+        <nav className="border-b border-[var(--border)] bg-[var(--surface)]" aria-label="Pages">
+          <div className={`mx-auto flex ${pageWidth(pathname)} items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm md:flex-wrap md:overflow-visible`}>
             {groups.map((g) => {
               const active = g.items.some((i) => isOn(pathname, i.href));
               if (g.items.length === 1) {
@@ -191,7 +191,7 @@ function Header() {
                     <Count n={count} label="new" />
                   </button>
                   {isOpen && (
-                    <div className="absolute left-0 top-full z-30 mt-1.5 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-lg">
+                    <div className="absolute left-0 top-full z-30 mt-1.5 hidden min-w-48 md:block rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-lg">
                       {g.items.map((i) => (
                         <Link key={i.href} href={i.href} onClick={closeAll}
                           className={`block whitespace-nowrap rounded-lg px-3 py-2 font-semibold ${
@@ -207,17 +207,9 @@ function Header() {
               );
             })}
           </div>
-        </nav>
-      )}
-
-      {/* Phones: the same menus as one list under the Menu button. */}
-      {user && phoneMenu && (
-        <nav className="border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm md:hidden" aria-label="Pages">
-          {groups.map((g) => (
-            <div key={g.label} className="py-1">
-              {g.items.length > 1 && (
-                <div className="px-3 pb-0.5 pt-2 text-xs font-bold uppercase tracking-wide opacity-50">{g.label}</div>
-              )}
+          {/* Phones: the open menu's pages, under the row (a dropdown would be cut off by the scrolling row). */}
+          {groups.filter((g) => g.label === open && g.items.length > 1).map((g) => (
+            <div key={g.label} className="border-t border-[var(--border)] px-3 py-1 text-sm md:hidden">
               {g.items.map((i) => (
                 <Link key={i.href} href={i.href} onClick={closeAll}
                   className={`block rounded-lg px-3 py-2.5 font-semibold ${
@@ -229,7 +221,13 @@ function Header() {
               ))}
             </div>
           ))}
-          <div className="mt-1 border-t border-[var(--border)] py-1">
+        </nav>
+      )}
+
+      {/* Phones: To-do, My account, and Sign out under the Menu button. */}
+      {user && phoneMenu && (
+        <nav className="border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm md:hidden" aria-label="Account">
+          <div className="py-1">
             {showTodos && <Link href="/todos" onClick={closeAll} className="block rounded-lg px-3 py-2.5 font-semibold">To-do</Link>}
             {isStaff && <Link href="/account" onClick={closeAll} className="block rounded-lg px-3 py-2.5 font-semibold">My account</Link>}
             <button onClick={() => { closeAll(); void logout(); }} className="block w-full rounded-lg px-3 py-2.5 text-left font-semibold">
