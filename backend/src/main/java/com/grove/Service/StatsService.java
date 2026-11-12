@@ -276,6 +276,15 @@ public class StatsService {
 		return view(imports.save(i));
 	}
 
+	/** How the last pull of this week went, or null if it was never pulled. */
+	public StatsImportView importStatus(LocalDate weekStart) {
+		return imports.findById(weekStart).map(StatsService::view).orElse(null);
+	}
+
+	public boolean isConfigured() {
+		return salonUltimate.isConfigured();
+	}
+
 	private static StatsImportView view(StatsImport i) {
 		return new StatsImportView(i.getWeekStart(), i.getStatus().name(), i.getMessage(), i.getRowCount(), i.getAttemptedAt());
 	}

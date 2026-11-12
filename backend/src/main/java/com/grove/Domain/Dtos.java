@@ -360,7 +360,59 @@ public final class Dtos {
 	public record PayCodeView(String name, Integer code, BigDecimal premium, BigDecimal flatRate) {}
 
 	/** What's loaded, for the owner's Settings page. */
-	public record PayRules(List<PayMatrixEntry> matrix, List<PayCodeView> codes) {}
+	public record PayRules(List<PayMatrixEntry> matrix, List<PayCodeView> codes, BigDecimal leadBump, BigDecimal managerBump,
+		List<PayPerson> people) {}
+
+	/**
+	 * Someone on the owner's pay table. {@code role} is their site role when linked (LEAD and MANAGER
+	 * get a bump); {@code hasCode} false means payroll uses the plain matrix for them.
+	 */
+	public record PayPerson(String name, Role role, boolean hasCode, Integer code, BigDecimal premium, BigDecimal flatRate) {}
+
+	/** The owner setting one person's pay. A flat rate replaces the matrix; otherwise premium is added to it. */
+	public record PayPersonInput(String name, Integer code, BigDecimal premium, BigDecimal flatRate) {}
+
+	/** The owner setting the lead or manager bump. */
+	public record BumpInput(Role role, BigDecimal amount) {}
+
+	/** One of the two weeks a check pays for, and how its Salon Ultimate pull went (null: never pulled). */
+	public record PayrollWeek(LocalDate weekStart, StatsImportView pull) {}
+
+	/** Someone's numbers for one week, as the payroll skill reports them for ADP. */
+	public record PayrollPayWeek(
+		BigDecimal rate,
+		BigDecimal pph,
+		BigDecimal floorHours,
+		BigDecimal offFloorHours,
+		BigDecimal tips,
+		BigDecimal retail,
+		BigDecimal productPerGuest,
+		BigDecimal commission) {}
+
+	/** One person on the payroll report. A week is null when they weren't in that week's report. */
+	public record PayrollPayRow(
+		String suName,
+		/** "Last, First", like the skill. */
+		String name,
+		/** Their site role when linked; leads and managers get a bump. */
+		Role role,
+		/** False: no pay code, so the plain matrix was used (the skill warns about these). */
+		boolean hasCode,
+		PayrollPayWeek week1,
+		PayrollPayWeek week2) {}
+
+	/** Hours and pay for a pay period, built from the two weeks pulled from Salon Ultimate. */
+	public record PayrollReport(
+		/** False until the owner loads the pay matrix on Settings; rates are blank until then. */
+		boolean ratesLoaded,
+		/** False when the server has no Salon Ultimate sign-in. */
+		boolean salonUltimateConfigured,
+		List<PayrollWeek> weeks,
+		List<PayrollPayRow> rows,
+		BigDecimal floorHours,
+		BigDecimal offFloorHours,
+		BigDecimal tips,
+		BigDecimal commission) {}
 
 	/** A pay period: the check date and the two Saturday-to-Friday weeks it pays for. */
 	public record PayPeriod(LocalDate checkDate, LocalDate workStart, LocalDate workEnd) {}

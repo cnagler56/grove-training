@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api, type PayRules, type PayRulesUpload } from '@/src/lib/api';
 import { moneyCents } from '@/src/lib/format';
+import PayPeopleCard from './PayPeopleCard';
 
 /** Where the payroll skill keeps its two files on the owner's computer. */
 const SKILL_DATA_FOLDER = String.raw`C:\Users\chris\.claude\skills\payroll\data`;
@@ -19,7 +20,6 @@ export default function PayRulesCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showCodes, setShowCodes] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function copyFolder() {
@@ -66,7 +66,8 @@ export default function PayRulesCard() {
   const top = loaded ? rules.matrix[rules.matrix.length - 1] : null;
 
   return (
-    <section className="card mt-8 p-5">
+    <>
+      <section className="card mt-8 p-5">
       <h2 className="text-lg font-extrabold">Pay rates</h2>
       <p className="mt-1 text-sm opacity-70">
         Each stylist sees their own weekly rate on My week, figured the same way as payroll. Load the payroll
@@ -109,39 +110,15 @@ export default function PayRulesCard() {
         <button className="btn" onClick={() => void load()} disabled={busy || !matrixFile || !codesFile}>
           {busy ? 'Loading…' : loaded ? 'Replace pay rates' : 'Load pay rates'}
         </button>
-        {loaded && (
-          <button className="btn-ghost" onClick={() => setShowCodes(!showCodes)}>
-            {showCodes ? 'Hide codes' : 'Show codes'}
-          </button>
-        )}
       </div>
-
-      {showCodes && rules && (
-        <table className="mt-4 w-full text-left text-sm">
-          <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide opacity-60">
-            <tr>
-              <th className="py-2 font-semibold">Name</th>
-              <th className="py-2 font-semibold">Code</th>
-              <th className="py-2 text-right font-semibold">Pay</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--border)]">
-            {rules.codes.map((c) => (
-              <tr key={c.name}>
-                <td className="py-1.5">{c.name}</td>
-                <td className="py-1.5">{c.code ?? ''}</td>
-                <td className="py-1.5 text-right">
-                  {c.flatRate !== null
-                    ? `${moneyCents(c.flatRate)} flat`
-                    : c.premium
-                      ? `Matrix ${c.premium > 0 ? '+' : '-'} ${moneyCents(Math.abs(c.premium))}`
-                      : 'Matrix'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {loaded && (
+        <p className="mt-2 text-xs opacity-60">
+          Replacing pay rates also replaces everyone&apos;s individual rates below with the codes file.
+        </p>
       )}
+
     </section>
+    {rules && <PayPeopleCard rules={rules} onChange={setRules} />}
+    </>
   );
 }

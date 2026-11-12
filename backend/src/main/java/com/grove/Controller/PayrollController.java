@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.grove.Domain.Dtos.PayPeriods;
 import com.grove.Domain.Dtos.PayrollNoteInput;
 import com.grove.Domain.Dtos.PayrollNoteView;
+import com.grove.Domain.Dtos.PayrollReport;
 import com.grove.Domain.Dtos.PayrollSummary;
+import com.grove.Domain.Dtos.StatsImportView;
 import com.grove.Domain.Dtos.Person;
 import com.grove.Domain.Permission;
 import com.grove.Domain.User;
@@ -109,6 +111,21 @@ public class PayrollController {
 			@PathVariable Long id) {
 		payrollUser(token);
 		return payroll.reopen(id);
+	}
+
+	@GetMapping("/report")
+	public PayrollReport report(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestParam LocalDate checkDate) {
+		payrollUser(token);
+		return payroll.report(checkDate);
+	}
+
+	/** Pull one of the period's weeks from Salon Ultimate again (e.g. after closing an open timecard). */
+	@PostMapping("/pull")
+	public StatsImportView pull(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestParam LocalDate week) {
+		payrollUser(token);
+		return payroll.pullWeek(week);
 	}
 
 	@PutMapping("/pto/{id}/finish")

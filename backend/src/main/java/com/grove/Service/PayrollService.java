@@ -20,6 +20,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.Dtos.PayPeriod;
 import com.grove.Domain.Dtos.PayPeriods;
+import com.grove.Domain.Dtos.PayrollPayRow;
+import com.grove.Domain.Dtos.PayrollPayWeek;
+import com.grove.Domain.Dtos.PayrollReport;
+import com.grove.Domain.Dtos.PayrollWeek;
+import com.grove.Domain.Dtos.StatsImportView;
 import com.grove.Domain.Dtos.PayrollEmployee;
 import com.grove.Domain.Dtos.PayrollNoteInput;
 import com.grove.Domain.Dtos.PayrollNoteView;
@@ -32,6 +37,8 @@ import com.grove.Domain.Permission;
 import com.grove.Domain.User;
 import com.grove.Domain.VacationPayRequest;
 import com.grove.Domain.VacationPayRequest.Status;
+import com.grove.Domain.WeeklyStat;
+import com.grove.Repository.WeeklyStatRepository;
 import com.grove.Repository.PayrollNoteRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.VacationPayRequestRepository;
@@ -61,15 +68,22 @@ public class PayrollService {
 	private final UserRepository users;
 	private final PermissionService perms;
 	private final PushService push;
+	private final PayService pay;
+	private final StatsService statsService;
+	private final WeeklyStatRepository stats;
 	private final ZoneId zone;
 
 	public PayrollService(PayrollNoteRepository notes, VacationPayRequestRepository vacationPay, UserRepository users,
-			PermissionService perms, PushService push, @Value("${app.time-zone:America/Chicago}") String zone) {
+			PermissionService perms, PushService push, PayService pay, StatsService statsService, WeeklyStatRepository stats,
+			@Value("${app.time-zone:America/Chicago}") String zone) {
 		this.notes = notes;
 		this.vacationPay = vacationPay;
 		this.users = users;
 		this.perms = perms;
 		this.push = push;
+		this.pay = pay;
+		this.statsService = statsService;
+		this.stats = stats;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -288,6 +302,67 @@ public class PayrollService {
 			pending,
 			(int) employees.stream().flatMap(e -> e.notes().stream()).filter(v -> !"FINISHED".equals(v.status())).count(),
 			openPto);
+	}
+
+	/**
+	 * Hours, tips, rate, and commission for everyone in the check's two weeks, figured
+	 * like the payroll skill's ADP report, from the weeks the site pulls every Saturday.
+	 */
+	public PayrollReport report(LocalDate checkDate) {
+		requireCheckDate(checkDate);
+		PayPeriod p = period(checkDate);
+		LocalDate week1 = p.workStart();
+		LocalDate week2 = p.workStart().plusWeeks(1);
+
+		Map<String, WeeklyStat> first = byName(stats.findByWeekStart(week1));
+		Map<String, WeeklyStat> second = byName(stats.findByWeekStart(week2));
+		java.util.Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		first.values().forEach(s -> names.add(s.getSuName()));
+		second.values().forEach(s -> names.add(s.getSuName()));
+
+		List<PayrollPayRow> rows = names.stream()
+			.map(n -> {
+				var rates = pay.rates(n);
+				WeeklyStat a = first.get(n.toLowerCase());
+				WeeklyStat b = second.get(n.toLowerCase());
+				return new PayrollPayRow(n, PayService.lastFirst(n), pay.roleOf(n), pay.code(n) != null,
+					a == null ? null : payWeek(a, rates.apply(a)), b == null ? null : payWeek(b, rates.apply(b)));
+			})
+			.sorted(Comparator.comparing(PayrollPayRow::name, String.CASE_INSENSITIVE_ORDER))
+			.toList();
+
+		List<PayrollPayWeek> all = rows.stream()
+			.flatMap(r -> java.util.stream.Stream.of(r.week1(), r.week2()))
+			.filter(Objects::nonNull).toList();
+		return new PayrollReport(pay.ratesLoaded(), statsService.isConfigured(),
+			List.of(new PayrollWeek(week1, statsService.importStatus(week1)), new PayrollWeek(week2, statsService.importStatus(week2))),
+			rows,
+			sum(all, PayrollPayWeek::floorHours), sum(all, PayrollPayWeek::offFloorHours),
+			sum(all, PayrollPayWeek::tips), sum(all, PayrollPayWeek::commission));
+	}
+
+	/** Pull (or re-pull) one of the period's weeks from Salon Ultimate now. */
+	public StatsImportView pullWeek(LocalDate weekStart) {
+		return statsService.importWeek(weekStart);
+	}
+
+	private static Map<String, WeeklyStat> byName(List<WeeklyStat> week) {
+		Map<String, WeeklyStat> out = new HashMap<>();
+		week.forEach(s -> out.put(s.getSuName().toLowerCase(), s));
+		return out;
+	}
+
+	private static PayrollPayWeek payWeek(WeeklyStat s, BigDecimal rate) {
+		return new PayrollPayWeek(rate, PayService.pph(s), orZero(s.getFloorHours()), orZero(s.getOffFloorHours()),
+			orZero(s.getTips()), orZero(s.getRetailSales()), orZero(s.getProductPerGuest()), PayService.commission(s));
+	}
+
+	private static BigDecimal sum(List<PayrollPayWeek> weeks, java.util.function.Function<PayrollPayWeek, BigDecimal> f) {
+		return weeks.stream().map(f).reduce(BigDecimal.ZERO, BigDecimal::add);
+	}
+
+	private static BigDecimal orZero(BigDecimal n) {
+		return n == null ? BigDecimal.ZERO : n;
 	}
 
 	private static final class Row {

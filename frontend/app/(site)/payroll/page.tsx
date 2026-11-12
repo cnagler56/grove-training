@@ -8,6 +8,7 @@ import { NOTE_KIND, signedAmount } from '@/src/lib/payroll';
 import { longDayLabel } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 import PayPeriodPicker, { workRange } from '@/src/components/PayPeriodPicker';
+import PayrollHoursCard from '@/src/components/PayrollHoursCard';
 
 const hrs = (h: number) => `${Number(h.toFixed(2))}`;
 
@@ -61,7 +62,7 @@ export default function PayrollPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Payroll</h1>
           <p className="mt-1 text-sm opacity-70">
-            Paid time off and payroll notes for the pay period, all in one place.
+            Hours, pay rates, paid time off, and payroll notes for the pay period, all in one place.
           </p>
         </div>
         <div className="flex gap-2 print:hidden">
@@ -105,6 +106,9 @@ export default function PayrollPage() {
             </div>
           )}
 
+          <PayrollHoursCard key={checkDate} checkDate={checkDate} />
+
+          <h2 className="pt-2 text-lg font-extrabold">Paid time off and payroll notes</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Tile label="Paid time off" value={`${hrs(summary.ptoHours)} hours`} />
             <Tile label="Additions" value={moneyCents(summary.additions)} />

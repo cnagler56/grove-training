@@ -470,6 +470,63 @@ export interface TeamServiceWeek {
 export interface PayRules {
   matrix: { pph: number; rate: number }[];
   codes: { name: string; code: number | null; premium: number | null; flatRate: number | null }[];
+  /** Added to every lead's matrix rate. */
+  leadBump: number;
+  /** Added to every manager's matrix rate. */
+  managerBump: number;
+  /** Everyone with a code or seen in Salon Ultimate, by last name. */
+  people: PayPerson[];
+}
+
+/** Someone on the owner's pay table. role is their site role when linked; hasCode false = plain matrix. */
+export interface PayPerson {
+  name: string;
+  role: UserRole | null;
+  hasCode: boolean;
+  code: number | null;
+  premium: number | null;
+  flatRate: number | null;
+}
+
+export interface PayPersonInput {
+  name: string;
+  code: number | null;
+  premium: number | null;
+  flatRate: number | null;
+}
+
+/** Someone's numbers for one week, like the payroll skill's ADP report. rate is null until the matrix is loaded. */
+export interface PayrollPayWeek {
+  rate: number | null;
+  pph: number;
+  floorHours: number;
+  offFloorHours: number;
+  tips: number;
+  retail: number;
+  productPerGuest: number;
+  commission: number;
+}
+
+export interface PayrollPayRow {
+  suName: string;
+  /** "Last, First". */
+  name: string;
+  /** Site role when linked; leads and managers get a bump. */
+  role: UserRole | null;
+  hasCode: boolean;
+  week1: PayrollPayWeek | null;
+  week2: PayrollPayWeek | null;
+}
+
+export interface PayrollReport {
+  ratesLoaded: boolean;
+  salonUltimateConfigured: boolean;
+  weeks: { weekStart: string; pull: StatsImport | null }[];
+  rows: PayrollPayRow[];
+  floorHours: number;
+  offFloorHours: number;
+  tips: number;
+  commission: number;
 }
 
 /** The skill's two files, as-is: matrix.json and employee_codes.json. */
@@ -823,6 +880,11 @@ export const api = {
   pullStats: (week: string) => send<StatsImport>(`/api/stats/import?week=${week}`, 'POST'),
   payRules: () => send<PayRules>('/api/owner/pay-rules'),
   loadPayRules: (u: PayRulesUpload) => send<PayRules>('/api/owner/pay-rules', 'PUT', u),
+  setBump: (role: 'LEAD' | 'MANAGER', amount: number) => send<PayRules>('/api/owner/pay-rules/bump', 'PUT', { role, amount }),
+  savePayPerson: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
+  removePayPerson: (name: string) => send<PayRules>(`/api/owner/pay-rules/people?name=${encodeURIComponent(name)}`, 'DELETE'),
+  payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),
+  pullPayrollWeek: (week: string) => send<StatsImport>(`/api/payroll/pull?week=${week}`, 'POST'),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),
 
   resetPassword: (userId: number, password: string) =>
