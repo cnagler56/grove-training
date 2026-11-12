@@ -350,27 +350,25 @@ public final class Dtos {
 	/** A matrix step as it appears in the payroll skill's matrix.json. */
 	public record PayMatrixEntry(BigDecimal pph, BigDecimal rate) {}
 
-	/** A pay code as it appears in the payroll skill's employee_codes.json. */
-	public record PayCodeEntry(Integer code, BigDecimal premium, @JsonProperty("flat_rate") BigDecimal flatRate) {}
 
 	/** The owner loading the skill's two files. {@code codes} is keyed "Last, First", like the file. */
-	public record PayRulesUpload(List<PayMatrixEntry> matrix, Map<String, PayCodeEntry> codes) {}
+	public record PayRulesUpload(List<PayMatrixEntry> matrix) {}
 
-	/** One person's code on the owner's Settings page ("First Last", as Salon Ultimate shows it). */
-	public record PayCodeView(String name, Integer code, BigDecimal premium, BigDecimal flatRate) {}
 
 	/** What's loaded, for the owner's Settings page. */
-	public record PayRules(List<PayMatrixEntry> matrix, List<PayCodeView> codes, BigDecimal leadBump, BigDecimal managerBump,
+	public record PayRules(List<PayMatrixEntry> matrix, BigDecimal minimumRate, BigDecimal leadBump, BigDecimal managerBump,
 		List<PayPerson> people) {}
 
 	/**
 	 * Someone on the owner's pay table. {@code role} is their site role when linked (LEAD and MANAGER
-	 * get a bump); {@code hasCode} false means payroll uses the plain matrix for them.
+	 * get a bump). A null {@code flatRate} means they're paid on the matrix.
 	 */
-	public record PayPerson(String name, Role role, boolean hasCode, Integer code, BigDecimal premium, BigDecimal flatRate) {}
+	public record PayPerson(String name, Role role, BigDecimal flatRate) {}
 
-	/** The owner setting one person's pay. A flat rate replaces the matrix; otherwise premium is added to it. */
-	public record PayPersonInput(String name, Integer code, BigDecimal premium, BigDecimal flatRate) {}
+	/** The owner setting one person's flat rate; null puts them back on the matrix. */
+	public record PayPersonInput(String name, BigDecimal flatRate) {}
+
+	public record MinimumInput(BigDecimal amount) {}
 
 	/** The owner setting the lead or manager bump. */
 	public record BumpInput(Role role, BigDecimal amount) {}
@@ -396,8 +394,10 @@ public final class Dtos {
 		String name,
 		/** Their site role when linked; leads and managers get a bump. */
 		Role role,
-		/** False: no pay code, so the plain matrix was used (the skill warns about these). */
-		boolean hasCode,
+		/** Their flat rate, or null when paid on the matrix. */
+		BigDecimal flatRate,
+		/** Something to fix before trusting the rate, e.g. not linked to a site account; null when fine. */
+		String problem,
 		PayrollPayWeek week1,
 		PayrollPayWeek week2) {}
 

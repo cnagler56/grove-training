@@ -14,10 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.AppSetting;
-import com.grove.Domain.Dtos.PayCodeEntry;
 import com.grove.Domain.Dtos.PayPerson;
 import com.grove.Domain.Dtos.PayPersonInput;
-import com.grove.Domain.Dtos.PayCodeView;
 import com.grove.Domain.Dtos.PayMatrixEntry;
 import com.grove.Domain.Dtos.PayRules;
 import com.grove.Domain.Dtos.PayRulesUpload;
@@ -33,24 +31,25 @@ import com.grove.Repository.UserRepository;
 import com.grove.Repository.WeeklyStatRepository;
 
 /**
- * Weekly hourly pay, figured exactly like the payroll skill (calculate_payroll.py):
+ * Weekly hourly pay:
  * <ul>
  * <li>sales = after-discount service sales + 20% of the discount amount</li>
  * <li>PPH = sales ÷ floor hours</li>
- * <li>rate = the matrix rate for the highest step at or below PPH ($16 if none),
- *     plus the person's code premium, but never under $16 ($13 for a negative premium)</li>
+ * <li>stylists: the matrix rate for the highest step at or below PPH, or the owner's minimum
+ *     ($16 to start), whichever is higher</li>
  * <li>leads and managers (by their role on the site) get the owner's bump for that role on top:
  *     $0.50 for leads and $1.00 for managers to start</li>
- * <li>a flat rate in their code replaces all of that, bump included</li>
+ * <li>someone with a flat rate (every receptionist) gets exactly that instead</li>
  * </ul>
- * The matrix and codes come from the skill's files, loaded by the owner and
- * kept only in the database (the code repository is public).
+ * The matrix comes from the payroll skill's matrix.json, loaded by the owner; it and the
+ * flat rates are kept only in the database (the code repository is public). Flat rates
+ * live in the old pay_codes table; its code and premium columns are no longer used.
  */
 @Service
 public class PayService {
 
-	static final BigDecimal BASE_RATE = new BigDecimal("16.00");
-	static final BigDecimal MIN_RATE_WITH_DEDUCTION = new BigDecimal("13.00");
+	static final BigDecimal DEFAULT_MINIMUM = new BigDecimal("16.00");
+	static final String MINIMUM_KEY = "pay.minimumRate";
 	static final BigDecimal DISCOUNT_SHARE = new BigDecimal("0.2");
 	/** The roles that get a bump on the matrix rate, and where each amount is kept. */
 	static final Map<Role, String> BUMP_KEYS = Map.of(Role.LEAD, "pay.leadBump", Role.MANAGER, "pay.managerBump");
@@ -94,9 +93,13 @@ public class PayService {
 	public Function<WeeklyStat, BigDecimal> rates(String suName) {
 		List<PayMatrixRow> steps = sortedMatrix();
 		if (steps.isEmpty()) return s -> null;
-		PayCode code = code(suName);
-		BigDecimal bump = bump(roleOf(suName));
-		return s -> rate(exactPph(s), code, steps, bump);
+		BigDecimal flat = flatRate(suName);
+		if (flat != null) return s -> flat.setScale(2, RoundingMode.HALF_UP);
+		Role role = roleOf(suName);
+		if (role == Role.RECEPTIONIST) return s -> null; // no flat rate set yet
+		BigDecimal minimum = minimum();
+		BigDecimal bump = bump(role);
+		return s -> rate(exactPph(s), steps, minimum, bump);
 	}
 
 	public static BigDecimal commission(WeeklyStat s) {
@@ -111,10 +114,38 @@ public class PayService {
 		return matrix.count() > 0;
 	}
 
-	/** Their pay code, matched on the Salon Ultimate name; null if they have none. */
-	public PayCode code(String suName) {
+	/** Their flat hourly rate, matched on the Salon Ultimate name; null if they're paid on the matrix. */
+	public BigDecimal flatRate(String suName) {
+		PayCode row = flatRow(suName);
+		return row == null ? null : row.getFlatRate();
+	}
+
+	private PayCode flatRow(String suName) {
 		return suName == null ? null : codes.findAll().stream()
-			.filter(c -> c.getSuName().equalsIgnoreCase(suName)).findFirst().orElse(null);
+			.filter(c -> c.getFlatRate() != null && c.getSuName().equalsIgnoreCase(suName)).findFirst().orElse(null);
+	}
+
+	/** The lowest a stylist is paid when their matrix rate is lower. */
+	public BigDecimal minimum() {
+		return money(MINIMUM_KEY, DEFAULT_MINIMUM);
+	}
+
+	public PayRules setMinimum(BigDecimal amount) {
+		if (amount == null || amount.signum() <= 0 || amount.compareTo(new BigDecimal("100")) > 0) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a minimum rate more than $0");
+		}
+		settings.save(new AppSetting(MINIMUM_KEY, amount.setScale(2, RoundingMode.HALF_UP).toPlainString()));
+		return rules();
+	}
+
+	private BigDecimal money(String key, BigDecimal fallback) {
+		return settings.findById(key).map(s -> {
+			try {
+				return new BigDecimal(s.getValue());
+			} catch (NumberFormatException e) {
+				return fallback;
+			}
+		}).orElse(fallback);
 	}
 
 	/** The site role of the active account linked to this Salon Ultimate name, or null if none is linked. */
@@ -129,14 +160,7 @@ public class PayService {
 	public BigDecimal bump(Role role) {
 		String key = role == null ? null : BUMP_KEYS.get(role);
 		if (key == null) return BigDecimal.ZERO;
-		BigDecimal fallback = DEFAULT_BUMPS.get(role);
-		return settings.findById(key).map(s -> {
-			try {
-				return new BigDecimal(s.getValue());
-			} catch (NumberFormatException e) {
-				return fallback;
-			}
-		}).orElse(fallback);
+		return money(key, DEFAULT_BUMPS.get(role));
 	}
 
 	public PayRules setBump(Role role, BigDecimal amount) {
@@ -149,61 +173,44 @@ public class PayService {
 		return rules();
 	}
 
-	/** Add or change one person's pay: a premium on the matrix, or a flat hourly rate. */
+	/** Give someone a flat hourly rate, or with a null rate, put them back on the matrix. */
 	@Transactional
-	public PayRules savePerson(PayPersonInput input) {
+	public PayRules setFlatRate(PayPersonInput input) {
 		String name = input == null || input.name() == null ? "" : input.name().trim();
 		if (name.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick who this is for");
-		BigDecimal premium = input.premium();
 		BigDecimal flat = input.flatRate();
 		if (flat != null && (flat.signum() <= 0 || flat.compareTo(new BigDecimal("500")) > 0)) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A flat rate has to be more than $0");
 		}
-		if (premium != null && premium.abs().compareTo(new BigDecimal("100")) > 0) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "That premium is too large");
-		}
-		PayCode existing = code(name);
-		String key = existing != null ? existing.getSuName() : name;
-		if (existing != null) {
-			codes.delete(existing);
+		// Clear any old row for this name, flat or from the codes file.
+		List<PayCode> old = codes.findAll().stream().filter(c -> c.getSuName().equalsIgnoreCase(name)).toList();
+		String key = old.isEmpty() ? name : old.get(0).getSuName();
+		if (!old.isEmpty()) {
+			codes.deleteAll(old);
 			codes.flush();
 		}
-		codes.save(new PayCode(key, input.code(), flat != null ? null : (premium == null ? BigDecimal.ZERO : premium), flat));
+		if (flat != null) codes.save(new PayCode(key, null, null, flat.setScale(2, RoundingMode.HALF_UP)));
 		return rules();
 	}
 
-	public PayRules removePerson(String name) {
-		PayCode existing = code(name);
-		if (existing == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No pay code for that name");
-		codes.delete(existing);
-		return rules();
-	}
-
-	static BigDecimal rate(BigDecimal pph, PayCode code, List<PayMatrixRow> steps) {
-		return rate(pph, code, steps, BigDecimal.ZERO);
-	}
-
-	/** {@code bump} is the lead or manager bump (0 for everyone else); it goes on after the minimum, and never on a flat rate. */
-	static BigDecimal rate(BigDecimal pph, PayCode code, List<PayMatrixRow> steps, BigDecimal bump) {
-		if (code != null && code.getFlatRate() != null) return code.getFlatRate().setScale(2, RoundingMode.HALF_UP);
-		BigDecimal base = BASE_RATE;
+	/**
+	 * A stylist's rate: the highest matrix step at or below PPH, but never under the minimum,
+	 * plus their lead or manager bump (0 for everyone else).
+	 */
+	static BigDecimal rate(BigDecimal pph, List<PayMatrixRow> steps, BigDecimal minimum, BigDecimal bump) {
+		BigDecimal base = minimum;
 		for (PayMatrixRow step : steps) {
 			if (pph.compareTo(step.getPph()) >= 0) base = step.getRate();
 			else break;
 		}
-		BigDecimal premium = code == null || code.getPremium() == null ? BigDecimal.ZERO : code.getPremium();
-		BigDecimal min = premium.signum() < 0 ? MIN_RATE_WITH_DEDUCTION : BASE_RATE;
-		return base.add(premium).max(min).add(bump).setScale(2, RoundingMode.HALF_UP);
+		return base.max(minimum).add(bump).setScale(2, RoundingMode.HALF_UP);
 	}
 
-	/** Replace the matrix and codes with the skill's files. */
+	/** Replace the matrix with the skill's matrix.json. */
 	@Transactional
 	public PayRules load(PayRulesUpload upload) {
 		if (upload == null || upload.matrix() == null || upload.matrix().isEmpty()) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The matrix file has no rows");
-		}
-		if (upload.codes() == null || upload.codes().isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The employee codes file has no one in it");
 		}
 		for (PayMatrixEntry e : upload.matrix()) {
 			if (e.pph() == null || e.rate() == null || e.pph().signum() < 0 || e.rate().signum() <= 0) {
@@ -214,42 +221,29 @@ public class PayService {
 			.collect(Collectors.toMap(e -> e.pph().setScale(2, RoundingMode.HALF_UP), Function.identity(), (a, b) -> b));
 		matrix.deleteAllInBatch();
 		matrix.saveAll(unique.entrySet().stream().map(e -> new PayMatrixRow(e.getKey(), e.getValue().rate())).toList());
-
-		codes.deleteAllInBatch();
-		codes.saveAll(upload.codes().entrySet().stream()
-			.map(e -> {
-				PayCodeEntry c = e.getValue();
-				return new PayCode(salonUltimateName(e.getKey()), c.code(), c.premium(), c.flatRate());
-			})
-			.collect(Collectors.toMap(c -> c.getSuName().toLowerCase(), Function.identity(), (a, b) -> b))
-			.values());
 		return rules();
 	}
 
-	/** What's loaded, plus everyone to show on the owner's pay table: anyone with a code or seen in Salon Ultimate. */
+	/** The matrix and settings, plus everyone to show on the owner's pay table: anyone with a flat rate or seen in Salon Ultimate. */
 	public PayRules rules() {
 		Map<String, User> linked = new java.util.HashMap<>();
 		users.findAll().stream().filter(u -> u.isActive() && u.getSalonUltimateName() != null)
 			.forEach(u -> linked.putIfAbsent(u.getSalonUltimateName().toLowerCase(), u));
-		List<PayCode> all = codes.findAll();
+		List<PayCode> flats = codes.findAll().stream().filter(c -> c.getFlatRate() != null).toList();
 		java.util.Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-		all.forEach(c -> names.add(c.getSuName()));
+		flats.forEach(c -> names.add(c.getSuName()));
 		names.addAll(stats.names());
 		List<PayPerson> people = names.stream()
 			.map(n -> {
-				PayCode c = all.stream().filter(x -> x.getSuName().equalsIgnoreCase(n)).findFirst().orElse(null);
+				PayCode c = flats.stream().filter(x -> x.getSuName().equalsIgnoreCase(n)).findFirst().orElse(null);
 				User u = linked.get(n.toLowerCase());
-				return new PayPerson(n, u == null ? null : u.getRoles(), c != null,
-					c == null ? null : c.getCode(), c == null ? null : c.getPremium(), c == null ? null : c.getFlatRate());
+				return new PayPerson(n, u == null ? null : u.getRoles(), c == null ? null : c.getFlatRate());
 			})
 			.sorted(Comparator.comparing((PayPerson p) -> lastFirst(p.name()), String.CASE_INSENSITIVE_ORDER))
 			.toList();
 		return new PayRules(
 			sortedMatrix().stream().map(r -> new PayMatrixEntry(r.getPph(), r.getRate())).toList(),
-			all.stream()
-				.sorted(Comparator.comparing(c -> c.getSuName().toLowerCase()))
-				.map(c -> new PayCodeView(c.getSuName(), c.getCode(), c.getPremium(), c.getFlatRate()))
-				.toList(),
+			minimum(),
 			bump(Role.LEAD),
 			bump(Role.MANAGER),
 			people);
@@ -260,13 +254,6 @@ public class PayService {
 		String n = suName == null ? "" : suName.trim();
 		int space = n.lastIndexOf(' ');
 		return space < 0 ? n : n.substring(space + 1) + ", " + n.substring(0, space);
-	}
-
-	/** "De La Cruz, Mia" (the codes file) → "Mia De La Cruz" (Salon Ultimate). */
-	static String salonUltimateName(String fileName) {
-		int comma = fileName.indexOf(',');
-		if (comma < 0) return fileName.trim();
-		return (fileName.substring(comma + 1).trim() + " " + fileName.substring(0, comma).trim()).trim();
 	}
 
 	private List<PayMatrixRow> sortedMatrix() {

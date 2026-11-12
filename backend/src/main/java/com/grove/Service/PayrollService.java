@@ -34,6 +34,7 @@ import com.grove.Domain.Dtos.Person;
 import com.grove.Domain.PayrollNote;
 import com.grove.Domain.PayrollNote.Kind;
 import com.grove.Domain.Permission;
+import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Domain.VacationPayRequest;
 import com.grove.Domain.VacationPayRequest.Status;
@@ -325,7 +326,14 @@ public class PayrollService {
 				var rates = pay.rates(n);
 				WeeklyStat a = first.get(n.toLowerCase());
 				WeeklyStat b = second.get(n.toLowerCase());
-				return new PayrollPayRow(n, PayService.lastFirst(n), pay.roleOf(n), pay.code(n) != null,
+				Role role = pay.roleOf(n);
+				BigDecimal flat = pay.flatRate(n);
+				String problem = role == Role.RECEPTIONIST && flat == null
+					? "Receptionist with no flat rate: set one on Settings"
+					: role == null && flat == null
+						? "Not linked to a site account, so paid as a stylist. Link them on the Team page."
+						: null;
+				return new PayrollPayRow(n, PayService.lastFirst(n), role, flat, problem,
 					a == null ? null : payWeek(a, rates.apply(a)), b == null ? null : payWeek(b, rates.apply(b)));
 			})
 			.sorted(Comparator.comparing(PayrollPayRow::name, String.CASE_INSENSITIVE_ORDER))

@@ -469,29 +469,26 @@ export interface TeamServiceWeek {
 /** The pay matrix and codes, as loaded from the payroll skill's files (owners only). */
 export interface PayRules {
   matrix: { pph: number; rate: number }[];
-  codes: { name: string; code: number | null; premium: number | null; flatRate: number | null }[];
+  /** The lowest a stylist is paid when their matrix rate is lower. */
+  minimumRate: number;
   /** Added to every lead's matrix rate. */
   leadBump: number;
   /** Added to every manager's matrix rate. */
   managerBump: number;
-  /** Everyone with a code or seen in Salon Ultimate, by last name. */
+  /** Everyone with a flat rate or seen in Salon Ultimate, by last name. */
   people: PayPerson[];
 }
 
-/** Someone on the owner's pay table. role is their site role when linked; hasCode false = plain matrix. */
+/** Someone on the owner's pay table. role is their site role when linked; a null flatRate means the matrix. */
 export interface PayPerson {
   name: string;
   role: UserRole | null;
-  hasCode: boolean;
-  code: number | null;
-  premium: number | null;
   flatRate: number | null;
 }
 
+/** A flat rate for someone; null puts them back on the matrix. */
 export interface PayPersonInput {
   name: string;
-  code: number | null;
-  premium: number | null;
   flatRate: number | null;
 }
 
@@ -513,7 +510,10 @@ export interface PayrollPayRow {
   name: string;
   /** Site role when linked; leads and managers get a bump. */
   role: UserRole | null;
-  hasCode: boolean;
+  /** Their flat rate, or null when paid on the matrix. */
+  flatRate: number | null;
+  /** Something to fix before trusting the rate; null when fine. */
+  problem: string | null;
   week1: PayrollPayWeek | null;
   week2: PayrollPayWeek | null;
 }
@@ -529,10 +529,9 @@ export interface PayrollReport {
   commission: number;
 }
 
-/** The skill's two files, as-is: matrix.json and employee_codes.json. */
+/** The skill's matrix.json, as-is. */
 export interface PayRulesUpload {
   matrix: { pph: number; rate: number }[];
-  codes: Record<string, { code?: number; premium?: number; flat_rate?: number }>;
 }
 
 export interface StatsImport {
@@ -881,8 +880,8 @@ export const api = {
   payRules: () => send<PayRules>('/api/owner/pay-rules'),
   loadPayRules: (u: PayRulesUpload) => send<PayRules>('/api/owner/pay-rules', 'PUT', u),
   setBump: (role: 'LEAD' | 'MANAGER', amount: number) => send<PayRules>('/api/owner/pay-rules/bump', 'PUT', { role, amount }),
-  savePayPerson: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
-  removePayPerson: (name: string) => send<PayRules>(`/api/owner/pay-rules/people?name=${encodeURIComponent(name)}`, 'DELETE'),
+  setMinimumRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/minimum', 'PUT', { amount }),
+  setFlatRate: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
   payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),
   pullPayrollWeek: (week: string) => send<StatsImport>(`/api/payroll/pull?week=${week}`, 'POST'),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),

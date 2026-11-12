@@ -109,8 +109,9 @@ export default function PayrollHoursCard({ checkDate }: { checkDate: string }) {
                             {(r.role === 'LEAD' || r.role === 'MANAGER') && (
                               <span className="font-semibold text-[var(--accent-strong)]">{r.role === 'LEAD' ? 'Lead' : 'Manager'}</span>
                             )}
-                            {!r.hasCode && <span className="font-semibold text-[var(--warn)]">No pay code</span>}
+                            {r.flatRate != null && <span className="opacity-60">Flat {moneyCents(r.flatRate)}</span>}
                           </div>
+                          {r.problem && <div className="mt-0.5 max-w-56 text-xs font-semibold text-[var(--warn)] print:hidden">{r.problem}</div>}
                         </td>
                       )}
                       <td className="px-2 py-1.5 text-center opacity-60">{i + 1}</td>

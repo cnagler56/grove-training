@@ -127,23 +127,22 @@ class StatsTests {
 		// No pay tables yet: no rate.
 		mvc.perform(get("/api/stats/mine").cookie(ava)).andExpect(jsonPath("$.weeks[0].payRate").doesNotExist());
 
-		String rules = "{\"matrix\":[{\"pph\":0,\"rate\":16},{\"pph\":38,\"rate\":17},{\"pph\":40,\"rate\":18}],"
-			+ "\"codes\":{\"Stone, Ava\":{\"code\":2,\"premium\":0.5},\"Desk, Dee\":{\"code\":15,\"flat_rate\":14}}}";
+		String rules = "{\"matrix\":[{\"pph\":0,\"rate\":16},{\"pph\":38,\"rate\":17},{\"pph\":40,\"rate\":18}]}";
 		mvc.perform(put("/api/owner/pay-rules").cookie(manager).contentType(MediaType.APPLICATION_JSON).content(rules))
 			.andExpect(status().isForbidden());
 		mvc.perform(put("/api/owner/pay-rules").cookie(owner).contentType(MediaType.APPLICATION_JSON).content(rules))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.matrix.length()").value(3))
-			.andExpect(jsonPath("$.codes[0].name").value("Ava Stone"));
+			.andExpect(jsonPath("$.minimumRate").value(16.0));
 
-		// (1150.50 + 49.50 × 0.2) ÷ 30.5 = 38.05 PPH → $17 step + $0.50 premium.
+		// (1150.50 + 49.50 × 0.2) ÷ 30.5 = 38.05 PPH → the $17 step.
 		mvc.perform(get("/api/stats/mine").cookie(ava))
 			.andExpect(jsonPath("$.weeks[0].pph").value(38.05))
-			.andExpect(jsonPath("$.weeks[0].payRate").value(17.50))
-			// $99 tips ÷ 30.5 floor hours = $3.25 an hour, on top of $17.50.
+			.andExpect(jsonPath("$.weeks[0].payRate").value(17.00))
+			// $99 tips ÷ 30.5 floor hours = $3.25 an hour, on top of $17.00.
 			.andExpect(jsonPath("$.weeks[0].tips").value(99.00))
 			.andExpect(jsonPath("$.weeks[0].tipsPerHour").value(3.25))
-			.andExpect(jsonPath("$.weeks[0].totalPerHour").value(20.75));
+			.andExpect(jsonPath("$.weeks[0].totalPerHour").value(20.25));
 		// Managers see PPH on the leaderboards, never anyone's rate.
 		mvc.perform(get("/api/stats/team").cookie(manager))
 			.andExpect(jsonPath("$.rows[0].stats.pph").exists())

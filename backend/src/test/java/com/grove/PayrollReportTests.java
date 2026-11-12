@@ -1,7 +1,6 @@
 package com.grove;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -65,6 +64,7 @@ class PayrollReportTests {
 		codes.deleteAll();
 		settings.findById("pay.leadBump").ifPresent(settings::delete);
 		settings.findById("pay.managerBump").ifPresent(settings::delete);
+		settings.findById("pay.minimumRate").ifPresent(settings::delete);
 		sessions.deleteAll();
 		users.deleteAll();
 		owner = signUp("owner@grove.test", "Owner", "Person");
@@ -73,81 +73,96 @@ class PayrollReportTests {
 	}
 
 	@Test
-	void reportShowsBothWeeksWithRatesCommissionAndTheLeadBump() throws Exception {
-		// Ava: 40 PPH both weeks, retail $80 in week 1 (commission), $20 and low PPG in week 2 (none).
+	void ratesFollowTheMinimumRoleBumpsAndFlatRates() throws Exception {
+		// Matrix: $16.50 from 39 PPH, $17.25 from 45 PPH. Minimum $16, lead +$0.50, manager +$1.00.
+		person("ava@grove.test", "Ava", "Stone", Role.STYLIST);
+		person("lena@grove.test", "Lena", "Park", Role.LEAD);
+		person("max@grove.test", "Max", "Hill", Role.MANAGER);
+		person("dee@grove.test", "Dee", "Desk", Role.RECEPTIONIST);
+		// Ava: 40 PPH both weeks; retail $80 in week 1 (commission), $20 with low PPG in week 2 (none).
 		stats.save(stat(week1, "Ava Stone", "10", "400", "400", "80", "1.00", "25.50"));
 		stats.save(stat(week2, "Ava Stone", "10", "400", "400", "20", "0.50", "10"));
-		// Lena is a lead on the site with no pay code: matrix + $0.50.
 		stats.save(stat(week1, "Lena Park", "10", "450", "450", "0", "1.60", "0"));
-		signUp("lena@grove.test", "Lena", "Park");
-		var lena = users.findByEmail("lena@grove.test").orElseThrow();
-		lena.setRoles(Role.LEAD);
-		lena.setSalonUltimateName("Lena Park");
-		users.save(lena);
-		codes.save(new PayCode("Ava Stone", 2, new BigDecimal("0.50"), null));
-
-		// Max is a manager with no code: matrix + $1.00; a flat rate gets no bump.
 		stats.save(stat(week1, "Max Hill", "10", "450", "450", "0", "0", "0"));
-		signUp("max@grove.test", "Max", "Hill");
-		var max = users.findByEmail("max@grove.test").orElseThrow();
-		max.setRoles(Role.MANAGER);
-		max.setSalonUltimateName("Max Hill");
-		users.save(max);
-		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
-			.andExpect(jsonPath("$.rows[0].name").value("Hill, Max"))
-			.andExpect(jsonPath("$.rows[0].role").value("MANAGER"))
-			.andExpect(jsonPath("$.rows[0].week1.rate").value(18.25));
-		codes.save(new PayCode("Max Hill", 15, null, new BigDecimal("20")));
-		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
-			.andExpect(jsonPath("$.rows[0].week1.rate").value(20.00));
-		stats.deleteAll(stats.findByWeekStart(week1).stream().filter(s -> s.getSuName().equals("Max Hill")).toList());
+		stats.save(stat(week1, "Dee Desk", "10", "0", "0", "0", "0", "0"));
+		// Cara has no site account: paid like a stylist, at the minimum for 30 PPH, and flagged.
+		stats.save(stat(week1, "Cara Diaz", "10", "300", "300", "0", "0", "0"));
+		// An old premium from the codes file no longer counts.
+		codes.save(new PayCode("Ava Stone", 2, new BigDecimal("0.50"), null));
 
 		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.ratesLoaded").value(true))
 			.andExpect(jsonPath("$.weeks[0].weekStart").value(week1.toString()))
 			.andExpect(jsonPath("$.weeks[1].weekStart").value(week2.toString()))
-			.andExpect(jsonPath("$.rows.length()").value(2))
-			.andExpect(jsonPath("$.rows[0].name").value("Park, Lena"))
-			.andExpect(jsonPath("$.rows[0].role").value("LEAD"))
-			.andExpect(jsonPath("$.rows[0].hasCode").value(false))
-			.andExpect(jsonPath("$.rows[0].week1.rate").value(17.75))
+			.andExpect(jsonPath("$.rows.length()").value(5))
+			.andExpect(jsonPath("$.rows[0].name").value("Desk, Dee"))
+			.andExpect(jsonPath("$.rows[0].week1.rate").doesNotExist())
+			.andExpect(jsonPath("$.rows[0].problem").value(org.hamcrest.Matchers.startsWith("Receptionist with no flat rate")))
+			.andExpect(jsonPath("$.rows[1].name").value("Diaz, Cara"))
+			.andExpect(jsonPath("$.rows[1].week1.rate").value(16.00))
+			.andExpect(jsonPath("$.rows[1].problem").value(org.hamcrest.Matchers.startsWith("Not linked")))
+			.andExpect(jsonPath("$.rows[2].name").value("Hill, Max"))
+			.andExpect(jsonPath("$.rows[2].role").value("MANAGER"))
+			.andExpect(jsonPath("$.rows[2].week1.rate").value(18.25))
+			.andExpect(jsonPath("$.rows[3].name").value("Park, Lena"))
+			.andExpect(jsonPath("$.rows[3].role").value("LEAD"))
+			.andExpect(jsonPath("$.rows[3].week1.rate").value(17.75))
 			// Under $60 retail but PPG at least 1.50 still earns commission (10% of $0).
-			.andExpect(jsonPath("$.rows[0].week1.commission").value(0))
-			.andExpect(jsonPath("$.rows[0].week2").doesNotExist())
-			.andExpect(jsonPath("$.rows[1].name").value("Stone, Ava"))
-			.andExpect(jsonPath("$.rows[1].role").doesNotExist())
-			.andExpect(jsonPath("$.rows[1].week1.rate").value(17.00))
-			.andExpect(jsonPath("$.rows[1].week1.commission").value(8.00))
-			.andExpect(jsonPath("$.rows[1].week1.tips").value(25.5))
-			.andExpect(jsonPath("$.rows[1].week2.commission").value(0))
-			.andExpect(jsonPath("$.floorHours").value(30))
+			.andExpect(jsonPath("$.rows[3].week1.commission").value(0))
+			.andExpect(jsonPath("$.rows[3].week2").doesNotExist())
+			.andExpect(jsonPath("$.rows[4].name").value("Stone, Ava"))
+			.andExpect(jsonPath("$.rows[4].problem").doesNotExist())
+			.andExpect(jsonPath("$.rows[4].week1.rate").value(16.50))
+			.andExpect(jsonPath("$.rows[4].week1.commission").value(8.00))
+			.andExpect(jsonPath("$.rows[4].week1.tips").value(25.5))
+			.andExpect(jsonPath("$.rows[4].week2.commission").value(0))
+			.andExpect(jsonPath("$.floorHours").value(60))
 			.andExpect(jsonPath("$.commission").value(8.00));
+
+		// Flat rates: exactly that, no bump, and the receptionist's flag goes away.
+		flat("Dee Desk", "14");
+		flat("Max Hill", "20");
+		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
+			.andExpect(jsonPath("$.rows[0].week1.rate").value(14.00))
+			.andExpect(jsonPath("$.rows[0].flatRate").value(14))
+			.andExpect(jsonPath("$.rows[0].problem").doesNotExist())
+			.andExpect(jsonPath("$.rows[2].week1.rate").value(20.00));
 	}
 
 	@Test
-	void theOwnerSetsIndividualRatesAndTheLeadBump() throws Exception {
-		stats.save(stat(week1, "Ava Stone", "10", "400", "400", "0", "0", "0"));
+	void theOwnerSetsTheMinimumBumpsAndFlatRates() throws Exception {
+		stats.save(stat(week1, "Ava Stone", "10", "300", "300", "0", "0", "0"));
 
-		// Ava shows up on the pay table from Salon Ultimate even without a code.
+		// Ava shows up on the pay table from Salon Ultimate, paid on the matrix.
 		mvc.perform(get("/api/owner/pay-rules").cookie(owner))
+			.andExpect(jsonPath("$.minimumRate").value(16.0))
 			.andExpect(jsonPath("$.leadBump").value(0.5))
 			.andExpect(jsonPath("$.managerBump").value(1.0))
 			.andExpect(jsonPath("$.people[0].name").value("Ava Stone"))
-			.andExpect(jsonPath("$.people[0].hasCode").value(false));
+			.andExpect(jsonPath("$.people[0].flatRate").doesNotExist());
 
-		mvc.perform(put("/api/owner/pay-rules/people").cookie(owner).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\":\"Ava Stone\",\"code\":15,\"flatRate\":21}"))
-			.andExpect(jsonPath("$.people[0].flatRate").value(21));
+		// Raising the minimum raises anyone under it.
+		mvc.perform(put("/api/owner/pay-rules/minimum").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":17}"))
+			.andExpect(jsonPath("$.minimumRate").value(17.0));
+		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
+			.andExpect(jsonPath("$.rows[0].week1.rate").value(17.00));
+		mvc.perform(put("/api/owner/pay-rules/minimum").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":0}"))
+			.andExpect(status().isBadRequest());
+
+		// A flat rate, then back to the matrix (case doesn't matter, and an old code row is cleared too).
+		codes.save(new PayCode("Ava Stone", 2, new BigDecimal("0.50"), null));
+		flat("Ava Stone", "21").andExpect(jsonPath("$.people[0].flatRate").value(21));
+		assertThat(codes.findAll()).hasSize(1);
 		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
 			.andExpect(jsonPath("$.rows[0].week1.rate").value(21.00));
-
-		// Back to the matrix with a premium.
 		mvc.perform(put("/api/owner/pay-rules/people").cookie(owner).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"name\":\"ava stone\",\"code\":3,\"premium\":0.75}"))
-			.andExpect(jsonPath("$.people[0].flatRate").doesNotExist())
-			.andExpect(jsonPath("$.people[0].premium").value(0.75));
-		assertThat(codes.findAll()).hasSize(1);
+				.content("{\"name\":\"ava stone\",\"flatRate\":null}"))
+			.andExpect(jsonPath("$.people[0].flatRate").doesNotExist());
+		assertThat(codes.findAll()).isEmpty();
+		flat("Ava Stone", "-1").andExpect(status().isBadRequest());
 
 		mvc.perform(put("/api/owner/pay-rules/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"role\":\"LEAD\",\"amount\":0.75}"))
@@ -161,9 +176,19 @@ class PayrollReportTests {
 		mvc.perform(put("/api/owner/pay-rules/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"role\":\"STYLIST\",\"amount\":1}"))
 			.andExpect(status().isBadRequest());
+	}
 
-		mvc.perform(delete("/api/owner/pay-rules/people").param("name", "Ava Stone").cookie(owner))
-			.andExpect(jsonPath("$.people[0].hasCode").value(false));
+	private void person(String email, String first, String last, Role role) throws Exception {
+		signUp(email, first, last);
+		var u = users.findByEmail(email).orElseThrow();
+		u.setRoles(role);
+		u.setSalonUltimateName(first + " " + last);
+		users.save(u);
+	}
+
+	private org.springframework.test.web.servlet.ResultActions flat(String name, String rate) throws Exception {
+		return mvc.perform(put("/api/owner/pay-rules/people").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"" + name + "\",\"flatRate\":" + rate + "}"));
 	}
 
 	@Test

@@ -1,14 +1,13 @@
 package com.grove.Controller;
 
 import org.springframework.web.bind.annotation.CookieValue;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.grove.Domain.Dtos.BumpInput;
+import com.grove.Domain.Dtos.MinimumInput;
 import com.grove.Domain.Dtos.PayPersonInput;
 import com.grove.Domain.Dtos.PayRules;
 import com.grove.Domain.Dtos.PayRulesUpload;
@@ -44,19 +43,20 @@ public class PayController {
 		return pay.setBump(body == null ? null : body.role(), body == null ? null : body.amount());
 	}
 
-	/** Add or change one person's pay. */
-	@PutMapping("/api/owner/pay-rules/people")
-	public PayRules savePerson(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
-			@RequestBody PayPersonInput body) {
+	/** The lowest rate a stylist is paid. */
+	@PutMapping("/api/owner/pay-rules/minimum")
+	public PayRules minimum(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestBody MinimumInput body) {
 		sessions.requireOwner(token);
-		return pay.savePerson(body);
+		return pay.setMinimum(body == null ? null : body.amount());
 	}
 
-	@DeleteMapping("/api/owner/pay-rules/people")
-	public PayRules removePerson(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
-			@RequestParam String name) {
+	/** Set someone's flat rate, or with a null rate, put them back on the matrix. */
+	@PutMapping("/api/owner/pay-rules/people")
+	public PayRules flatRate(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestBody PayPersonInput body) {
 		sessions.requireOwner(token);
-		return pay.removePerson(name);
+		return pay.setFlatRate(body);
 	}
 
 	@PutMapping("/api/owner/pay-rules")
