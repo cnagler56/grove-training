@@ -1,33 +1,36 @@
 'use client';
 
 import { useState } from 'react';
-import { api, type PayPerson, type PayRules } from '@/src/lib/api';
+import { api, type BumpKind, type PayPerson, type PayRules } from '@/src/lib/api';
 import { moneyCents } from '@/src/lib/format';
 import { roleLabel } from '@/src/lib/roles';
 import { useDialogs } from '@/src/components/Dialogs';
 
-type Setting = 'MINIMUM' | 'RECEPTIONIST' | 'LEAD' | 'MANAGER';
+type Setting = 'MINIMUM' | 'RECEPTIONIST' | 'LEAD' | 'LEAD_PROD' | 'MANAGER';
 const SETTINGS: { key: Setting; label: string; name: string }[] = [
   { key: 'MINIMUM', label: 'Stylist rate', name: 'stylist rate' },
   { key: 'RECEPTIONIST', label: 'Receptionist rate', name: 'receptionist rate' },
   { key: 'LEAD', label: 'Lead bump', name: 'lead bump' },
+  { key: 'LEAD_PROD', label: 'Lead/prod bump', name: 'lead/prod bump' },
   { key: 'MANAGER', label: 'Manager bump', name: 'manager bump' },
 ];
 
+/** A row's unsaved changes: base rate, which bump, and the amount for Other. */
+type Draft = { base: string; kind: BumpKind; custom: string };
+
 /**
  * Owner Settings: how everyone is paid. Each person has a base rate (the stylist or
- * receptionist rate unless changed just for them). Stylists get the matrix rate or their
- * base, whichever is higher, plus the lead or manager bump; receptionists get their base.
+ * receptionist rate unless changed just for them) and a bump (their role's, or one picked
+ * for them). Stylists get the matrix rate or their base, whichever is higher; the bump goes on top.
  */
 export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; onChange: (r: PayRules) => void }) {
   const saved: Record<Setting, number> = {
-    MINIMUM: rules.minimumRate, RECEPTIONIST: rules.receptionistRate, LEAD: rules.leadBump, MANAGER: rules.managerBump,
+    MINIMUM: rules.minimumRate, RECEPTIONIST: rules.receptionistRate,
+    LEAD: rules.leadBump, LEAD_PROD: rules.leadProdBump, MANAGER: rules.managerBump,
   };
-  const [values, setValues] = useState<Record<Setting, string>>({
-    MINIMUM: String(rules.minimumRate), RECEPTIONIST: String(rules.receptionistRate),
-    LEAD: String(rules.leadBump), MANAGER: String(rules.managerBump),
-  });
-  const [bases, setBases] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<Setting, string>>(
+    Object.fromEntries(Object.entries(saved).map(([k, v]) => [k, String(v)])) as Record<Setting, string>);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [newName, setNewName] = useState('');
   const [newRate, setNewRate] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,10 +38,29 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
   const [notice, setNotice] = useState<string | null>(null);
   const dialogs = useDialogs();
 
+  const savedDraft = (p: PayPerson): Draft => ({
+    base: String(p.ownRate ?? p.defaultRate),
+    kind: p.bumpKind ?? 'ROLE',
+    custom: p.bumpKind === 'CUSTOM' ? String(p.bump) : '',
+  });
+
+  /** The dropdown's choices, with today's amounts. */
+  function bumpOptions(p: PayPerson): { value: BumpKind; label: string }[] {
+    const roleBump = p.role === 'LEAD' ? rules.leadBump : p.role === 'MANAGER' ? rules.managerBump : 0;
+    return [
+      { value: 'ROLE', label: `By role (${roleBump > 0 ? moneyCents(roleBump) : 'none'})` },
+      { value: 'NONE', label: 'None' },
+      { value: 'LEAD', label: `Lead ${moneyCents(rules.leadBump)}` },
+      { value: 'LEAD_PROD', label: `Lead/prod ${moneyCents(rules.leadProdBump)}` },
+      { value: 'MANAGER', label: `Manager ${moneyCents(rules.managerBump)}` },
+      { value: 'CUSTOM', label: 'Other amount' },
+    ];
+  }
+
   async function remove(p: PayPerson) {
     if (!(await dialogs.confirm({
       title: `Remove ${p.name} from the pay list?`,
-      message: 'Any rate set just for them is cleared. Their past hours stay on old pay periods, and they come back '
+      message: 'Any rate or bump set just for them is cleared. Their past hours stay on old pay periods, and they come back '
         + 'on their own if Salon Ultimate reports them again.',
       confirmLabel: 'Remove',
       danger: true,
@@ -70,12 +92,19 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
       : api.setBump(key, amount)), `Saved the ${name}.`);
   }
 
-  async function saveBase(p: PayPerson, value: string | null) {
-    const baseRate = value == null || value.trim() === '' ? null : Number(value);
-    const ok = await run(() => api.setBaseRate({ name: p.name, baseRate }),
-      baseRate == null || baseRate === p.defaultRate ? `${p.name} is back on the default rate.` : `Saved ${p.name}'s rate.`);
+  /** Save whatever changed on one row: the base rate, the bump, or both. */
+  async function saveRow(p: PayPerson, d: Draft) {
+    const was = savedDraft(p);
+    const ok = await run(async () => {
+      let rules: PayRules | null = null;
+      if (Number(d.base) !== Number(was.base)) rules = await api.setBaseRate({ name: p.name, baseRate: Number(d.base) });
+      if (d.kind !== was.kind || (d.kind === 'CUSTOM' && Number(d.custom) !== Number(was.custom))) {
+        rules = await api.setPersonBump({ name: p.name, kind: d.kind, amount: d.kind === 'CUSTOM' ? Number(d.custom) : null });
+      }
+      return rules ?? api.payRules();
+    }, `Saved ${p.name}'s pay.`);
     if (ok) {
-      setBases((all) => {
+      setDrafts((all) => {
         const rest = { ...all };
         delete rest[p.name];
         return rest;
@@ -99,8 +128,8 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
         <h2 className="text-lg font-extrabold">How everyone is paid</h2>
         <p className="mt-1 text-sm opacity-70">
           Everyone starts at the stylist or receptionist rate, which you can change for one person below. Stylists
-          get the matrix rate when it&apos;s higher. Leads and managers (their role on the Team page) get their bump
-          on top. Paid shows the least each person makes an hour.
+          get the matrix rate when it&apos;s higher. Each person&apos;s bump goes on top: by role, leads and managers get
+          theirs, or pick one for them. Paid shows the least each person makes an hour.
         </p>
         <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
           {SETTINGS.map(({ key, label }) => (
@@ -120,21 +149,25 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="w-full min-w-[680px] text-sm">
           <thead>
             <tr className="border-y border-[var(--border)] text-left text-xs uppercase tracking-wide opacity-70">
               <th className="px-4 py-2">Name</th>
               <th className="px-2 py-2">Base rate</th>
+              <th className="px-2 py-2">Bump</th>
               <th className="px-2 py-2">Paid</th>
               <th className="px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {rules.people.map((p) => {
-              const savedBase = String(p.ownRate ?? p.defaultRate);
-              const value = bases[p.name] ?? savedBase;
-              const changed = value.trim() !== '' && Number(value) !== Number(savedBase);
-              const bump = p.paidRate - (p.ownRate ?? p.defaultRate);
+              const was = savedDraft(p);
+              const d = drafts[p.name] ?? was;
+              const set = (patch: Partial<Draft>) => setDrafts({ ...drafts, [p.name]: { ...d, ...patch } });
+              const changed = (d.base.trim() !== '' && Number(d.base) !== Number(was.base))
+                || d.kind !== was.kind
+                || (d.kind === 'CUSTOM' && d.custom.trim() !== '' && Number(d.custom) !== Number(was.custom));
+              const incomplete = d.base.trim() === '' || (d.kind === 'CUSTOM' && d.custom.trim() === '');
               return (
                 <tr key={p.name}>
                   <td className="px-4 py-2">
@@ -147,20 +180,31 @@ export default function PayPeopleCard({ rules, onChange }: { rules: PayRules; on
                   </td>
                   <td className="px-2 py-2">
                     <input className="input w-24 py-1" type="number" step="0.25" min="0" aria-label={`${p.name}'s base rate`}
-                      value={value} onChange={(e) => setBases({ ...bases, [p.name]: e.target.value })} />
+                      value={d.base} onChange={(e) => set({ base: e.target.value })} />
                   </td>
                   <td className="px-2 py-2">
-                    <b>{moneyCents(p.paidRate)}</b>
-                    {bump > 0.001 && <span className="ml-1 text-xs opacity-60">incl. {moneyCents(bump)} bump</span>}
+                    <div className="flex items-center gap-1.5">
+                      <select className="input w-40 py-1" aria-label={`${p.name}'s bump`} value={d.kind}
+                        onChange={(e) => set({ kind: e.target.value as BumpKind })}>
+                        {bumpOptions(p).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {d.kind === 'CUSTOM' && (
+                        <input className="input w-20 py-1" type="number" step="0.25" min="0" placeholder="$/hr"
+                          aria-label={`${p.name}'s bump amount`} value={d.custom} onChange={(e) => set({ custom: e.target.value })} />
+                      )}
+                    </div>
                   </td>
+                  <td className="whitespace-nowrap px-2 py-2"><b>{moneyCents(p.paidRate)}</b></td>
                   <td className="whitespace-nowrap px-4 py-2 text-right">
                     {changed && (
-                      <button className="btn px-3 py-1 text-xs" disabled={busy} onClick={() => void saveBase(p, value)}>
+                      <button className="btn px-3 py-1 text-xs" disabled={busy || incomplete} onClick={() => void saveRow(p, d)}>
                         Save
                       </button>
                     )}
                     {!changed && p.ownRate != null && (
-                      <button className="text-xs font-semibold hover:underline" disabled={busy} onClick={() => void saveBase(p, null)}>
+                      <button className="text-xs font-semibold hover:underline" disabled={busy}
+                        onClick={() => void run(() => api.setBaseRate({ name: p.name, baseRate: null }),
+                          `${p.name} is back on the default rate.`)}>
                         Use default ({moneyCents(p.defaultRate)})
                       </button>
                     )}

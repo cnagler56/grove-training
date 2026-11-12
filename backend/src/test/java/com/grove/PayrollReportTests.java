@@ -69,6 +69,7 @@ class PayrollReportTests {
 		codes.deleteAll();
 		settings.findById("pay.leadBump").ifPresent(settings::delete);
 		settings.findById("pay.managerBump").ifPresent(settings::delete);
+		settings.findById("pay.leadProdBump").ifPresent(settings::delete);
 		settings.findById("pay.minimumRate").ifPresent(settings::delete);
 		settings.findById("pay.receptionistRate").ifPresent(settings::delete);
 		settings.findAll().stream().filter(x -> x.getKey().startsWith("pay.removed.")).forEach(settings::delete);
@@ -242,6 +243,51 @@ class PayrollReportTests {
 				.content("{\"userId\":" + userId + ",\"checkDate\":\"" + check + "\",\"kind\":\"" + kind + "\",\"amount\":" + amount
 					+ ",\"note\":\"" + text + "\"}"))
 			.andExpect(status().isCreated());
+	}
+
+	@Test
+	void eachPersonsBumpCanBeChosenOrTheirOwnAmount() throws Exception {
+		// Matrix: $16.50 from 39 PPH. Ava is a stylist at 40 PPH, so $16.50 with no bump.
+		person("ava@grove.test", "Ava", "Stone", Role.STYLIST);
+		person("lena@grove.test", "Lena", "Park", Role.LEAD);
+		stats.save(stat(week1, "Ava Stone", "10", "400", "400", "0", "0", "0"));
+		stats.save(stat(week1, "Lena Park", "10", "400", "400", "0", "0", "0"));
+
+		mvc.perform(get("/api/owner/pay-rules").cookie(owner))
+			.andExpect(jsonPath("$.leadProdBump").value(0.75))
+			// Lena follows her role: the $0.50 lead bump.
+			.andExpect(jsonPath("$.people[0].name").value("Lena Park"))
+			.andExpect(jsonPath("$.people[0].bumpKind").doesNotExist())
+			.andExpect(jsonPath("$.people[0].bump").value(0.5));
+
+		// Lead/prod for Lena, her own $1.50 for Ava.
+		bumpFor("Lena Park", "LEAD_PROD", null).andExpect(jsonPath("$.people[0].bump").value(0.75))
+			.andExpect(jsonPath("$.people[0].paidRate").value(16.75));
+		bumpFor("Ava Stone", "CUSTOM", "1.50").andExpect(jsonPath("$.people[1].bump").value(1.5))
+			.andExpect(jsonPath("$.people[1].paidRate").value(17.5));
+		mvc.perform(get("/api/payroll/report").param("checkDate", check.toString()).cookie(owner))
+			.andExpect(jsonPath("$.rows[0].week1.rate").value(17.25))
+			.andExpect(jsonPath("$.rows[1].week1.rate").value(18.00));
+
+		// Changing the lead/prod amount moves everyone on it; a base rate keeps the bump.
+		mvc.perform(put("/api/owner/pay-rules/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"role\":\"LEAD_PROD\",\"amount\":1}"))
+			.andExpect(jsonPath("$.people[0].bump").value(1.0));
+		flat("Ava Stone", "17").andExpect(jsonPath("$.people[1].bumpKind").value("CUSTOM"))
+			.andExpect(jsonPath("$.people[1].paidRate").value(18.5));
+
+		// Back to her role, and the custom amount has to make sense.
+		bumpFor("Ava Stone", "ROLE", null).andExpect(jsonPath("$.people[1].bump").value(0))
+			.andExpect(jsonPath("$.people[1].ownRate").value(17));
+		bumpFor("Ava Stone", "CUSTOM", "-1").andExpect(status().isBadRequest());
+		bumpFor("Ava Stone", "BONUS", null).andExpect(status().isBadRequest());
+		// None turns off even a role bump.
+		bumpFor("Lena Park", "NONE", null).andExpect(jsonPath("$.people[0].bump").value(0));
+	}
+
+	private org.springframework.test.web.servlet.ResultActions bumpFor(String name, String kind, String amount) throws Exception {
+		return mvc.perform(put("/api/owner/pay-rules/people/bump").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+			.content("{\"name\":\"" + name + "\",\"kind\":\"" + kind + "\",\"amount\":" + amount + "}"));
 	}
 
 	@Test

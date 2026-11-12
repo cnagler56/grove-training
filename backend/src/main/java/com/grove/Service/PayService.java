@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.grove.Domain.AppSetting;
 import com.grove.Domain.Dtos.PayPerson;
 import com.grove.Domain.Dtos.PayPersonInput;
+import com.grove.Domain.Dtos.PersonBumpInput;
 import com.grove.Domain.Dtos.PayMatrixEntry;
 import com.grove.Domain.Dtos.PayRules;
 import com.grove.Domain.Dtos.PayRulesUpload;
@@ -58,9 +59,13 @@ public class PayService {
 	/** "pay.removed.ava stone" = the date the owner took Ava off the pay list. */
 	static final String REMOVED_PREFIX = "pay.removed.";
 	static final BigDecimal DISCOUNT_SHARE = new BigDecimal("0.2");
-	/** The roles that get a bump on the matrix rate, and where each amount is kept. */
-	static final Map<Role, String> BUMP_KEYS = Map.of(Role.LEAD, "pay.leadBump", Role.MANAGER, "pay.managerBump");
-	static final Map<Role, BigDecimal> DEFAULT_BUMPS = Map.of(Role.LEAD, new BigDecimal("0.50"), Role.MANAGER, new BigDecimal("1.00"));
+	/** The kinds of bump the owner sets amounts for, and where each amount is kept. */
+	static final Map<String, String> BUMP_KEYS = Map.of(
+		"LEAD", "pay.leadBump", "LEAD_PROD", "pay.leadProdBump", "MANAGER", "pay.managerBump");
+	static final Map<String, BigDecimal> DEFAULT_BUMPS = Map.of(
+		"LEAD", new BigDecimal("0.50"), "LEAD_PROD", new BigDecimal("0.75"), "MANAGER", new BigDecimal("1.00"));
+	/** What someone can be given on the pay table besides following their role. */
+	static final java.util.Set<String> PERSON_BUMPS = java.util.Set.of("NONE", "LEAD", "LEAD_PROD", "MANAGER", "CUSTOM");
 	/** Retail commission, as in the skill: 10% of retail when retail is at least $60 or product per guest at least $1.50. */
 	static final BigDecimal COMMISSION_RATE = new BigDecimal("0.10");
 	static final BigDecimal MIN_RETAIL_FOR_COMMISSION = new BigDecimal("60");
@@ -101,9 +106,10 @@ public class PayService {
 		List<PayMatrixRow> steps = sortedMatrix();
 		if (steps.isEmpty()) return s -> null;
 		Role role = roleOf(suName);
+		PayCode row = personalRow(suName);
 		BigDecimal base = baseRate(suName, role);
-		if (role == Role.RECEPTIONIST) return s -> base;
-		BigDecimal bump = bump(role);
+		BigDecimal bump = personBump(row, role);
+		if (role == Role.RECEPTIONIST) return s -> base.add(bump).setScale(2, RoundingMode.HALF_UP);
 		return s -> rate(exactPph(s), steps, base, bump);
 	}
 
@@ -121,7 +127,7 @@ public class PayService {
 
 	/** The base rate the owner set just for this person, or null if they use their role's default. */
 	public BigDecimal personalRate(String suName) {
-		PayCode row = flatRow(suName);
+		PayCode row = personalRow(suName);
 		return row == null ? null : row.getFlatRate();
 	}
 
@@ -136,9 +142,10 @@ public class PayService {
 		return (own != null ? own : defaultRate(role)).setScale(2, RoundingMode.HALF_UP);
 	}
 
-	private PayCode flatRow(String suName) {
+	/** Their row of things the owner set just for them (base rate, bump), or null. */
+	private PayCode personalRow(String suName) {
 		return suName == null ? null : codes.findAll().stream()
-			.filter(c -> c.getFlatRate() != null && c.getSuName().equalsIgnoreCase(suName)).findFirst().orElse(null);
+			.filter(c -> c.isPersonal() && c.getSuName().equalsIgnoreCase(suName)).findFirst().orElse(null);
 	}
 
 	/** The lowest a stylist is paid when their matrix rate is lower. */
@@ -182,14 +189,29 @@ public class PayService {
 
 	/** What this role adds to the matrix rate per hour: the lead or manager bump, 0 for everyone else. */
 	public BigDecimal bump(Role role) {
-		String key = role == null ? null : BUMP_KEYS.get(role);
-		if (key == null) return BigDecimal.ZERO;
-		return money(key, DEFAULT_BUMPS.get(role));
+		if (role == Role.LEAD) return kindBump("LEAD");
+		if (role == Role.MANAGER) return kindBump("MANAGER");
+		return BigDecimal.ZERO;
 	}
 
-	public PayRules setBump(Role role, BigDecimal amount) {
-		String key = role == null ? null : BUMP_KEYS.get(role);
-		if (key == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only leads and managers have a bump");
+	/** The amount the owner set for one kind of bump (LEAD, LEAD_PROD, MANAGER). */
+	public BigDecimal kindBump(String kind) {
+		String key = BUMP_KEYS.get(kind);
+		return key == null ? BigDecimal.ZERO : money(key, DEFAULT_BUMPS.get(kind));
+	}
+
+	/** Someone's bump: what the owner picked for them, or their role's if nothing was picked. */
+	BigDecimal personBump(PayCode row, Role role) {
+		String kind = row == null ? null : row.getBumpKind();
+		if (kind == null) return bump(role);
+		if (kind.equals("NONE")) return BigDecimal.ZERO;
+		if (kind.equals("CUSTOM")) return row.getBump() == null ? BigDecimal.ZERO : row.getBump();
+		return kindBump(kind);
+	}
+
+	public PayRules setBump(String kind, BigDecimal amount) {
+		String key = kind == null ? null : BUMP_KEYS.get(kind);
+		if (key == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick the lead, lead/prod, or manager bump");
 		if (amount == null || amount.signum() < 0 || amount.compareTo(BigDecimal.TEN) > 0) {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a bump from $0 to $10");
 		}
@@ -210,15 +232,48 @@ public class PayService {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A rate has to be more than $0");
 		}
 		if (flat != null && flat.compareTo(defaultRate(roleOf(name))) == 0) flat = null;
-		// Clear any old row for this name, flat or from the codes file.
+		BigDecimal rate = flat == null ? null : flat.setScale(2, RoundingMode.HALF_UP);
+		savePersonal(name, row -> row.setFlatRate(rate));
+		return rules();
+	}
+
+	/** Choose someone's bump: follow their role (null or ROLE), none, a named kind, or their own amount. */
+	@Transactional
+	public PayRules setPersonBump(PersonBumpInput input) {
+		String name = input == null || input.name() == null ? "" : input.name().trim();
+		if (name.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick who this is for");
+		String kind = input.kind() == null || input.kind().equals("ROLE") ? null : input.kind();
+		if (kind != null && !PERSON_BUMPS.contains(kind)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pick a bump");
+		BigDecimal amount = input.amount();
+		if ("CUSTOM".equals(kind) && (amount == null || amount.signum() < 0 || amount.compareTo(BigDecimal.TEN) > 0)) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a bump from $0 to $10");
+		}
+		BigDecimal own = "CUSTOM".equals(kind) ? amount.setScale(2, RoundingMode.HALF_UP) : null;
+		savePersonal(name, row -> {
+			row.setBumpKind(kind);
+			row.setBump(own);
+		});
+		return rules();
+	}
+
+	/**
+	 * Change someone's row of personal settings, creating it if needed and deleting it when
+	 * nothing is left in it. Old rows from the codes file are folded in (their premium is unused).
+	 */
+	private void savePersonal(String name, java.util.function.Consumer<PayCode> change) {
 		List<PayCode> old = codes.findAll().stream().filter(c -> c.getSuName().equalsIgnoreCase(name)).toList();
-		String key = old.isEmpty() ? name : old.get(0).getSuName();
+		PayCode row = old.stream().filter(PayCode::isPersonal).findFirst().orElse(null);
+		PayCode keep = new PayCode(old.isEmpty() ? name : old.get(0).getSuName(), null, null, row == null ? null : row.getFlatRate());
+		if (row != null) {
+			keep.setBumpKind(row.getBumpKind());
+			keep.setBump(row.getBump());
+		}
+		change.accept(keep);
 		if (!old.isEmpty()) {
 			codes.deleteAll(old);
 			codes.flush();
 		}
-		if (flat != null) codes.save(new PayCode(key, null, null, flat.setScale(2, RoundingMode.HALF_UP)));
-		return rules();
+		if (keep.isPersonal()) codes.save(keep);
 	}
 
 	/**
@@ -273,7 +328,7 @@ public class PayService {
 		Map<String, User> linked = new java.util.HashMap<>();
 		users.findAll().stream().filter(u -> u.isActive() && u.getSalonUltimateName() != null)
 			.forEach(u -> linked.putIfAbsent(u.getSalonUltimateName().toLowerCase(), u));
-		List<PayCode> flats = codes.findAll().stream().filter(c -> c.getFlatRate() != null).toList();
+		List<PayCode> flats = codes.findAll().stream().filter(PayCode::isPersonal).toList();
 		java.util.Set<String> names = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 		flats.forEach(c -> names.add(c.getSuName()));
 		// Everyone Salon Ultimate has reported, except people the owner removed who haven't been
@@ -298,10 +353,11 @@ public class PayService {
 				User u = linked.get(n.toLowerCase());
 				Role role = u == null ? null : u.getRoles();
 				BigDecimal def = defaultRate(role).setScale(2, RoundingMode.HALF_UP);
-				BigDecimal own = c == null ? null : c.getFlatRate().setScale(2, RoundingMode.HALF_UP);
+				BigDecimal own = c == null || c.getFlatRate() == null ? null : c.getFlatRate().setScale(2, RoundingMode.HALF_UP);
 				BigDecimal base = own != null ? own : def;
-				BigDecimal paid = role == Role.RECEPTIONIST ? base : base.add(bump(role)).setScale(2, RoundingMode.HALF_UP);
-				return new PayPerson(n, role, own, def, paid);
+				BigDecimal bump = personBump(c, role).setScale(2, RoundingMode.HALF_UP);
+				return new PayPerson(n, role, own, def, base.add(bump).setScale(2, RoundingMode.HALF_UP),
+					c == null ? null : c.getBumpKind(), bump);
 			})
 			.sorted(Comparator.comparing((PayPerson p) -> lastFirst(p.name()), String.CASE_INSENSITIVE_ORDER))
 			.toList();
@@ -309,8 +365,9 @@ public class PayService {
 			sortedMatrix().stream().map(r -> new PayMatrixEntry(r.getPph(), r.getRate())).toList(),
 			minimum(),
 			defaultRate(Role.RECEPTIONIST),
-			bump(Role.LEAD),
-			bump(Role.MANAGER),
+			kindBump("LEAD"),
+			kindBump("LEAD_PROD"),
+			kindBump("MANAGER"),
 			people);
 	}
 

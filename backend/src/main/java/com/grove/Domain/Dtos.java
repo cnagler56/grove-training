@@ -357,7 +357,7 @@ public final class Dtos {
 
 	/** What's loaded, for the owner's Settings page. */
 	public record PayRules(List<PayMatrixEntry> matrix, BigDecimal minimumRate, BigDecimal receptionistRate,
-		BigDecimal leadBump, BigDecimal managerBump,
+		BigDecimal leadBump, BigDecimal leadProdBump, BigDecimal managerBump,
 		List<PayPerson> people) {}
 
 	/**
@@ -365,7 +365,14 @@ public final class Dtos {
 	 * get a bump). {@code ownRate} is a base rate set just for them (null: they use {@code defaultRate},
 	 * their role's). {@code paidRate} is their base plus any bump: the least they're paid an hour.
 	 */
-	public record PayPerson(String name, Role role, BigDecimal ownRate, BigDecimal defaultRate, BigDecimal paidRate) {}
+	public record PayPerson(String name, Role role, BigDecimal ownRate, BigDecimal defaultRate, BigDecimal paidRate,
+		/** Null: their role decides (leads and managers). Otherwise NONE, LEAD, LEAD_PROD, MANAGER, or CUSTOM. */
+		String bumpKind,
+		/** What their bump comes to per hour. */
+		BigDecimal bump) {}
+
+	/** The owner choosing someone's bump: kind null or ROLE follows their role; CUSTOM uses amount. */
+	public record PersonBumpInput(String name, String kind, BigDecimal amount) {}
 
 	/** The owner setting one person's base rate; null puts them back on their role's default. */
 	public record PayPersonInput(String name, BigDecimal baseRate) {}
@@ -373,7 +380,8 @@ public final class Dtos {
 	public record MinimumInput(BigDecimal amount) {}
 
 	/** The owner setting the lead or manager bump. */
-	public record BumpInput(Role role, BigDecimal amount) {}
+	/** The owner setting the amount of one kind of bump: LEAD, LEAD_PROD, or MANAGER. */
+	public record BumpInput(String role, BigDecimal amount) {}
 
 	/** One of the two weeks a check pays for, and how its Salon Ultimate pull went (null: never pulled). */
 	public record PayrollWeek(LocalDate weekStart, StatsImportView pull) {}

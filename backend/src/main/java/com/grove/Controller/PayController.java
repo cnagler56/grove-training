@@ -12,6 +12,7 @@ import com.grove.Domain.Dtos.BumpInput;
 import com.grove.Domain.Dtos.MinimumInput;
 import com.grove.Domain.Dtos.PayPersonInput;
 import com.grove.Domain.Dtos.PayRules;
+import com.grove.Domain.Dtos.PersonBumpInput;
 import com.grove.Domain.Dtos.PayRulesUpload;
 import com.grove.Service.PayService;
 import com.grove.Service.SessionService;
@@ -54,6 +55,14 @@ public class PayController {
 			@RequestBody MinimumInput body) {
 		sessions.requireOwner(token);
 		return pay.setMinimum(body == null ? null : body.amount());
+	}
+
+	/** Choose someone's bump: their role's, none, lead, lead/prod, manager, or their own amount. */
+	@PutMapping("/api/owner/pay-rules/people/bump")
+	public PayRules personBump(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@RequestBody PersonBumpInput body) {
+		sessions.requireOwner(token);
+		return pay.setPersonBump(body);
 	}
 
 	/** The default rate for receptionists. */

@@ -475,6 +475,8 @@ export interface PayRules {
   receptionistRate: number;
   /** Added to every lead's matrix rate. */
   leadBump: number;
+  /** The lead/prod bump, for people it's picked for. */
+  leadProdBump: number;
   /** Added to every manager's matrix rate. */
   managerBump: number;
   /** Everyone with a base rate of their own or seen in Salon Ultimate, by last name. */
@@ -489,9 +491,16 @@ export interface PayPerson {
   ownRate: number | null;
   /** Their role's default: the receptionist rate or the stylist minimum. */
   defaultRate: number;
-  /** Base plus any lead or manager bump: the least they're paid an hour. */
+  /** Base plus their bump: the least they're paid an hour. */
   paidRate: number;
+  /** The bump picked for them; null means their role decides. */
+  bumpKind: Exclude<BumpKind, 'ROLE'> | null;
+  /** What their bump comes to per hour. */
+  bump: number;
 }
+
+/** A bump choice on the pay table. ROLE follows their role (leads and managers); CUSTOM is their own amount. */
+export type BumpKind = 'ROLE' | 'NONE' | 'LEAD' | 'LEAD_PROD' | 'MANAGER' | 'CUSTOM';
 
 /** Someone's own base rate; null puts them back on their role's default. */
 export interface PayPersonInput {
@@ -905,10 +914,12 @@ export const api = {
   pullStats: (week: string) => send<StatsImport>(`/api/stats/import?week=${week}`, 'POST'),
   payRules: () => send<PayRules>('/api/owner/pay-rules'),
   loadPayRules: (u: PayRulesUpload) => send<PayRules>('/api/owner/pay-rules', 'PUT', u),
-  setBump: (role: 'LEAD' | 'MANAGER', amount: number) => send<PayRules>('/api/owner/pay-rules/bump', 'PUT', { role, amount }),
+  setBump: (role: 'LEAD' | 'LEAD_PROD' | 'MANAGER', amount: number) => send<PayRules>('/api/owner/pay-rules/bump', 'PUT', { role, amount }),
   setMinimumRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/minimum', 'PUT', { amount }),
   setReceptionistRate: (amount: number) => send<PayRules>('/api/owner/pay-rules/receptionist-rate', 'PUT', { amount }),
   setBaseRate: (p: PayPersonInput) => send<PayRules>('/api/owner/pay-rules/people', 'PUT', p),
+  setPersonBump: (b: { name: string; kind: BumpKind; amount: number | null }) =>
+    send<PayRules>('/api/owner/pay-rules/people/bump', 'PUT', b),
   removePayPerson: (name: string) => send<PayRules>(`/api/owner/pay-rules/people?name=${encodeURIComponent(name)}`, 'DELETE'),
   payrollEntry: (checkDate: string) => send<PayrollEntry>(`/api/payroll/entry?checkDate=${checkDate}`),
   payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),

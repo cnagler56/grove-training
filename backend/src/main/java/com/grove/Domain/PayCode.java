@@ -29,6 +29,17 @@ public class PayCode {
 	@Column(name = "flat_rate", precision = 8, scale = 2)
 	private BigDecimal flatRate;
 
+	/**
+	 * Which bump this person gets: null follows their role (leads and managers), or NONE,
+	 * LEAD, LEAD_PROD, MANAGER, or CUSTOM (the amount in {@link #bump}).
+	 */
+	@Column(name = "bump_kind", length = 20)
+	private String bumpKind;
+
+	/** Their own bump per hour, used when bumpKind is CUSTOM. */
+	@Column(precision = 8, scale = 2)
+	private BigDecimal bump;
+
 	public PayCode() {}
 
 	public PayCode(String suName, Integer code, BigDecimal premium, BigDecimal flatRate) {
@@ -42,4 +53,12 @@ public class PayCode {
 	public Integer getCode() { return code; }
 	public BigDecimal getPremium() { return premium; }
 	public BigDecimal getFlatRate() { return flatRate; }
+	public void setFlatRate(BigDecimal flatRate) { this.flatRate = flatRate; }
+	public String getBumpKind() { return bumpKind; }
+	public void setBumpKind(String bumpKind) { this.bumpKind = bumpKind; }
+	public BigDecimal getBump() { return bump; }
+	public void setBump(BigDecimal bump) { this.bump = bump; }
+
+	/** True when this row holds something the owner set: their own base rate or bump. */
+	public boolean isPersonal() { return flatRate != null || bumpKind != null; }
 }
