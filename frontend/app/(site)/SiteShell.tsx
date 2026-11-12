@@ -2,36 +2,38 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/src/lib/api';
 import { UserProvider, useUser } from '@/src/lib/UserContext';
 import { canManageSite, hasTodos, onSchedule } from '@/src/lib/roles';
 import { clearDelivered } from '@/src/lib/push';
 import TodoPopup from '@/src/components/TodoPopup';
 
-const TABS = [{ href: '/home', label: 'Home' }];
-const NOTIFICATION_TABS = [{ href: '/notifications', label: 'Notifications' }];
-const TODO_TABS = [{ href: '/todos', label: 'To-do' }];
-const STAFF_TABS = [{ href: '/videos', label: 'Videos' }, { href: '/contests', label: 'Contests' }];
-const SCHEDULE_TABS = [{ href: '/schedule', label: 'Schedule' }];
-/** Their own numbers and pay rate from Salon Ultimate. Not for owners (not in it) or receptionists. */
-const MY_WEEK_TABS = [{ href: '/my-week', label: 'My week' }];
-const TIME_OFF_TABS = [{ href: '/time-off', label: 'Time off' }];
-const VACATION_PAY_TABS = [{ href: '/paid-time-off', label: 'Paid Time Off' }];
-/** Who gets these follows the owner's Settings. */
-const PAYROLL_NOTES_TABS = [{ href: '/payroll-notes', label: 'Payroll notes' }];
-const PAYROLL_TABS = [{ href: '/payroll', label: 'Payroll' }];
-const ADMIN_TABS = [
-  { href: '/admin/stats', label: 'Leaderboards' },
-  { href: '/admin', label: 'Manage videos' },
-  { href: '/admin/team', label: 'Team' },
-  { href: '/admin/models', label: 'Models' },
-  { href: '/admin/contacts', label: 'Contacts' },
-];
-const OWNER_TABS = [
-  { href: '/admin/applicants', label: 'Applicants' },
-  { href: '/admin/settings', label: 'Settings' },
-];
+/** One page in the menu. `count` shows as a small number beside it (new applicants). */
+type MenuItem = { href: string; label: string; count?: number };
+/** A menu across the top. With one page it's a plain link; with more it opens a list. */
+type MenuGroup = { label: string; items: MenuItem[] };
+
+/** Manage videos (/admin) and Payroll (/payroll) only match exactly; they're prefixes of other pages. */
+const isOn = (pathname: string, href: string) =>
+  (href === '/admin' || href === '/payroll' ? pathname === href : pathname.startsWith(href));
+
+const pill = (active: boolean) => `whitespace-nowrap rounded-full px-3.5 py-1.5 font-semibold transition-colors ${
+  active ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'opacity-70 hover:bg-[var(--surface-2)] hover:opacity-100'
+}`;
+
+const headerPill = (active: boolean) =>
+  `whitespace-nowrap rounded-full px-3.5 py-1.5 font-semibold ${active ? 'bg-white/45' : 'bg-white/25 hover:bg-white/35'}`;
+
+function Count({ n, label, tone = 'accent' }: { n: number; label: string; tone?: 'accent' | 'danger' }) {
+  if (n <= 0) return null;
+  return (
+    <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-bold text-white ${tone === 'danger' ? 'bg-[var(--danger)]' : 'bg-[var(--accent)]'}`}
+      aria-label={`${n} ${label}`}>
+      {n}
+    </span>
+  );
+}
 
 /** Pages with wide tables and card grids get a wider layout (header included, so it lines up). */
 const WIDE_PAGES = ['/payroll', '/my-week', '/admin/stats', '/schedule/edit'];
@@ -46,22 +48,10 @@ const seesSchedule = (p: { viewSchedule: boolean; editSchedule: boolean; approve
 function Header() {
   const { user, perms, logout } = useUser();
   const pathname = usePathname();
-  const isOwner = user?.roles === 'OWNER';
-  const isStaff = !!user && user.roles !== 'CUSTOMER';
-  const tabs = [
-    ...TABS,
-    ...(isStaff ? NOTIFICATION_TABS : []),
-    ...(hasTodos(user?.roles) ? TODO_TABS : []),
-    ...(user && user.roles !== 'CUSTOMER' ? STAFF_TABS : []),
-    ...(seesSchedule(perms) ? SCHEDULE_TABS : []),
-    ...(hasMyWeek(user?.roles) ? MY_WEEK_TABS : []),
-    ...(onSchedule(user?.roles) || perms.approveTimeOff ? TIME_OFF_TABS : []),
-    ...(onSchedule(user?.roles) || isOwner ? VACATION_PAY_TABS : []),
-    ...(perms.payrollNotes ? PAYROLL_NOTES_TABS : []),
-    ...(perms.viewPayroll ? PAYROLL_TABS : []),
-    ...(canManageSite(user?.roles) ? ADMIN_TABS : []),
-    ...(isOwner ? OWNER_TABS : []),
-  ];
+  const role = user?.roles;
+  const isOwner = role === 'OWNER';
+  const isStaff = !!user && role !== 'CUSTOMER';
+  const manages = canManageSite(role);
 
   // Owners see how many applications are still "New"; refreshed on every page change.
   const [newApplicants, setNewApplicants] = useState(0);
@@ -90,69 +80,158 @@ function Header() {
     };
   }, [isStaff, pathname]);
 
+  // The menus, each holding only the pages this person can open. Empty ones are dropped.
+  const page = (show: boolean, href: string, label: string, count?: number): MenuItem[] => (show ? [{ href, label, count }] : []);
+  const groups: MenuGroup[] = [
+    { label: 'Home', items: page(true, '/home', 'Home') },
+    { label: 'Schedule', items: [
+      ...page(seesSchedule(perms), '/schedule', 'Schedule'),
+      ...page(onSchedule(role) || perms.approveTimeOff, '/time-off', 'Time off'),
+      ...page(onSchedule(role) || isOwner, '/paid-time-off', 'Paid Time Off'),
+    ] },
+    { label: 'Training', items: [
+      ...page(isStaff, '/videos', 'Videos'),
+      ...page(isStaff, '/contests', 'Contests'),
+      ...page(hasMyWeek(role), '/my-week', 'My week'),
+      ...page(manages, '/admin/stats', 'Leaderboards'),
+      ...page(manages, '/admin', 'Manage videos'),
+    ] },
+    { label: 'Payroll', items: [
+      ...page(perms.viewPayroll, '/payroll', 'Payroll'),
+      ...page(perms.payrollNotes, '/payroll-notes', 'Payroll notes'),
+    ] },
+    { label: 'People', items: [
+      ...page(manages, '/admin/team', 'Team'),
+      ...page(isOwner, '/admin/applicants', 'Applicants', newApplicants),
+      ...page(manages, '/admin/models', 'Models'),
+      ...page(manages, '/admin/contacts', 'Contacts'),
+    ] },
+    { label: 'Settings', items: page(isOwner, '/admin/settings', 'Settings') },
+  ].filter((g) => g.items.length > 0);
+
+  // Which menu is open on wide screens, and whether the phone menu is open.
+  const [open, setOpen] = useState<string | null>(null);
+  const [phoneMenu, setPhoneMenu] = useState(false);
+  const closeAll = () => { setOpen(null); setPhoneMenu(false); };
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open && !phoneMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) closeAll();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeAll(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, phoneMenu]);
+
+  const showTodos = hasTodos(role);
+
   return (
-    <header className="print:hidden">
+    <header className="print:hidden" ref={navRef}>
       <div className="bg-gradient-to-r from-[var(--header-from)] to-[var(--header-to)] text-white">
-        <div className={`mx-auto flex ${pageWidth(pathname)} items-center justify-between px-4 py-4`}>
-          <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight">
+        <div className={`mx-auto flex ${pageWidth(pathname)} items-center justify-between gap-2 px-4 py-4`}>
+          <Link href={user ? '/home' : '/'} className="text-xl font-extrabold tracking-tight" onClick={closeAll}>
             Grove Salons
           </Link>
           {user && (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="hidden font-semibold sm:inline">{user.firstName || user.email}</span>
-              {user.roles !== 'CUSTOMER' && (
-                <Link href="/account" className="whitespace-nowrap rounded-full bg-white/25 px-3.5 py-1.5 font-semibold hover:bg-white/35">
-                  My account
+            <div className="flex items-center gap-2 text-sm">
+              <span className="hidden font-semibold lg:inline">{user.firstName || user.email}</span>
+              {isStaff && (
+                <Link href="/notifications" className={headerPill(isOn(pathname, '/notifications'))} onClick={closeAll}>
+                  Notifications
+                  <Count n={unread} label="unread" tone="danger" />
                 </Link>
               )}
-              <button
-                onClick={() => void logout()}
-                className="rounded-full bg-white/25 px-3.5 py-1.5 font-semibold hover:bg-white/35"
-              >
-                Sign out
+              {/* Wide screens: everything in the header. Phones: the rest is under Menu. */}
+              {showTodos && (
+                <Link href="/todos" className={`hidden md:inline-block ${headerPill(isOn(pathname, '/todos'))}`}>To-do</Link>
+              )}
+              {isStaff && (
+                <Link href="/account" className={`hidden md:inline-block ${headerPill(isOn(pathname, '/account'))}`}>My account</Link>
+              )}
+              <button onClick={() => void logout()} className={`hidden md:inline-block ${headerPill(false)}`}>Sign out</button>
+              <button className={`md:hidden ${headerPill(phoneMenu)}`} aria-expanded={phoneMenu}
+                onClick={() => setPhoneMenu(!phoneMenu)}>
+                {phoneMenu ? 'Close' : 'Menu'}
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Wide screens: one row of menus. */}
       {user && (
-        <nav className="border-b border-[var(--border)] bg-[var(--surface)]">
-          <div className={`mx-auto flex ${pageWidth(pathname)} items-center gap-1.5 overflow-x-auto px-3 py-2 text-sm`}>
-            {tabs.map((tab) => {
-              const active = tab.href === '/admin' || tab.href === '/payroll'
-                  ? pathname === tab.href
-                  : pathname.startsWith(tab.href);
+        <nav className="hidden border-b border-[var(--border)] bg-[var(--surface)] md:block" aria-label="Pages">
+          <div className={`mx-auto flex ${pageWidth(pathname)} flex-wrap items-center gap-1.5 px-3 py-2 text-sm`}>
+            {groups.map((g) => {
+              const active = g.items.some((i) => isOn(pathname, i.href));
+              if (g.items.length === 1) {
+                const only = g.items[0];
+                return (
+                  <Link key={g.label} href={only.href} className={pill(active)} onClick={closeAll}>
+                    {only.label}
+                    <Count n={only.count ?? 0} label="new" />
+                  </Link>
+                );
+              }
+              const isOpen = open === g.label;
+              const count = g.items.reduce((n, i) => n + (i.count ?? 0), 0);
               return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 font-semibold transition-colors ${
-                    active
-                      ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-                      : 'opacity-70 hover:bg-[var(--surface-2)] hover:opacity-100'
-                  }`}
-                >
-                  {tab.label}
-                  {tab.href === '/admin/applicants' && isOwner && newApplicants > 0 && (
-                    <span
-                      className="ml-1.5 rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-bold text-white"
-                      aria-label={`${newApplicants} new`}
-                    >
-                      {newApplicants}
-                    </span>
+                <div key={g.label} className="relative">
+                  <button className={pill(active || isOpen)} aria-haspopup="true" aria-expanded={isOpen}
+                    onClick={() => setOpen(isOpen ? null : g.label)}>
+                    {g.label}
+                    <Count n={count} label="new" />
+                  </button>
+                  {isOpen && (
+                    <div className="absolute left-0 top-full z-30 mt-1.5 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-lg">
+                      {g.items.map((i) => (
+                        <Link key={i.href} href={i.href} onClick={closeAll}
+                          className={`block whitespace-nowrap rounded-lg px-3 py-2 font-semibold ${
+                            isOn(pathname, i.href) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'hover:bg-[var(--surface-2)]'
+                          }`}>
+                          {i.label}
+                          <Count n={i.count ?? 0} label="new" />
+                        </Link>
+                      ))}
+                    </div>
                   )}
-                  {tab.href === '/notifications' && unread > 0 && (
-                    <span
-                      className="ml-1.5 rounded-full bg-[var(--danger)] px-1.5 py-0.5 text-xs font-bold text-white"
-                      aria-label={`${unread} unread`}
-                    >
-                      {unread}
-                    </span>
-                  )}
-                </Link>
+                </div>
               );
             })}
+          </div>
+        </nav>
+      )}
+
+      {/* Phones: the same menus as one list under the Menu button. */}
+      {user && phoneMenu && (
+        <nav className="border-b border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm md:hidden" aria-label="Pages">
+          {groups.map((g) => (
+            <div key={g.label} className="py-1">
+              {g.items.length > 1 && (
+                <div className="px-3 pb-0.5 pt-2 text-xs font-bold uppercase tracking-wide opacity-50">{g.label}</div>
+              )}
+              {g.items.map((i) => (
+                <Link key={i.href} href={i.href} onClick={closeAll}
+                  className={`block rounded-lg px-3 py-2.5 font-semibold ${
+                    isOn(pathname, i.href) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : ''
+                  }`}>
+                  {i.label}
+                  <Count n={i.count ?? 0} label="new" />
+                </Link>
+              ))}
+            </div>
+          ))}
+          <div className="mt-1 border-t border-[var(--border)] py-1">
+            {showTodos && <Link href="/todos" onClick={closeAll} className="block rounded-lg px-3 py-2.5 font-semibold">To-do</Link>}
+            {isStaff && <Link href="/account" onClick={closeAll} className="block rounded-lg px-3 py-2.5 font-semibold">My account</Link>}
+            <button onClick={() => { closeAll(); void logout(); }} className="block w-full rounded-lg px-3 py-2.5 text-left font-semibold">
+              Sign out
+            </button>
           </div>
         </nav>
       )}
