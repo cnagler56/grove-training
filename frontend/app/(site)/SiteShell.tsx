@@ -294,13 +294,16 @@ function Gate({ children }: { children: React.ReactNode }) {
 /** Pages shown in a small window of their own, without the header, tabs, or pop-ups. */
 const isBare = (pathname: string) => pathname.startsWith('/payroll/entry');
 
+/** Pages that fill the screen, so they sit right under the menu bar instead of the usual top gap. */
+const isTight = (pathname: string) => pathname.startsWith('/time-off/calendar');
+
 function Main({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   if (isBare(pathname)) {
     return <main className="px-3 py-3"><Gate>{children}</Gate></main>;
   }
   return (
-    <main className={`mx-auto ${pageWidth(pathname)} px-4 py-8 print:max-w-none print:p-0`}>
+    <main className={`mx-auto ${pageWidth(pathname)} px-4 ${isTight(pathname) ? 'py-3' : 'py-8'} print:max-w-none print:p-0`}>
       <Gate>{children}</Gate>
     </main>
   );

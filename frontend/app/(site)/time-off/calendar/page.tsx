@@ -8,6 +8,9 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
   'November', 'December'];
 const DAY_HEADS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** Names shown in a day before "+2 more"; the day's panel lists everyone. */
+const MAX_NAMES = 3;
+
 /** Blacked-out days are dark so they stand out from the rest of the month. */
 const DARK = 'bg-slate-800 text-white hover:bg-slate-700';
 
@@ -55,36 +58,44 @@ export default function TimeOffCalendarPage() {
   const [y, m] = month.split('-').map(Number);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight">Time off calendar</h1>
-        <p className="mt-1 text-sm opacity-70">
-          Everyone&apos;s time off by day. Click a day to add a note, or to black it out so no one can ask for it off.
-        </p>
-      </div>
+    // Wide screens: controls in a column on the left, the month filling the rest of the
+    // screen below the menu bar. Phones: stacked, and the month scrolls.
+    <div className="space-y-4 lg:flex lg:h-[calc(100dvh-8.5rem)] lg:gap-5 lg:space-y-0">
+      <aside className="space-y-4 lg:w-56 lg:shrink-0 lg:overflow-y-auto">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">Time off calendar</h1>
+          <p className="mt-1 text-sm opacity-70">
+            Click a day to add a note, or to black it out so no one can ask for it off.
+          </p>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(shiftMonth(month, -1))}>Previous</button>
-        <h2 className="min-w-44 text-center text-xl font-extrabold">{MONTH_NAMES[m - 1]} {y}</h2>
-        <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(shiftMonth(month, 1))}>Next</button>
-        {month !== today.slice(0, 7) && (
-          <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(today.slice(0, 7))}>This month</button>
-        )}
-        <div className="ml-auto flex flex-wrap gap-3 text-xs">
+        <div className="space-y-2">
+          <h2 className="text-xl font-extrabold">{MONTH_NAMES[m - 1]} {y}</h2>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(shiftMonth(month, -1))}>Previous</button>
+            <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(shiftMonth(month, 1))}>Next</button>
+            {month !== today.slice(0, 7) && (
+              <button className="btn-ghost px-3 py-1.5" onClick={() => setMonth(today.slice(0, 7))}>This month</button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs lg:flex-col">
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-[var(--accent)]" />Approved</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-[var(--warn)]" />Waiting for an answer</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-slate-800" />Blacked out</span>
         </div>
-      </div>
 
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {notice && <p className="text-sm font-semibold text-[var(--success)]">{notice}</p>}
+        {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+        {notice && <p className="text-sm font-semibold text-[var(--success)]">{notice}</p>}
+        {!cal && !error && <p className="text-sm opacity-60">Loading…</p>}
+      </aside>
 
-      <div className="card overflow-hidden p-0">
+      <div className="card flex flex-col overflow-hidden p-0 lg:min-w-0 lg:flex-1">
         <div className="grid grid-cols-7 border-b border-[var(--border)] text-center text-xs font-bold uppercase tracking-wide opacity-60">
-          {DAY_HEADS.map((d) => <div key={d} className="py-2">{d}</div>)}
+          {DAY_HEADS.map((d) => <div key={d} className="py-1.5">{d}</div>)}
         </div>
-        <div className="grid grid-cols-7">
+        <div className="grid grid-cols-7 lg:min-h-0 lg:flex-1 lg:grid-rows-6">
           {days.map((d) => {
             const inMonth = d.slice(0, 7) === month;
             const b = blackout(d);
@@ -93,7 +104,7 @@ export default function TimeOffCalendarPage() {
             const isToday = d === today;
             return (
               <button key={d} type="button" onClick={() => { setNotice(null); setError(null); setSelected(d); }}
-                className={`flex min-h-24 min-w-0 flex-col justify-start border-b border-r border-[var(--border)] p-1.5 text-left transition-colors sm:min-h-28 ${
+                className={`flex min-h-24 min-w-0 flex-col justify-start overflow-hidden border-b border-r border-[var(--border)] p-1.5 text-left transition-colors sm:min-h-28 lg:min-h-0 ${
                   b ? DARK : 'hover:bg-[var(--surface-2)]'} ${inMonth ? '' : 'opacity-40'}`}>
                 <div className="flex items-center justify-between gap-1">
                   <span className={`text-sm font-bold ${isToday ? 'rounded-full bg-[var(--accent)] px-1.5 text-white' : ''}`}>
@@ -108,16 +119,17 @@ export default function TimeOffCalendarPage() {
                     {note}
                   </div>
                 )}
-                <ul className="mt-1 space-y-0.5">
-                  {off.map((r) => <Person key={r.id} r={r} />)}
+                <ul className="mt-0.5 space-y-px">
+                  {off.slice(0, MAX_NAMES).map((r) => <Person key={r.id} r={r} />)}
+                  {off.length > MAX_NAMES && (
+                    <li className="text-[11px] font-semibold leading-4 opacity-70">+{off.length - MAX_NAMES} more</li>
+                  )}
                 </ul>
               </button>
             );
           })}
         </div>
       </div>
-
-      {!cal && !error && <p className="text-sm opacity-60">Loading…</p>}
 
       {selected && (
         <DayPanel
@@ -253,7 +265,7 @@ function Person({ r }: { r: TimeOffRequest }) {
   const waiting = r.status === 'PENDING';
   return (
     <li title={`${r.name}: ${timeOffRange(r.startDate, r.endDate)}${waiting ? ' (waiting for an answer)' : ''}${r.note ? ` - ${r.note}` : ''}`}
-      className={`truncate rounded px-1 text-[11px] font-semibold leading-5 ${
+      className={`truncate rounded px-1 text-[11px] font-semibold leading-4 ${
         waiting
           ? 'border border-dashed border-[var(--warn)] text-[var(--warn)]'
           : 'bg-[var(--accent)] text-white'
