@@ -159,6 +159,9 @@ function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved 
 }) {
   const [noteText, setNoteText] = useState(note ?? '');
   const [reason, setReason] = useState('');
+  // The request being sent back, and the message for it.
+  const [sendingBack, setSendingBack] = useState<number | null>(null);
+  const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const label = longDayLabel(date);
@@ -196,12 +199,38 @@ function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved 
           {off.length === 0 ? (
             <p className="mt-1 text-sm opacity-70">No one is off this day.</p>
           ) : (
-            <ul className="mt-1 space-y-1 text-sm">
+            <ul className="mt-1 space-y-2 text-sm">
               {off.map((r) => (
                 <li key={r.id}>
                   <b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}
                   {r.status === 'PENDING' && <span className="font-semibold text-[var(--warn)]"> (waiting for an answer)</span>}
                   {r.note && <div className="text-xs opacity-70">{r.note}</div>}
+                  {r.status === 'PENDING' && (
+                    sendingBack === r.id ? (
+                      <div className="mt-1.5 space-y-1.5">
+                        <textarea className="input min-h-16" maxLength={500} autoFocus value={message}
+                          placeholder="Your message to them (they'll see it)" onChange={(e) => setMessage(e.target.value)} />
+                        <div className="flex gap-2">
+                          <button className="btn px-3 py-1 text-xs" disabled={busy || !message.trim()}
+                            onClick={() => void act(() => api.sendBackTimeOff(r.id, message.trim()), `Sent back ${r.name}'s request.`)}>
+                            Send back
+                          </button>
+                          <button className="btn-ghost px-3 py-1 text-xs" disabled={busy}
+                            onClick={() => { setSendingBack(null); setMessage(''); }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-1.5 flex gap-2">
+                        <button className="btn px-3 py-1 text-xs" disabled={busy}
+                          onClick={() => void act(() => api.approveTimeOff(r.id),
+                            `Approved ${r.name}'s time off. Those days are now RO on the schedule.`)}>
+                          Approve
+                        </button>
+                        <button className="btn-ghost px-3 py-1 text-xs" disabled={busy}
+                          onClick={() => { setSendingBack(r.id); setMessage(''); }}>Send back</button>
+                      </div>
+                    )
+                  )}
                 </li>
               ))}
             </ul>
