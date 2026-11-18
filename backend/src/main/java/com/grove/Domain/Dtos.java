@@ -241,6 +241,39 @@ public final class Dtos {
 	/** Setting a blackout's reason (optional). */
 	public record BlackoutInput(String note) {}
 
+	/** One day on the owner's business card. total is null until the day is saved (BLOCKED or FAILED). */
+	public record DailySalesDay(
+		LocalDate date,
+		/** OK, BLOCKED (a timecard was open), or FAILED. */
+		String status,
+		String message,
+		/** Saved, and someone worked. */
+		boolean open,
+		/** Services after discounts plus retail. */
+		BigDecimal total,
+		BigDecimal netServiceSales,
+		BigDecimal retailSales,
+		BigDecimal tips,
+		Integer clients,
+		Integer services,
+		Integer staffWorked) {}
+
+	/** The owner's Home page card: the last 30 days, the latest open day, and this month's projection. */
+	public record DailySalesView(
+		/** False when the server has no Salon Ultimate sign-in. */
+		boolean configured,
+		/** When today's numbers are pulled (30 minutes after closing). */
+		LocalDateTime todayPullsAt,
+		List<DailySalesDay> days,
+		DailySalesDay latest,
+		/** Today's pull, once it has run; null before then. */
+		DailySalesDay today,
+		BigDecimal monthToDate,
+		int openDaysSoFar,
+		BigDecimal averagePerOpenDay,
+		int openDaysInMonth,
+		BigDecimal projectedMonth) {}
+
 	/** A note on one day of the calendar. */
 	public record DayNote(LocalDate date, String text) {}
 

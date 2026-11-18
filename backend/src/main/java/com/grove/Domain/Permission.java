@@ -28,7 +28,10 @@ public enum Permission {
 		EnumSet.of(Role.GENERAL_MANAGER)),
 	VIEW_PAYROLL("See the Payroll tab",
 		"See everything for a pay period in one place: payroll notes plus paid time off hours.",
-		EnumSet.noneOf(Role.class));
+		EnumSet.noneOf(Role.class)),
+	TIMECARD_ALERTS("Get open timecard alerts",
+		"A notification 30 minutes after closing when someone is still clocked in.",
+		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER));
 
 	private final String label;
 	private final String description;

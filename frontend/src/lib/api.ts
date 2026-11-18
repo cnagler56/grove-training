@@ -247,6 +247,44 @@ export interface TimeOffRequest {
   createdAt: string | null;
 }
 
+/** One day's business. total is null until the day is saved. */
+export interface DailySalesDay {
+  date: string;
+  status: 'OK' | 'BLOCKED' | 'FAILED';
+  message: string | null;
+  /** Saved, and someone worked. */
+  open: boolean;
+  /** Services after discounts plus retail. */
+  total: number | null;
+  netServiceSales: number | null;
+  retailSales: number | null;
+  tips: number | null;
+  clients: number | null;
+  services: number | null;
+  staffWorked: number | null;
+}
+
+/** An owner on Settings, and whether they get the daily sales summary notification. */
+export interface SummaryRecipient {
+  userId: number;
+  name: string;
+  on: boolean;
+}
+
+/** The owner's Business card on Home. */
+export interface DailySalesView {
+  configured: boolean;
+  todayPullsAt: string;
+  days: DailySalesDay[];
+  latest: DailySalesDay | null;
+  today: DailySalesDay | null;
+  monthToDate: number;
+  openDaysSoFar: number;
+  averagePerOpenDay: number;
+  openDaysInMonth: number;
+  projectedMonth: number;
+}
+
 /** A day no one can ask for off. date is "YYYY-MM-DD". */
 export interface BlackoutDay {
   date: string;
@@ -296,7 +334,7 @@ export interface VacationPayQueue {
 }
 
 export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES'
-  | 'PAYROLL_NOTES' | 'VIEW_PAYROLL';
+  | 'PAYROLL_NOTES' | 'VIEW_PAYROLL' | 'TIMECARD_ALERTS';
 
 /** A pay period, keyed by its check date. Dates are "YYYY-MM-DD". */
 export interface PayPeriod {
@@ -837,6 +875,10 @@ export const api = {
   requestTimeOff: (r: { startDate: string; endDate: string; note: string | null }) =>
     send<TimeOffRequest>('/api/time-off', 'POST', r),
   cancelTimeOff: (id: number) => send<void>(`/api/time-off/${id}`, 'DELETE'),
+  salesSummaryRecipients: () => send<SummaryRecipient[]>('/api/owner/daily-sales/recipients'),
+  setSalesSummaryRecipient: (userId: number, on: boolean) =>
+    send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),
+  dailySales: () => send<DailySalesView>('/api/owner/daily-sales'),
   timeOffBlackouts: () => send<BlackoutDay[]>('/api/time-off/blackouts'),
   timeOffCalendar: (from: string, to: string) => send<TimeOffCalendar>(`/api/time-off/calendar?from=${from}&to=${to}`),
   blackOutDay: (date: string, note: string | null) => send<BlackoutDay>(`/api/time-off/blackouts/${date}`, 'PUT', { note }),
