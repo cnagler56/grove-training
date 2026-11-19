@@ -147,6 +147,11 @@ public class BunnyStreamService {
 
 	private static ResponseStatusException upstream(String what, RestClientException e) {
 		System.out.println("[BUNNY] failed to " + what + ": " + e.getMessage());
+		if (e instanceof HttpClientErrorException.Unauthorized || e instanceof HttpClientErrorException.Forbidden) {
+			return new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+				"Couldn't " + what + ": Bunny Stream rejected the API key. Check BUNNY_LIBRARY_ID and BUNNY_API_KEY"
+					+ " (Bunny: Stream, your library, API).");
+		}
 		return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Couldn't " + what + " on Bunny Stream");
 	}
 
