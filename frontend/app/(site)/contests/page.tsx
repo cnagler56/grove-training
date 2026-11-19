@@ -270,8 +270,23 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
     setForm({ ...form, teamNames: form.teamNames.filter((_, j) => j !== i), picked });
   }
 
+  // Why a split button did nothing (fewer than two people ticked), shown beside the buttons.
+  const [splitHint, setSplitHint] = useState<string | null>(null);
+  const tooFewToSplit = pickedIds.length < 2;
+  useEffect(() => {
+    if (!tooFewToSplit) setSplitHint(null);
+  }, [tooFewToSplit]);
+  function needPeople() {
+    if (!tooFewToSplit) return false;
+    setSplitHint(pickedIds.length === 0
+      ? 'Tick who\'s in under Who\'s in below first, then split them.'
+      : 'Tick at least one more person under Who\'s in below first.');
+    return true;
+  }
+
   /** Shuffle everyone picked and deal them out, so team sizes differ by at most one. */
   function splitEvenly() {
+    if (needPeople()) return;
     const shuffled = [...pickedIds].sort(() => Math.random() - 0.5);
     setForm({ ...form, picked: Object.fromEntries(shuffled.map((id, i) => [id, i % form.teamNames.length])) });
   }
@@ -282,6 +297,7 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
    * People worth the same are shuffled, so pressing again can give a different mix.
    */
   function balanceByValue() {
+    if (needPeople()) return;
     const teamCount = form.teamNames.length;
     const room = Math.ceil(pickedIds.length / teamCount);
     const totals = Array(teamCount).fill(0);
@@ -365,15 +381,16 @@ function ContestForm({ form, setForm, people, busy, isNew, onSubmit, onCancel }:
                   Add a team
                 </button>
               )}
-              <button type="button" className="btn-ghost" disabled={pickedIds.length < 2} onClick={splitEvenly}>
+              <button type="button" className={`btn-ghost${tooFewToSplit ? ' opacity-50' : ''}`} onClick={splitEvenly}>
                 Split evenly at random
               </button>
               {handicapped && (
-                <button type="button" className="btn-ghost" disabled={pickedIds.length < 2} onClick={balanceByValue}>
+                <button type="button" className={`btn-ghost${tooFewToSplit ? ' opacity-50' : ''}`} onClick={balanceByValue}>
                   Balance by value
                 </button>
               )}
             </div>
+            {splitHint && <p className="text-sm font-semibold text-[var(--danger)]">{splitHint}</p>}
             <p className="text-xs opacity-70">
               {handicapped
                 ? 'Split at random, balance the teams by value, or pick each person\'s team in the list below.'
