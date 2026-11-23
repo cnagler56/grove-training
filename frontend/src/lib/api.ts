@@ -202,6 +202,8 @@ export interface MyPermissions {
   payrollNotes: boolean;
   /** The Payroll tab: everything for a pay period. */
   viewPayroll: boolean;
+  /** The monthly goals card on Home. */
+  viewGoals: boolean;
 }
 
 export interface TeamComment {
@@ -334,7 +336,55 @@ export interface VacationPayQueue {
 }
 
 export type PermissionKey = 'VIEW_SCHEDULE' | 'EDIT_SCHEDULE' | 'APPROVE_SCHEDULE' | 'APPROVE_TIME_OFF' | 'POST_UPDATES'
-  | 'PAYROLL_NOTES' | 'VIEW_PAYROLL' | 'TIMECARD_ALERTS';
+  | 'PAYROLL_NOTES' | 'VIEW_PAYROLL' | 'TIMECARD_ALERTS' | 'VIEW_GOALS';
+
+/** A month's goals; null = no goal for that one. */
+export interface MonthlyGoals {
+  sales: number | null;
+  waxes: number | null;
+  treatments: number | null;
+  /** Product per guest: retail ÷ guests. */
+  ppg: number | null;
+}
+
+export interface GoalLine {
+  key: 'SALES' | 'WAXES' | 'TREATMENTS' | 'PPG';
+  label: string;
+  money: boolean;
+  goal: number;
+  /** For PPG, the month so far (null before any guests). */
+  done: number | null;
+  /** Null for PPG. */
+  left: number | null;
+  /** Left ÷ open days left; for PPG, the PPG the rest of the month needs. */
+  perDay: number | null;
+  met: boolean;
+}
+
+export interface GoalDayNeed {
+  date: string;
+  /** Stylist hours the day is weighted by. */
+  hours: number;
+  /** True when the hours come from the schedule, false when from that weekday's usual hours. */
+  scheduled: boolean;
+  sales: number | null;
+  waxes: number | null;
+  treatments: number | null;
+}
+
+export interface GoalsView {
+  month: string;
+  monthLabel: string;
+  hasGoals: boolean;
+  lines: GoalLine[];
+  days: GoalDayNeed[];
+  daysLeft: number;
+  /** Past days this month whose numbers aren't in (open timecard, or not pulled yet). */
+  daysNotIn: number;
+  /** Saved days whose waxes and treatments are still being filled in. */
+  daysCountsPending: number;
+  ppgNeeded: number | null;
+}
 
 /** A pay period, keyed by its check date. Dates are "YYYY-MM-DD". */
 export interface PayPeriod {
@@ -879,6 +929,9 @@ export const api = {
   setSalesSummaryRecipient: (userId: number, on: boolean) =>
     send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),
   dailySales: () => send<DailySalesView>('/api/owner/daily-sales'),
+  goals: () => send<GoalsView>('/api/goals'),
+  monthlyGoals: (month: string) => send<MonthlyGoals>(`/api/owner/goals/${month}`),
+  setMonthlyGoals: (month: string, g: MonthlyGoals) => send<MonthlyGoals>(`/api/owner/goals/${month}`, 'PUT', g),
   retryDailySales: (date: string) => send<DailySalesView>(`/api/owner/daily-sales/${date}/retry`, 'POST'),
   timeOffBlackouts: () => send<BlackoutDay[]>('/api/time-off/blackouts'),
   timeOffCalendar: (from: string, to: string) => send<TimeOffCalendar>(`/api/time-off/calendar?from=${from}&to=${to}`),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PayRulesCard from '@/src/components/PayRulesCard';
 import SalesSummaryCard from '@/src/components/SalesSummaryCard';
+import MonthlyGoalsCard from '@/src/components/MonthlyGoalsCard';
 import { api, type PermissionKey, type PermissionRule, type UserRole } from '@/src/lib/api';
 import { ROLES } from '@/src/lib/roles';
 
@@ -100,6 +101,7 @@ export default function SettingsPage() {
         {dirty && <span className="text-sm font-semibold text-[var(--warn)]">Unsaved changes</span>}
       </div>
 
+      <MonthlyGoalsCard />
       <SalesSummaryCard />
       <PayRulesCard />
     </div>

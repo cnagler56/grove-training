@@ -13,7 +13,7 @@ import { turnOffPush } from './push';
 import { confirmLeave, leavingNow } from './leaveGuard';
 
 const NO_PERMISSIONS: MyPermissions = { viewSchedule: false, editSchedule: false, approveSchedule: false, approveTimeOff: false, postUpdates: false,
-  payrollNotes: false, viewPayroll: false };
+  payrollNotes: false, viewPayroll: false, viewGoals: false };
 
 interface UserContextValue {
   user: User | null;

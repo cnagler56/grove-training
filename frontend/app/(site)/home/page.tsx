@@ -15,6 +15,7 @@ import NotificationsCard from '@/src/components/NotificationsCard';
 import ContestHomeCard from '@/src/components/ContestHomeCard';
 import CelebrationMoment from '@/src/components/CelebrationMoment';
 import OwnerBusinessCard from '@/src/components/OwnerBusinessCard';
+import GoalsCard from '@/src/components/GoalsCard';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -98,6 +99,7 @@ export default function StaffHomePage() {
       {/* Everything below "Celebrating today" is half width, two to a row. */}
       <div className="grid items-start gap-4 md:grid-cols-2">
       {isOwner && <OwnerBusinessCard />}
+      {perms.viewGoals && <GoalsCard isOwner={isOwner} />}
       {toApprove.length > 0 && (
         <section className="card border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-5">
           <h2 className="text-lg font-extrabold">Schedule waiting for your approval</h2>

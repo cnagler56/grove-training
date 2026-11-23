@@ -182,7 +182,7 @@ public final class Dtos {
 
 	/** What the signed-in person can do with the schedule (drives tabs and buttons). */
 	public record MyPermissions(boolean viewSchedule, boolean editSchedule, boolean approveSchedule, boolean approveTimeOff, boolean postUpdates,
-		boolean payrollNotes, boolean viewPayroll) {}
+		boolean payrollNotes, boolean viewPayroll, boolean viewGoals) {}
 
 	/** Starting a Team board post. {@code withPhotos}: photos follow, so the text may be blank. */
 	public record TeamPostInput(String body, boolean withPhotos) {}

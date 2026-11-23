@@ -143,7 +143,10 @@ public class DailySalesService {
 			LocalDate d = today.minusDays(i);
 			DailySales saved = days.findById(d).orElse(null);
 			boolean due = saved == null
-				|| (saved.getStatus() != Status.OK && saved.getAttemptedAt().isBefore(now.minusHours(RETRY_HOURS)));
+				|| (saved.getStatus() != Status.OK && saved.getAttemptedAt().isBefore(now.minusHours(RETRY_HOURS)))
+				// Saved before waxes and treatments were counted: this month's days fill in for goals.
+				|| (saved.wasOpen() && saved.getWaxes() == null && YearMonth.from(d).equals(YearMonth.from(today))
+					&& saved.getAttemptedAt().isBefore(now.minusHours(1)));
 			if (!due) continue;
 			pull(d, false);
 			pulled++;
@@ -217,6 +220,17 @@ public class DailySalesService {
 			Thread.currentThread().interrupt();
 		} catch (Exception e) {
 			log.warn("Stylist Comparison for {} failed; saving the day without clients and services", date, e);
+		}
+		try {
+			String html = salonUltimate.detailedServiceByEmployee(date, date);
+			if (html == null) return;
+			var types = SalonUltimateReport.parseDetailedService(html).values();
+			d.setWaxes(types.stream().mapToInt(SalonUltimateReport.ServiceTypes::waxes).sum());
+			d.setTreatments(types.stream().mapToInt(SalonUltimateReport.ServiceTypes::treatments).sum());
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (Exception e) {
+			log.warn("Detailed Service for {} failed; saving the day without waxes and treatments", date, e);
 		}
 	}
 

@@ -31,6 +31,9 @@ public enum Permission {
 		EnumSet.noneOf(Role.class)),
 	TIMECARD_ALERTS("Get open timecard alerts",
 		"A notification 30 minutes after closing when someone is still clocked in.",
+		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER)),
+	VIEW_GOALS("See monthly goals",
+		"The Home page card with this month's goals, how much is done, and what each remaining day needs.",
 		EnumSet.of(Role.GENERAL_MANAGER, Role.MANAGER));
 
 	private final String label;
