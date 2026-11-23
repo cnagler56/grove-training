@@ -372,6 +372,22 @@ export interface GoalDayNeed {
   treatments: number | null;
 }
 
+/** What's booked in Salon Ultimate's appointment book for a day. */
+export interface BookedDay {
+  date: string;
+  /** Why it couldn't be read; the numbers are 0 then. */
+  problem: string | null;
+  /** The prices on the book. */
+  projected: number;
+  /** Separate visits. */
+  guests: number;
+  services: number;
+  haircuts: number;
+  colors: number;
+  treatments: number;
+  waxes: number;
+}
+
 export interface GoalsView {
   month: string;
   monthLabel: string;
@@ -930,6 +946,7 @@ export const api = {
     send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),
   dailySales: () => send<DailySalesView>('/api/owner/daily-sales'),
   goals: () => send<GoalsView>('/api/goals'),
+  booked: (date: string) => send<BookedDay>(`/api/goals/booked?date=${date}`),
   monthlyGoals: (month: string) => send<MonthlyGoals>(`/api/owner/goals/${month}`),
   setMonthlyGoals: (month: string, g: MonthlyGoals) => send<MonthlyGoals>(`/api/owner/goals/${month}`, 'PUT', g),
   retryDailySales: (date: string) => send<DailySalesView>(`/api/owner/daily-sales/${date}/retry`, 'POST'),

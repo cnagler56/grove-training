@@ -139,6 +139,30 @@ public class SalonUltimateClient {
 		return res.body();
 	}
 
+	/**
+	 * The appointment book for one day as JSON: every booked service with its price and
+	 * category, as the Appt. Book screen loads it. Read only. The screen opens in the
+	 * store view, so the session switches there and opens the book first.
+	 */
+	public String appointmentBook(LocalDate date) throws IOException, InterruptedException {
+		HttpClient http = signIn();
+		for (String path : new String[] { "/report?store_id=" + storeId, "/appointment?date=current&callPostCookie=0&shortview=1&appType=1" }) {
+			HttpResponse<Void> opened = http.send(
+				HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(30)).header("User-Agent", USER_AGENT).GET().build(),
+				HttpResponse.BodyHandlers.discarding());
+			if (opened.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + opened.statusCode());
+		}
+		URI book = URI.create(baseUrl + "/api/v2/AppointmentBook?employeeFilters.showOffEmployees=false&date=" + date);
+		HttpResponse<String> res = http.send(HttpRequest.newBuilder(book)
+			.timeout(Duration.ofSeconds(60))
+			.header("User-Agent", USER_AGENT)
+			.header("Accept", "application/json")
+			.header("Referer", baseUrl + "/appointment?date=current&callPostCookie=0&shortview=1&appType=1")
+			.GET().build(), HttpResponse.BodyHandlers.ofString());
+		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
+		return res.body();
+	}
+
 	/** A fresh signed-in session. */
 	private HttpClient signIn() throws IOException, InterruptedException {
 		HttpClient http = HttpClient.newBuilder()

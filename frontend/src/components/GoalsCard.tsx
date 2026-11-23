@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, type GoalDayNeed, type GoalLine, type GoalsView } from '@/src/lib/api';
+import { api, type BookedDay, type GoalDayNeed, type GoalLine, type GoalsView } from '@/src/lib/api';
 import { money, moneyCents } from '@/src/lib/format';
 import { addDays, longDayLabel, todayIso } from '@/src/lib/schedule';
 
@@ -19,10 +19,22 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
   const [data, setData] = useState<GoalsView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDays, setShowDays] = useState(false);
+  // What's in Salon Ultimate's appointment book, by day.
+  const [booked, setBooked] = useState<Record<string, BookedDay>>({});
 
   useEffect(() => {
     api.goals().then(setData).catch((e) => setError(e.message));
   }, []);
+
+  // The goal's day, and tomorrow too while the goal's day is today.
+  const goalDay = data?.days.find((d) => d.hours > 0)?.date ?? null;
+  useEffect(() => {
+    if (!goalDay) return;
+    const want = goalDay === todayIso() ? [goalDay, addDays(goalDay, 1)] : [goalDay];
+    for (const date of want) {
+      api.booked(date).then((b) => setBooked((m) => ({ ...m, [date]: b }))).catch(() => {});
+    }
+  }, [goalDay]);
 
   if (error) return isOwner ? <section className="card p-5 text-sm text-[var(--danger)]">{error}</section> : null;
   if (!data) return null;
@@ -40,6 +52,11 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
   const counts = data.lines.filter((l) => l.key !== 'PPG');
   const ppg = data.lines.find((l) => l.key === 'PPG') ?? null;
   const dayName = !day ? null : day.date === today ? 'Today' : day.date === addDays(today, 1) ? 'Tomorrow' : weekday(day.date);
+  const dayBook = day && booked[day.date]?.problem == null ? booked[day.date] ?? null : null;
+  const tomorrow = day && day.date === today ? booked[addDays(today, 1)] ?? null : null;
+  const bookedFor = (key: GoalLine['key']) => !dayBook ? undefined
+    : key === 'SALES' ? `Booked ${money(dayBook.projected)}`
+    : key === 'WAXES' ? `Booked ${dayBook.waxes}` : `Booked ${dayBook.treatments}`;
 
   return (
     <section className="card overflow-hidden p-0">
@@ -52,7 +69,7 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {counts.map((l) => (
-              <DayTile key={l.key} label={l.label} met={l.met}
+              <DayTile key={l.key} label={l.label} met={l.met} booked={bookedFor(l.key)}
                 value={l.key === 'SALES' ? (day.sales == null ? '-' : money(day.sales))
                   : l.key === 'WAXES' ? String(day.waxes ?? '-') : String(day.treatments ?? '-')} />
             ))}
@@ -61,7 +78,13 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
                 value={ppg.perDay == null ? moneyCents(ppg.goal) : moneyCents(Math.max(ppg.perDay, 0))} />
             )}
           </div>
-          <p className="mt-2 text-xs opacity-80">
+          {dayBook && (
+            <p className="mt-2 text-sm font-semibold">
+              Booked in the appointment book: {dayBook.guests} {dayBook.guests === 1 ? 'guest' : 'guests'},{' '}
+              {money(dayBook.projected)} projected.
+            </p>
+          )}
+          <p className="mt-1 text-xs opacity-80">
             Based on {count(day.hours)} {day.scheduled ? 'scheduled' : 'usual'} stylist {day.hours === 1 ? 'hour' : 'hours'} that day, so busier days carry more.
           </p>
         </div>
@@ -71,6 +94,8 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
           <p className="mt-1 text-sm opacity-80">No open days left this month.</p>
         </div>
       )}
+
+      {tomorrow && <TomorrowBook book={tomorrow} />}
 
       <div className="space-y-3 p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -112,11 +137,32 @@ export default function GoalsCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
-function DayTile({ label, value, met }: { label: string; value: string; met: boolean }) {
+function DayTile({ label, value, met, booked }: { label: string; value: string; met: boolean; booked?: string }) {
   return (
     <div className="rounded-lg bg-[var(--surface)] px-3 py-2 text-[var(--foreground)]">
       <div className="text-[11px] font-semibold uppercase leading-tight tracking-wide opacity-60">{label}</div>
       <div className="mt-0.5 text-2xl font-extrabold tabular-nums">{met ? 'Met' : value}</div>
+      {booked && <div className="text-xs font-semibold tabular-nums text-[var(--accent-strong)]">{booked}</div>}
+    </div>
+  );
+}
+
+/** Tomorrow's appointment book, shown while today's goal is up. */
+function TomorrowBook({ book }: { book: BookedDay }) {
+  return (
+    <div className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-5 py-3 text-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="font-bold">Tomorrow&apos;s appointment book</h3>
+        {book.problem == null && <span className="text-lg font-extrabold tabular-nums">{money(book.projected)} projected</span>}
+      </div>
+      {book.problem != null ? (
+        <p className="mt-1 text-xs opacity-70">{book.problem}</p>
+      ) : (
+        <p className="mt-1 tabular-nums">
+          {book.guests} {book.guests === 1 ? 'guest' : 'guests'} booked: {book.haircuts} haircuts, {book.colors} colors,
+          {' '}{book.treatments} treatments, {book.waxes} waxes
+        </p>
+      )}
     </div>
   );
 }
