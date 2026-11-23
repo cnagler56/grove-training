@@ -18,8 +18,10 @@ import java.util.concurrent.CompletableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.grove.Domain.AppSetting;
 import com.grove.Domain.DailySales;
@@ -111,6 +113,27 @@ public class DailySalesService {
 	/** In the background, if the server was asleep at the usual time (the owner's Home page asks). */
 	public void catchUp() {
 		if (salonUltimate.isConfigured()) CompletableFuture.runAsync(this::run);
+	}
+
+	/**
+	 * The owner's Try again on a day that didn't come in (say a timecard was closed late).
+	 * Quiet like the daily retries: the owner pressing it sees the numbers on the card.
+	 */
+	public DailySalesView retry(LocalDate date) {
+		if (!salonUltimate.isConfigured()) {
+			throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Salon Ultimate sign-in isn't set up on the server");
+		}
+		LocalDateTime now = LocalDateTime.now(zone);
+		LocalDate today = now.toLocalDate();
+		if (date == null || date.isAfter(today) || date.isBefore(today.minusDays(DAYS_SHOWN - 1L))) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only the last " + DAYS_SHOWN + " days can be pulled again");
+		}
+		if (date.equals(today) && now.isBefore(pullTime(today))) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+				"Today's numbers can't be pulled until 30 minutes after closing");
+		}
+		pull(date, false);
+		return view();
 	}
 
 	/** Older days that are missing, or didn't save and are due another try. Quiet: no notifications. */

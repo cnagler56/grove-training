@@ -879,6 +879,7 @@ export const api = {
   setSalesSummaryRecipient: (userId: number, on: boolean) =>
     send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),
   dailySales: () => send<DailySalesView>('/api/owner/daily-sales'),
+  retryDailySales: (date: string) => send<DailySalesView>(`/api/owner/daily-sales/${date}/retry`, 'POST'),
   timeOffBlackouts: () => send<BlackoutDay[]>('/api/time-off/blackouts'),
   timeOffCalendar: (from: string, to: string) => send<TimeOffCalendar>(`/api/time-off/calendar?from=${from}&to=${to}`),
   blackOutDay: (date: string, note: string | null) => send<BlackoutDay>(`/api/time-off/blackouts/${date}`, 'PUT', { note }),

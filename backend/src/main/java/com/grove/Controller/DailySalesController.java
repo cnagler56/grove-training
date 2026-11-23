@@ -1,9 +1,12 @@
 package com.grove.Controller;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +47,13 @@ public class DailySalesController {
 	public DailySalesView dailySales(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		sessions.requireOwner(token);
 		return dailySales.view();
+	}
+
+	/** Try again on a day that didn't come in, e.g. after a late timecard is closed. */
+	@PostMapping("/api/owner/daily-sales/{date}/retry")
+	public DailySalesView retry(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable LocalDate date) {
+		sessions.requireOwner(token);
+		return dailySales.retry(date);
 	}
 }

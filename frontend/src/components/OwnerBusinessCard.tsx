@@ -20,10 +20,30 @@ export default function OwnerBusinessCard() {
   const [data, setData] = useState<DailySalesView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
+  // The day being pulled again, and how the last try went.
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const [retryResult, setRetryResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     api.dailySales().then(setData).catch((e) => setError(e.message));
   }, []);
+
+  async function retry(date: string) {
+    setRetrying(date);
+    setRetryResult(null);
+    try {
+      const next = await api.retryDailySales(date);
+      setData(next);
+      const day = next.days.find((d) => d.date === date);
+      setRetryResult(day?.status === 'OK'
+        ? { ok: true, text: `${longDayLabel(date)} is in now.` }
+        : { ok: false, text: `${longDayLabel(date)} still didn't come in${day?.message ? `: ${day.message}` : '.'}` });
+    } catch (e) {
+      setRetryResult({ ok: false, text: e instanceof Error ? e.message : 'Couldn’t try again' });
+    } finally {
+      setRetrying(null);
+    }
+  }
 
   if (error) return <section className="card p-5 text-sm text-[var(--danger)]">{error}</section>;
   if (!data) return <section className="card p-5 text-sm opacity-60">Loading business…</section>;
@@ -31,7 +51,8 @@ export default function OwnerBusinessCard() {
   const today = todayIso();
   const month = MONTHS[Number(today.slice(5, 7)) - 1];
   const latest = data.latest;
-  const blockedToday = data.today && data.today.status === 'BLOCKED' ? data.today : null;
+  // Days that didn't come in (open timecard, or Salon Ultimate couldn't be reached), newest first.
+  const missed = data.days.filter((d) => d.status !== 'OK').reverse();
 
   return (
     <section className="card space-y-4 p-5">
@@ -44,9 +65,26 @@ export default function OwnerBusinessCard() {
         </span>
       </div>
 
-      {blockedToday && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-[var(--warn)]">
-          Today&apos;s numbers are waiting on an open timecard: {blockedToday.message}
+      {missed.length > 0 && data.configured && (
+        <ul className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 text-sm">
+          {missed.map((d) => (
+            <li key={d.date} className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 font-semibold text-[var(--warn)]">
+                {d.date === today ? 'Today' : longDayLabel(d.date)}
+                {d.status === 'BLOCKED' ? ' is waiting on an open timecard' : ' didn’t come in'}
+                {d.message ? `: ${d.message}` : ''}
+              </span>
+              <button className="btn-ghost" disabled={retrying !== null} onClick={() => void retry(d.date)}>
+                {retrying === d.date ? 'Trying…' : 'Try again'}
+              </button>
+            </li>
+          ))}
+          <li className="text-xs opacity-70">Once the timecard is closed in Salon Ultimate, press Try again.</li>
+        </ul>
+      )}
+      {retryResult && (
+        <p className={`text-sm font-semibold ${retryResult.ok ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+          {retryResult.text}
         </p>
       )}
 

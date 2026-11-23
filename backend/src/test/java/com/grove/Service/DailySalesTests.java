@@ -193,6 +193,35 @@ class DailySalesTests {
 		mvc.perform(get("/api/owner/daily-sales").cookie(manager)).andExpect(status().isForbidden());
 	}
 
+	@Test
+	void anOwnerCanTryABlockedDayAgainOnceTheTimecardIsClosed() throws Exception {
+		LocalDate yesterday = LocalDate.now(java.time.ZoneId.of("America/Chicago")).minusDays(1);
+		when(salonUltimate.weekReport(any(), any())).thenReturn(
+			"Could Not Display Report. There are unclosed time cards for the following employees: Ava Stone. Close them.");
+		assertThat(service.pull(yesterday, true).getStatus()).isEqualTo(DailySales.Status.BLOCKED);
+		String label = yesterday.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d", java.util.Locale.US));
+		// The card's usual catch-up may pull today too, so count only notifications about this day.
+		java.util.function.Supplier<Long> aboutIt = () -> inbox.findAll().stream()
+			.filter(n -> (n.getTitle() + " " + n.getBody()).contains(label)).count();
+		long notified = aboutIt.get();
+
+		// She clocks out; the owner presses Try again.
+		when(salonUltimate.weekReport(any(), any())).thenReturn(SalonUltimateReportTest.REPORT);
+		mvc.perform(post("/api/owner/daily-sales/" + yesterday + "/retry").cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.days[?(@.date == '" + yesterday + "')].status").value("OK"));
+		assertThat(days.findById(yesterday).orElseThrow().getStatus()).isEqualTo(DailySales.Status.OK);
+		assertThat(aboutIt.get()).isEqualTo(notified); // quiet
+
+		// Only owners, and only recent days that have happened.
+		mvc.perform(post("/api/owner/daily-sales/" + yesterday + "/retry").cookie(login("max@grove.test")))
+			.andExpect(status().isForbidden());
+		mvc.perform(post("/api/owner/daily-sales/" + yesterday.plusDays(2) + "/retry").cookie(owner))
+			.andExpect(status().isBadRequest());
+		mvc.perform(post("/api/owner/daily-sales/" + yesterday.minusDays(60) + "/retry").cookie(owner))
+			.andExpect(status().isBadRequest());
+	}
+
 	private static DailySales open(int dayOfMonth, String net) {
 		DailySales d = new DailySales(LocalDate.of(2026, 11, dayOfMonth));
 		d.setStatus(DailySales.Status.OK);
