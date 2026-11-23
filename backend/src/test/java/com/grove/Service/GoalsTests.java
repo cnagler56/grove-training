@@ -76,10 +76,15 @@ class GoalsTests {
 		// History: Saturdays 60 worked hours, Sundays 20, weekdays 40; 2 guests an hour.
 		for (LocalDate d = today.minusDays(GoalsService.HISTORY_DAYS); d.isBefore(today); d = d.plusDays(1)) {
 			int hours = d.getDayOfWeek() == DayOfWeek.SATURDAY ? 60 : d.getDayOfWeek() == DayOfWeek.SUNDAY ? 20 : 40;
-			// This month so far: $1,000 a day, $100 of it retail, 2 waxes and 3 treatments.
-			days.save(day(d, hours, d.getMonthValue() == 11 ? "900" : "500", "100", 2, 3));
+			// This month so far: $1,000 a day, $100 of it retail.
+			days.save(day(d, hours, d.getMonthValue() == 11 ? "900" : "500", "100"));
 		}
+		// Waxes and treatments come from one Detailed Service report for the month so far (4 waxes, 6 treatments).
+		org.mockito.Mockito.when(salonUltimate.isConfigured()).thenReturn(true);
+		org.mockito.Mockito.when(salonUltimate.detailedServiceByEmployee(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 19)))
+			.thenReturn(SalonUltimateReportTest.DETAILED_SERVICE);
 		goals.set(nov, new GoalsService.Goals(new BigDecimal("30000"), 60, 80, new BigDecimal("2.00")));
+		goals.refreshCounts(nov, today);
 	}
 
 	@Test
@@ -105,9 +110,11 @@ class GoalsTests {
 		assertThat(sun.sales()).isEqualByComparingTo("500");
 
 		// Counts are whole and add up to exactly what's left.
-		assertThat(line(v, "WAXES").left()).isEqualByComparingTo("22"); // 60 - 38
-		assertThat(v.days().stream().mapToInt(GoalsService.DayNeed::waxes).sum()).isEqualTo(22);
-		assertThat(v.days().stream().mapToInt(GoalsService.DayNeed::treatments).sum()).isEqualTo(80 - 57);
+		assertThat(v.countsThrough()).isEqualTo(LocalDate.of(2026, 11, 19));
+		assertThat(line(v, "WAXES").done()).isEqualByComparingTo("4");
+		assertThat(line(v, "WAXES").left()).isEqualByComparingTo("56");
+		assertThat(v.days().stream().mapToInt(GoalsService.DayNeed::waxes).sum()).isEqualTo(56);
+		assertThat(v.days().stream().mapToInt(GoalsService.DayNeed::treatments).sum()).isEqualTo(80 - 6);
 	}
 
 	@Test
@@ -161,6 +168,15 @@ class GoalsTests {
 	}
 
 	@Test
+	void anOpenTimecardKeepsTheLastCounts() throws Exception {
+		org.mockito.Mockito.when(salonUltimate.detailedServiceByEmployee(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+			.thenReturn("Could Not Display Report. There are unclosed time cards for the following employees: Ava Stone. Close them.");
+		goals.refreshCounts(nov, today.plusDays(1));
+		assertThat(goals.counts(nov).waxes()).isEqualTo(4);
+		assertThat(goals.counts(nov).through()).isEqualTo(LocalDate.of(2026, 11, 19));
+	}
+
+	@Test
 	void apportionAddsUpExactly() {
 		int[] out = GoalsService.apportion(10, List.of(new BigDecimal("3"), new BigDecimal("3"), new BigDecimal("3")));
 		assertThat(out[0] + out[1] + out[2]).isEqualTo(10);
@@ -175,7 +191,7 @@ class GoalsTests {
 		return v.days().stream().filter(d -> d.date().equals(date)).findFirst().orElseThrow();
 	}
 
-	private static DailySales day(LocalDate date, int hours, String net, String retail, int waxes, int treatments) {
+	private static DailySales day(LocalDate date, int hours, String net, String retail) {
 		DailySales d = new DailySales(date);
 		d.setStatus(DailySales.Status.OK);
 		d.setStaffWorked(4);
@@ -183,8 +199,6 @@ class GoalsTests {
 		d.setRetailSales(new BigDecimal(retail));
 		d.setFloorHours(BigDecimal.valueOf(hours));
 		d.setClients(hours * 2);
-		d.setWaxes(waxes);
-		d.setTreatments(treatments);
 		d.setAttemptedAt(LocalDateTime.now());
 		return d;
 	}

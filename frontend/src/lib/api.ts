@@ -381,8 +381,8 @@ export interface GoalsView {
   daysLeft: number;
   /** Past days this month whose numbers aren't in (open timecard, or not pulled yet). */
   daysNotIn: number;
-  /** Saved days whose waxes and treatments are still being filled in. */
-  daysCountsPending: number;
+  /** The last day the waxes and treatments include; null while they load. */
+  countsThrough: string | null;
   ppgNeeded: number | null;
 }
 

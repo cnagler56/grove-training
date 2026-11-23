@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.TextStyle;
@@ -17,11 +18,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,6 +53,12 @@ import com.grove.Repository.UserRepository;
 public class GoalsService {
 
 	static final String KEY_PREFIX = "goals.";
+	/** Month-to-date waxes and treatments, e.g. "goals.counts.2026-11". */
+	static final String COUNTS_PREFIX = "goals.counts.";
+	/** Pulled again after this long, so today's count catches up once it's in. */
+	static final int COUNTS_FRESH_MINUTES = 60;
+
+	private static final Logger log = LoggerFactory.getLogger(GoalsService.class);
 	/** How far back "usual hours" and guests per hour look. */
 	static final int HISTORY_DAYS = 56;
 	/** Roles whose scheduled hours bring in sales. */
@@ -58,15 +69,17 @@ public class GoalsService {
 	private final ShiftRepository shifts;
 	private final UserRepository users;
 	private final DailySalesService dailySales;
+	private final SalonUltimateClient salonUltimate;
 	private final ZoneId zone;
 
 	public GoalsService(AppSettingRepository settings, DailySalesRepository days, ShiftRepository shifts, UserRepository users,
-			DailySalesService dailySales, @Value("${app.time-zone:America/Chicago}") String zone) {
+			DailySalesService dailySales, SalonUltimateClient salonUltimate, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.settings = settings;
 		this.days = days;
 		this.shifts = shifts;
 		this.users = users;
 		this.dailySales = dailySales;
+		this.salonUltimate = salonUltimate;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -83,8 +96,12 @@ public class GoalsService {
 	public record DayNeed(LocalDate date, BigDecimal hours, boolean scheduled, BigDecimal sales, Integer waxes,
 		Integer treatments) {}
 
+	/** {@code countsThrough}: the last day the waxes and treatments include (null while they load). */
 	public record GoalsView(String month, String monthLabel, boolean hasGoals, List<GoalLine> lines, List<DayNeed> days,
-		int daysLeft, int daysNotIn, int daysCountsPending, BigDecimal ppgNeeded) {}
+		int daysLeft, int daysNotIn, LocalDate countsThrough, BigDecimal ppgNeeded) {}
+
+	/** This month's waxes and treatments from one Detailed Service report, the same one the leaderboard and contests read. */
+	record MonthCounts(LocalDate through, int waxes, int treatments, LocalDateTime pulledAt) {}
 
 	// ---- owner: setting goals ----
 
@@ -114,7 +131,75 @@ public class GoalsService {
 	public GoalsView view() {
 		dailySales.catchUp();
 		LocalDate today = LocalDate.now(zone);
-		return view(YearMonth.from(today), today);
+		YearMonth month = YearMonth.from(today);
+		if (get(month).any() && countsDue(month, today)) CompletableFuture.runAsync(() -> refreshCounts(month, today));
+		return view(month, today);
+	}
+
+	/** Every 30 minutes: keep this month's waxes and treatments current while it has goals. */
+	@Scheduled(cron = "0 5,35 * * * *", zone = "${app.time-zone:America/Chicago}")
+	public void refreshScheduled() {
+		LocalDate today = LocalDate.now(zone);
+		YearMonth month = YearMonth.from(today);
+		if (get(month).any() && countsDue(month, today)) refreshCounts(month, today);
+	}
+
+	private boolean countsDue(YearMonth month, LocalDate today) {
+		MonthCounts c = counts(month);
+		return c == null || !c.through().equals(countsThrough(month, today))
+			|| c.pulledAt().isBefore(LocalDateTime.now(zone).minusMinutes(COUNTS_FRESH_MINUTES));
+	}
+
+	/** The last day whose numbers are in: today once its pull is saved, otherwise yesterday. */
+	LocalDate countsThrough(YearMonth month, LocalDate today) {
+		boolean todayIn = days.findById(today).map(d -> d.getStatus() == DailySales.Status.OK).orElse(false);
+		LocalDate through = todayIn ? today : today.minusDays(1);
+		return through.isAfter(month.atEndOfMonth()) ? month.atEndOfMonth() : through;
+	}
+
+	/** Pull the month so far from Salon Ultimate and save the totals. A blocked or failed pull keeps the last totals. */
+	synchronized void refreshCounts(YearMonth month, LocalDate today) {
+		if (!salonUltimate.isConfigured()) return;
+		LocalDate through = countsThrough(month, today);
+		LocalDate first = month.atDay(1);
+		if (through.isBefore(first)) {
+			saveCounts(month, new MonthCounts(through, 0, 0, LocalDateTime.now(zone)));
+			return;
+		}
+		try {
+			String html = salonUltimate.detailedServiceByEmployee(first, through);
+			if (html == null) return;
+			var types = SalonUltimateReport.parseDetailedService(html);
+			if (types.isEmpty() && SalonUltimateReport.blockedBy(html) != null) {
+				log.info("Goals counts for {} waiting on an open timecard", month);
+				return;
+			}
+			saveCounts(month, new MonthCounts(through,
+				types.values().stream().mapToInt(SalonUltimateReport.ServiceTypes::waxes).sum(),
+				types.values().stream().mapToInt(SalonUltimateReport.ServiceTypes::treatments).sum(),
+				LocalDateTime.now(zone)));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (Exception e) {
+			log.warn("Goals counts for {} failed", month, e);
+		}
+	}
+
+	MonthCounts counts(YearMonth month) {
+		return settings.findById(COUNTS_PREFIX + month).map(s -> {
+			Map<String, String> m = pairs(s.getValue());
+			try {
+				return new MonthCounts(LocalDate.parse(m.get("through")), Integer.parseInt(m.get("waxes")),
+					Integer.parseInt(m.get("treatments")), LocalDateTime.parse(m.get("at")));
+			} catch (RuntimeException e) {
+				return null;
+			}
+		}).orElse(null);
+	}
+
+	private void saveCounts(YearMonth month, MonthCounts c) {
+		settings.save(new AppSetting(COUNTS_PREFIX + month, "through=" + c.through() + ";waxes=" + c.waxes()
+			+ ";treatments=" + c.treatments() + ";at=" + c.pulledAt()));
 	}
 
 	GoalsView view(YearMonth month, LocalDate today) {
@@ -132,10 +217,10 @@ public class GoalsService {
 		BigDecimal sales = BigDecimal.ZERO;
 		BigDecimal retail = BigDecimal.ZERO;
 		int clients = 0;
-		int waxes = 0;
-		int treatments = 0;
+		MonthCounts mc = counts(month);
+		int waxes = mc == null ? 0 : mc.waxes();
+		int treatments = mc == null ? 0 : mc.treatments();
 		int notIn = 0;
-		int countsPending = 0;
 		for (LocalDate d = first; d.isBefore(firstLeft) && !d.isAfter(last); d = d.plusDays(1)) {
 			DailySales s = saved.get(d);
 			if (s == null || s.getStatus() != DailySales.Status.OK) {
@@ -145,9 +230,6 @@ public class GoalsService {
 			sales = sales.add(s.total());
 			retail = retail.add(nz(s.getRetailSales()));
 			clients += s.getClients() == null ? 0 : s.getClients();
-			if (s.wasOpen() && (s.getWaxes() == null || s.getTreatments() == null)) countsPending++;
-			waxes += s.getWaxes() == null ? 0 : s.getWaxes();
-			treatments += s.getTreatments() == null ? 0 : s.getTreatments();
 		}
 
 		// Weights for the days left.
@@ -197,7 +279,7 @@ public class GoalsService {
 				ppgSoFar != null && ppgSoFar.compareTo(g.ppg()) >= 0 && (ppgNeeded == null || ppgNeeded.compareTo(g.ppg()) <= 0)));
 		}
 
-		return new GoalsView(month.toString(), label, g.any(), lines, needs, openLeft, notIn, countsPending, ppgNeeded);
+		return new GoalsView(month.toString(), label, g.any(), lines, needs, openLeft, notIn, mc == null ? null : mc.through(), ppgNeeded);
 	}
 
 	private static GoalLine countLine(String key, String label, int goal, int done, int openLeft) {
@@ -294,12 +376,17 @@ public class GoalsService {
 
 	// ---- storage: "sales=40000;waxes=60;treatments=80;ppg=12.5" ----
 
-	static Goals parse(String value) {
+	private static Map<String, String> pairs(String value) {
 		Map<String, String> m = new LinkedHashMap<>();
 		for (String part : value == null ? new String[0] : value.split(";")) {
 			int eq = part.indexOf('=');
 			if (eq > 0) m.put(part.substring(0, eq).trim(), part.substring(eq + 1).trim());
 		}
+		return m;
+	}
+
+	static Goals parse(String value) {
+		Map<String, String> m = pairs(value);
 		return new Goals(decimal(m.get("sales")), whole(m.get("waxes")), whole(m.get("treatments")), decimal(m.get("ppg")));
 	}
 

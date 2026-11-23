@@ -59,11 +59,6 @@ public class DailySales {
 
 	private Integer services;
 
-	/** From the Detailed Service report, for monthly goals. Null until pulled. */
-	private Integer waxes;
-
-	private Integer treatments;
-
 	/** How many people worked. 0 on a day the salon was closed. */
 	@Column(name = "staff_worked")
 	private Integer staffWorked;
@@ -113,12 +108,6 @@ public class DailySales {
 
 	public Integer getServices() { return services; }
 	public void setServices(Integer services) { this.services = services; }
-
-	public Integer getWaxes() { return waxes; }
-	public void setWaxes(Integer waxes) { this.waxes = waxes; }
-
-	public Integer getTreatments() { return treatments; }
-	public void setTreatments(Integer treatments) { this.treatments = treatments; }
 
 	public Integer getStaffWorked() { return staffWorked; }
 	public void setStaffWorked(Integer staffWorked) { this.staffWorked = staffWorked; }
