@@ -285,6 +285,8 @@ export interface DailySalesView {
   averagePerOpenDay: number;
   openDaysInMonth: number;
   projectedMonth: number;
+  /** The same weekday 52 weeks before each chart day (364 days back). */
+  yearAgo: DailySalesDay[];
 }
 
 /** A day no one can ask for off. date is "YYYY-MM-DD". */

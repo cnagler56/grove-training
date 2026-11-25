@@ -78,6 +78,25 @@ class DailySalesTests {
 	}
 
 	@Test
+	void theChartShows15DaysEachWithTheSameWeekdayAYearAgo() throws Exception {
+		// Monday Nov 23, 2026 compares with Monday Nov 24, 2025: same weekday, one date off.
+		LocalDate mon = LocalDate.of(2026, 11, 23);
+		assertThat(DailySalesService.yearAgo(mon)).isEqualTo(LocalDate.of(2025, 11, 24));
+		assertThat(DailySalesService.yearAgo(mon).getDayOfWeek()).isEqualTo(mon.getDayOfWeek());
+
+		LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Chicago"));
+		service.pull(today.minusDays(1), false);
+		service.pull(DailySalesService.yearAgo(today.minusDays(1)), false);
+		service.pull(today.minusDays(20), false); // older than the chart's 15 days
+		when(salonUltimate.isConfigured()).thenReturn(false); // no background catch-up adding days mid-test
+		mvc.perform(get("/api/owner/daily-sales").cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.days.length()").value(1))
+			.andExpect(jsonPath("$.yearAgo.length()").value(1))
+			.andExpect(jsonPath("$.yearAgo[0].date").value(DailySalesService.yearAgo(today.minusDays(1)).toString()));
+	}
+
+	@Test
 	void eachDayIsPulledHalfAnHourAfterClosing() {
 		assertThat(DailySalesService.pullTime(LocalDate.of(2026, 11, 18))).isEqualTo(LocalDateTime.of(2026, 11, 18, 20, 30)); // Wed
 		assertThat(DailySalesService.pullTime(LocalDate.of(2026, 11, 20))).isEqualTo(LocalDateTime.of(2026, 11, 20, 18, 30)); // Fri

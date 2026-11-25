@@ -63,6 +63,10 @@ public class DailySalesService {
 	static final int MINUTES_AFTER_CLOSE = 30;
 	/** How far back the chart goes, and how far back missing days are filled in. */
 	static final int DAYS_SHOWN = 30;
+	/** Days on the owner's chart, each next to the same weekday a year earlier. */
+	static final int CHART_DAYS = 15;
+	/** 52 weeks: the same weekday a year earlier. */
+	static final int YEAR_AGO_DAYS = 364;
 	/** Missing older days pulled per run, so Salon Ultimate isn't hit all at once. */
 	static final int BACKFILL_PER_RUN = 3;
 	/** A past day that didn't save is tried again after this long. */
@@ -148,6 +152,21 @@ public class DailySalesService {
 			pull(d, false);
 			pulled++;
 		}
+		// Then the year-ago days the chart compares against (and tomorrow's, so it's ready).
+		for (int i = -1; i < CHART_DAYS && pulled < BACKFILL_PER_RUN; i++) {
+			LocalDate d = yearAgo(today.minusDays(i));
+			DailySales saved = days.findById(d).orElse(null);
+			boolean due = saved == null
+				|| (saved.getStatus() != Status.OK && saved.getAttemptedAt().isBefore(now.minusHours(RETRY_HOURS)));
+			if (!due) continue;
+			pull(d, false);
+			pulled++;
+		}
+	}
+
+	/** The same weekday a year earlier: 52 weeks back, so a Monday compares with a Monday. */
+	public static LocalDate yearAgo(LocalDate date) {
+		return date.minusDays(YEAR_AGO_DAYS);
 	}
 
 	/**
@@ -334,6 +353,8 @@ public class DailySalesService {
 		catchUp();
 		LocalDate today = LocalDate.now(zone);
 		List<DailySales> recent = days.findByDateBetweenOrderByDateAsc(today.minusDays(DAYS_SHOWN - 1L), today);
+		LocalDate chartFrom = today.minusDays(CHART_DAYS - 1L);
+		List<DailySales> yearAgo = days.findByDateBetweenOrderByDateAsc(yearAgo(chartFrom), yearAgo(today));
 		YearMonth month = YearMonth.from(today);
 		Projection p = projection(days.findByDateBetweenOrderByDateAsc(month.atDay(1), month.atEndOfMonth()), month);
 		DailySales latest = recent.stream().filter(DailySales::wasOpen).reduce((a, b) -> b).orElse(null);
@@ -341,10 +362,11 @@ public class DailySalesService {
 		return new DailySalesView(
 			salonUltimate.isConfigured(),
 			pullTime(today),
-			recent.stream().map(DailySalesService::day).toList(),
+			recent.stream().filter(d -> !d.getDate().isBefore(chartFrom)).map(DailySalesService::day).toList(),
 			latest == null ? null : day(latest),
 			todays == null ? null : day(todays),
-			p.monthToDate(), p.openDaysSoFar(), p.averagePerOpenDay(), p.openDaysInMonth(), p.projected());
+			p.monthToDate(), p.openDaysSoFar(), p.averagePerOpenDay(), p.openDaysInMonth(), p.projected(),
+			yearAgo.stream().map(DailySalesService::day).toList());
 	}
 
 	private static DailySalesDay day(DailySales d) {

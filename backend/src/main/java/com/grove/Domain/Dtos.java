@@ -272,7 +272,9 @@ public final class Dtos {
 		int openDaysSoFar,
 		BigDecimal averagePerOpenDay,
 		int openDaysInMonth,
-		BigDecimal projectedMonth) {}
+		BigDecimal projectedMonth,
+		/** The same weekday 52 weeks before each chart day (364 days back), for comparison. */
+		List<DailySalesDay> yearAgo) {}
 
 	/** A note on one day of the calendar. */
 	public record DayNote(LocalDate date, String text) {}
