@@ -142,6 +142,7 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
 /** This year and a year ago: the same measure, so one hue, darker for now. */
 const NOW_COLOR = '#3f74a3';
 const YEAR_AGO_COLOR = '#8ab4d9';
+const DAY_LETTER = ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'];
 /** 52 weeks back: the same weekday a year earlier. */
 const yearAgoOf = (iso: string) => addDays(iso, -364);
 const withYear = (iso: string) => `${longDayLabel(iso)}, ${iso.slice(0, 4)}`;
@@ -202,20 +203,22 @@ function SalesChart({ days, yearAgo, today }: { days: DailySalesDay[]; yearAgo: 
   const nowSales = sales(hovered);
   const thenSales = sales(hoveredBefore);
   const hoverChange = nowSales != null && thenSales != null ? change(nowSales, thenSales) : null;
+  // Pointed-at day stands out; otherwise every other day is shaded so each pair reads as one day.
+  const band = (date: string, i: number) =>
+    hover === date ? 'bg-[var(--accent-soft)]' : i % 2 === 0 ? 'bg-[var(--surface-2)]' : '';
 
   return (
     <div>
       <div className="relative">
         {/* Recessive guide: the top of the scale, the best day (its amount is under the chart). */}
         <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-[var(--border)]" />
-        <div className="flex h-36 items-end gap-1.5 border-b border-[var(--border)]" onMouseLeave={() => setHover(null)}>
-          {dates.map((date) => {
+        <div className="flex h-36 items-end border-b border-[var(--border)]" onMouseLeave={() => setHover(null)}>
+          {dates.map((date, i) => {
             const now = sales(byDate.get(date));
             const then = sales(before.get(yearAgoOf(date)));
-            const on = hover === date;
             return (
-              // The hit area is the whole column, taller and wider than the bars.
-              <div key={date} className={`flex h-full min-w-0 flex-1 cursor-default items-end gap-[2px] rounded-t ${on ? 'bg-[var(--surface-2)]' : ''}`}
+              // One day per column: its two bars sit together on a band (every other day shaded) so pairs read as one.
+              <div key={date} className={`flex h-full min-w-0 flex-1 cursor-default items-end gap-[2px] px-[3px] ${band(date, i)}`}
                 onMouseEnter={() => setHover(date)} onClick={() => setHover(date)}
                 aria-label={`${longDayLabel(date)}: ${now != null ? money(now) : statusWord(byDate.get(date), date, today)}; a year ago ${then != null ? money(then) : 'no numbers'}`}>
                 <div className="w-1/2 rounded-t" style={{ height: `${height(then)}%`, background: YEAR_AGO_COLOR }} />
@@ -225,10 +228,18 @@ function SalesChart({ days, yearAgo, today }: { days: DailySalesDay[]; yearAgo: 
           })}
         </div>
       </div>
-      <div className="mt-1 flex justify-between gap-2 text-[10px] opacity-60">
-        <span>{longDayLabel(dates[0])}</span>
+      {/* Each day's name under its pair, on the same band. */}
+      <div className="flex" onMouseLeave={() => setHover(null)}>
+        {dates.map((date, i) => (
+          <div key={date} className={`min-w-0 flex-1 rounded-b pb-0.5 pt-0.5 text-center text-[10px] leading-tight ${band(date, i)}`}
+            onMouseEnter={() => setHover(date)} onClick={() => setHover(date)}>
+            <div className={`font-semibold ${date === today ? '' : 'opacity-60'}`}>{DAY_LETTER[new Date(`${date}T12:00:00`).getDay()]}</div>
+            <div className={`tabular-nums ${date === today ? 'font-semibold' : 'opacity-60'}`}>{Number(date.slice(8, 10))}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-end text-[10px] opacity-60">
         <span className="tabular-nums">Dashed line: best day, {money(max)}</span>
-        <span>Today</span>
       </div>
       <div className="mt-1 min-h-14 rounded-lg bg-[var(--surface-2)] px-2.5 py-1.5 text-xs">
         {hover ? (
