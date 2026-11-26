@@ -97,6 +97,39 @@ class DailySalesTests {
 	}
 
 	@Test
+	void aDayIsPulledAgainTheNextMorningAndWhenItLooksWrong() {
+		LocalDate tue = LocalDate.of(2026, 11, 24);
+		DailySales d = new DailySales(tue);
+		d.setStatus(DailySales.Status.OK);
+		d.setStaffWorked(9);
+		d.setClients(90);
+		d.setNetServiceSales(new BigDecimal("4063"));
+		d.setAttemptedAt(LocalDateTime.of(2026, 11, 24, 20, 30)); // the closing pull
+
+		// Not again that night; once the next morning; then left alone.
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 24, 23, 0))).isFalse();
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 25, 6, 15))).isTrue();
+		d.setAttemptedAt(LocalDateTime.of(2026, 11, 25, 6, 15));
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 26, 12, 0))).isFalse();
+
+		// Open with 0 clients, or services below zero: tried again every few hours.
+		d.setClients(0);
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 25, 9, 0))).isFalse();
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 25, 13, 0))).isTrue();
+		d.setClients(90);
+		d.setNetServiceSales(new BigDecimal("-3908"));
+		assertThat(DailySalesService.due(d, tue, LocalDateTime.of(2026, 11, 25, 13, 0))).isTrue();
+
+		// A closed day with no clients is fine.
+		DailySales closed = new DailySales(tue);
+		closed.setStatus(DailySales.Status.OK);
+		closed.setStaffWorked(0);
+		closed.setClients(0);
+		closed.setAttemptedAt(LocalDateTime.of(2026, 11, 25, 6, 15));
+		assertThat(DailySalesService.due(closed, tue, LocalDateTime.of(2026, 11, 26, 12, 0))).isFalse();
+	}
+
+	@Test
 	void eachDayIsPulledHalfAnHourAfterClosing() {
 		assertThat(DailySalesService.pullTime(LocalDate.of(2026, 11, 18))).isEqualTo(LocalDateTime.of(2026, 11, 18, 20, 30)); // Wed
 		assertThat(DailySalesService.pullTime(LocalDate.of(2026, 11, 20))).isEqualTo(LocalDateTime.of(2026, 11, 20, 18, 30)); // Fri

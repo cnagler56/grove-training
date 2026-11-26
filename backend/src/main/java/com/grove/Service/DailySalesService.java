@@ -145,23 +145,47 @@ public class DailySalesService {
 		int pulled = 0;
 		for (int i = 1; i <= DAYS_SHOWN && pulled < BACKFILL_PER_RUN; i++) {
 			LocalDate d = today.minusDays(i);
-			DailySales saved = days.findById(d).orElse(null);
-			boolean due = saved == null
-				|| (saved.getStatus() != Status.OK && saved.getAttemptedAt().isBefore(now.minusHours(RETRY_HOURS)));
-			if (!due) continue;
+			if (!due(days.findById(d).orElse(null), d, now)) continue;
 			pull(d, false);
 			pulled++;
 		}
 		// Then the year-ago days the chart compares against (and tomorrow's, so it's ready).
 		for (int i = -1; i < CHART_DAYS && pulled < BACKFILL_PER_RUN; i++) {
 			LocalDate d = yearAgo(today.minusDays(i));
-			DailySales saved = days.findById(d).orElse(null);
-			boolean due = saved == null
-				|| (saved.getStatus() != Status.OK && saved.getAttemptedAt().isBefore(now.minusHours(RETRY_HOURS)));
-			if (!due) continue;
+			if (!due(days.findById(d).orElse(null), d, now)) continue;
 			pull(d, false);
 			pulled++;
 		}
+	}
+
+	/** Re-pull a saved day that looks wrong after this long. */
+	static final int SUSPECT_RETRY_HOURS = 6;
+	/** A day pulled at closing is pulled once more after this time the next morning. */
+	static final LocalTime MORNING_REFRESH = LocalTime.of(6, 0);
+
+	/**
+	 * Whether a day should be pulled (again), quietly:
+	 * <ul>
+	 * <li>never saved, or didn't save and a day has passed</li>
+	 * <li>saved at closing time: once more the next morning, so tickets finished or fixed
+	 *     after the 30-minute pull (a closing pull once read negative services) are picked up</li>
+	 * <li>saved but looks wrong (open with no clients counted, or negative services): again every few hours</li>
+	 * </ul>
+	 */
+	static boolean due(DailySales saved, LocalDate date, LocalDateTime now) {
+		if (saved == null) return true;
+		LocalDateTime attempted = saved.getAttemptedAt();
+		if (attempted == null) return true;
+		if (saved.getStatus() != Status.OK) return attempted.isBefore(now.minusHours(RETRY_HOURS));
+		LocalDateTime morning = date.plusDays(1).atTime(MORNING_REFRESH);
+		if (attempted.isBefore(morning) && !now.isBefore(morning)) return true;
+		return looksWrong(saved) && attempted.isBefore(now.minusHours(SUSPECT_RETRY_HOURS));
+	}
+
+	/** Open, but no clients counted or services below zero: Salon Ultimate likely gave a bad answer. */
+	static boolean looksWrong(DailySales d) {
+		return d.wasOpen() && (d.getClients() == null || d.getClients() == 0
+			|| (d.getNetServiceSales() != null && d.getNetServiceSales().signum() < 0));
 	}
 
 	/** The same weekday a year earlier: 52 weeks back, so a Monday compares with a Monday. */

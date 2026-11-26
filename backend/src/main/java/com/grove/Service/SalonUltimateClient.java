@@ -92,9 +92,19 @@ public class SalonUltimateClient {
 	/**
 	 * The "Stylist Comparison" report's HTML: each stylist's number of services
 	 * ("Serv Units") and clients for {@code start} through {@code end}.
+	 *
+	 * It's a Central Office report: from the store view Salon Ultimate shows the plain
+	 * Reports page with no table (so every count read 0). Salon Ultimate remembers the
+	 * last store a user picked, and the Detailed Service and appointment book pulls pick
+	 * the store, so switch to Central Office ({@code store_id=} blank) first.
 	 */
 	public String stylistComparison(LocalDate start, LocalDate end) throws IOException, InterruptedException {
 		HttpClient http = signIn();
+		HttpResponse<Void> central = http.send(
+			HttpRequest.newBuilder(URI.create(baseUrl + "/report?store_id=")).timeout(Duration.ofSeconds(30))
+				.header("User-Agent", USER_AGENT).GET().build(),
+			HttpResponse.BodyHandlers.discarding());
+		if (central.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + central.statusCode());
 		Map<String, String> report = new LinkedHashMap<>();
 		report.put("reportName", STYLIST_COMPARISON);
 		report.put("reportSelect", STYLIST_COMPARISON);
@@ -104,6 +114,13 @@ public class SalonUltimateClient {
 		report.put("report[endDate]", end.format(US));
 		HttpResponse<String> res = http.send(post("/report", report, 90), HttpResponse.BodyHandlers.ofString());
 		if (res.statusCode() >= 400) throw new IOException("Salon Ultimate answered " + res.statusCode());
+		// Back to the store, so the owner's own Salon Ultimate doesn't open in Central Office.
+		try {
+			http.send(HttpRequest.newBuilder(URI.create(baseUrl + "/report?store_id=" + storeId)).timeout(Duration.ofSeconds(30))
+				.header("User-Agent", USER_AGENT).GET().build(), HttpResponse.BodyHandlers.discarding());
+		} catch (IOException e) {
+			// The report is in hand; the switch back is only a courtesy.
+		}
 		return res.body();
 	}
 
