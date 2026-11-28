@@ -48,6 +48,8 @@ public class TimeOffService {
 	public static final String APPROVED_NOTE = "Approved time off";
 	private static final int MAX_DAYS = 60;
 	private static final int MAX_NOTE = 500;
+	/** How long sent-back requests stay on the approvers' list. */
+	private static final int RECENT_DAYS = 30;
 	private static final DateTimeFormatter EMAIL_DATE = DateTimeFormatter.ofPattern("MMM d");
 
 	private final TimeOffRequestRepository requests;
@@ -227,7 +229,31 @@ public class TimeOffService {
 		List<TimeOffView> approved = requests.findByStatusOrderByStartDateAsc(Status.APPROVED).stream()
 			.filter(r -> !r.getEndDate().isBefore(today) && !r.getUserId().equals(approver.getUserId()))
 			.map(this::view).toList();
-		return new TimeOffQueue(waiting, approved);
+		LocalDateTime since = LocalDateTime.now(zone).minusDays(RECENT_DAYS);
+		List<TimeOffView> sentBack = requests.findByStatusOrderByStartDateAsc(Status.SENT_BACK).stream()
+			.filter(r -> r.getDecidedAt() != null && r.getDecidedAt().isAfter(since) && !r.getUserId().equals(approver.getUserId()))
+			.map(this::view).toList();
+		return new TimeOffQueue(waiting, approved, sentBack);
+	}
+
+	/** The employee has seen the answer: it leaves their Home page but stays in their history. */
+	public TimeOffView dismiss(User employee, Long id) {
+		TimeOffRequest r = find(id);
+		if (!r.getUserId().equals(employee.getUserId())) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found");
+		if (r.getStatus() == Status.PENDING) throw bad("This request hasn't been answered yet");
+		if (r.getDismissedAt() == null) r.setDismissedAt(LocalDateTime.now(zone));
+		return view(requests.save(r));
+	}
+
+	/**
+	 * The owner removes a request completely, e.g. one made for testing. Any RO days an approval
+	 * put on the schedule come off. Nobody is told.
+	 */
+	@Transactional
+	public void delete(Long id) {
+		TimeOffRequest r = find(id);
+		if (r.getStatus() == Status.APPROVED) removeApprovedDays(r);
+		requests.delete(r);
 	}
 
 	public TimeOffView approve(User approver, Long id, String message) {
@@ -303,7 +329,7 @@ public class TimeOffService {
 		return new TimeOffView(r.getId(), r.getUserId(), u == null ? "Former employee" : name(u), r.getStartDate(), r.getEndDate(),
 			r.getNote(), r.getStatus().name(), r.getResponseNote(),
 			r.getDecidedBy() == null ? null : users.findById(r.getDecidedBy()).map(TimeOffService::name).orElse(null),
-			r.getDecidedAt(), r.getCreatedAt());
+			r.getDecidedAt(), r.getCreatedAt(), r.getDismissedAt() != null);
 	}
 
 	private static String range(TimeOffRequest r) {

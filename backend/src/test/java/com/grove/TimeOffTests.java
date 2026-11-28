@@ -141,6 +141,36 @@ class TimeOffTests {
 	}
 
 	@Test
+	void anAnswerCanBeDismissedAndTheOwnerCanDeleteATestRequestQuietly() throws Exception {
+		long approved = request(ava, week.plusDays(2), week.plusDays(3), null);
+		long sentBack = request(ava, week.plusDays(4), week.plusDays(4), null);
+		long waiting = request(ava, week.plusDays(5), week.plusDays(5), null);
+		mvc.perform(put("/api/time-off/" + approved + "/approve").cookie(owner)).andExpect(status().isOk());
+		mvc.perform(put("/api/time-off/" + sentBack + "/send-back").cookie(owner).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"message\":\"We're short that day\"}"))
+			.andExpect(status().isOk());
+
+		// Ava clears the answer from Home; it stays in her list. Waiting ones and other people's can't be cleared.
+		mvc.perform(put("/api/time-off/" + sentBack + "/dismiss").cookie(ava)).andExpect(jsonPath("$.dismissed").value(true));
+		mvc.perform(put("/api/time-off/" + waiting + "/dismiss").cookie(ava)).andExpect(status().isBadRequest());
+		mvc.perform(put("/api/time-off/" + approved + "/dismiss").cookie(owner)).andExpect(status().isNotFound());
+		mvc.perform(get("/api/time-off/mine").cookie(ava)).andExpect(jsonPath("$.length()").value(3));
+		// Approvers see what was sent back lately.
+		mvc.perform(get("/api/time-off/queue").cookie(owner)).andExpect(jsonPath("$.sentBack.length()").value(1));
+
+		// The owner deletes the approved one: its RO days come off the schedule and no one is told.
+		org.mockito.Mockito.clearInvocations(mailer);
+		mvc.perform(delete("/api/time-off/" + approved + "/remove").cookie(owner)).andExpect(status().isNoContent());
+		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(owner))
+			.andExpect(jsonPath("$.shifts.length()").value(0));
+		mvc.perform(get("/api/time-off/mine").cookie(ava)).andExpect(jsonPath("$.length()").value(2));
+		verify(mailer, org.mockito.Mockito.never()).send(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+			org.mockito.ArgumentMatchers.any());
+		// Owners only.
+		mvc.perform(delete("/api/time-off/" + sentBack + "/remove").cookie(ava)).andExpect(status().isForbidden());
+	}
+
+	@Test
 	void approvedTimeOffCanBeCancelledThroughItsFirstDayOnly() throws Exception {
 		LocalDate today = LocalDate.now(ZoneId.of("America/Chicago"));
 		long started = request(ava, week, week, null);

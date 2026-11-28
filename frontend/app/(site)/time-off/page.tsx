@@ -25,6 +25,7 @@ export default function TimeOffPage() {
   const dialogs = useDialogs();
   const asks = onSchedule(user?.roles);
   const approves = perms.approveTimeOff;
+  const isOwner = user?.roles === 'OWNER';
 
   const [mine, setMine] = useState<TimeOffRequest[] | null>(null);
   const [queue, setQueue] = useState<TimeOffQueue | null>(null);
@@ -94,6 +95,19 @@ export default function TimeOffPage() {
     if (message) void run(() => api.sendBackTimeOff(r.id, message), `Sent back to ${r.name}.`);
   }
 
+  /** Owners: remove a request completely (a test or a mistake). Nobody is told. */
+  async function remove(r: TimeOffRequest) {
+    if (!(await dialogs.confirm({
+      title: `Delete ${r.name}'s request?`,
+      message: `${timeOffRange(r.startDate, r.endDate)}. It's removed completely, any RO days it put on the schedule come off, `
+        + `and ${r.name} isn't told. Use this for test requests or mistakes.`,
+      confirmLabel: 'Delete it',
+      cancelLabel: 'Keep it',
+      danger: true,
+    }))) return;
+    void run(() => api.removeTimeOff(r.id), `Deleted ${r.name}'s request.`);
+  }
+
   async function cancelApproved(r: TimeOffRequest) {
     if (!(await dialogs.confirm({
       title: 'Cancel your approved time off?',
@@ -137,6 +151,7 @@ export default function TimeOffPage() {
                     <button className="btn" disabled={busy}
                       onClick={() => void run(() => api.approveTimeOff(r.id), `Approved ${r.name}'s time off.`)}>Approve</button>
                     <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, false)}>Send back</button>
+                    {isOwner && <DeleteButton busy={busy} onClick={() => void remove(r)} />}
                   </div>
                 </li>
               ))}
@@ -226,12 +241,43 @@ export default function TimeOffPage() {
             {queue.approved.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
                 <span><b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}</span>
-                <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, true)}>Undo</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button className="btn-ghost" disabled={busy} onClick={() => void sendBack(r, true)}>Undo</button>
+                  {isOwner && <DeleteButton busy={busy} onClick={() => void remove(r)} />}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {approves && queue && queue.sentBack.length > 0 && (
+        <section className="card p-5">
+          <h2 className="text-lg font-extrabold">Sent back lately</h2>
+          <p className="mt-1 text-sm opacity-70">The last 30 days.</p>
+          <ul className="mt-2 divide-y divide-[var(--border)]">
+            {queue.sentBack.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <div><b>{r.name}</b> · {timeOffRange(r.startDate, r.endDate)}</div>
+                  {r.responseNote && <div className="mt-0.5 whitespace-pre-line opacity-70">{r.responseNote}</div>}
+                </div>
+                {isOwner && <DeleteButton busy={busy} onClick={() => void remove(r)} />}
               </li>
             ))}
           </ul>
         </section>
       )}
     </div>
+  );
+}
+
+/** Owners only: delete a request outright. */
+function DeleteButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+  return (
+    <button className="text-sm font-semibold text-[var(--danger)] hover:underline" disabled={busy} onClick={onClick}
+      title="Removes it completely and quietly, for test requests or mistakes">
+      Delete
+    </button>
   );
 }

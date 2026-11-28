@@ -66,10 +66,20 @@ export default function StaffHomePage() {
     if (isStaff) api.celebrations().then(setCelebrations).catch(() => {});
   }, [isStaff]);
 
+  /** They've seen the answer: it leaves Home (it stays on the Time off page). */
+  async function dismissTimeOff(id: number) {
+    try {
+      const updated = await api.dismissTimeOff(id);
+      setMyTimeOff((all) => all.map((r) => (r.id === id ? updated : r)));
+    } catch {
+      // Left as it was; they can try again.
+    }
+  }
+
   if (!user) return null;
-  // Answers to their requests stay on Home for two weeks.
+  // Answers to their requests stay on Home for two weeks, or until they dismiss them.
   const twoWeeksAgo = addDays(todayIso(), -14);
-  const timeOffAnswers = myTimeOff.filter((r) => r.status !== 'PENDING' && r.decidedAt && r.decidedAt >= twoWeeksAgo);
+  const timeOffAnswers = myTimeOff.filter((r) => r.status !== 'PENDING' && !r.dismissed && r.decidedAt && r.decidedAt >= twoWeeksAgo);
   const ready = (videos ?? []).filter((v) => v.status === 'READY');
   const watched = ready.filter((v) => v.completed).length;
   const pct = ready.length ? Math.round((watched / ready.length) * 100) : 0;
@@ -153,12 +163,18 @@ export default function StaffHomePage() {
           </div>
           <ul className="mt-2 divide-y divide-[var(--border)] text-sm">
             {timeOffAnswers.map((r) => (
-              <li key={r.id} className="py-2">
-                <b>{timeOffRange(r.startDate, r.endDate)}</b>:{' '}
-                <span className={`font-semibold ${r.status === 'APPROVED' ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
-                  {r.status === 'APPROVED' ? 'Approved' : 'Sent back'}
-                </span>
-                {r.responseNote && <div className="mt-0.5 whitespace-pre-line opacity-80">{r.responseNote}</div>}
+              <li key={r.id} className="flex items-start justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <b>{timeOffRange(r.startDate, r.endDate)}</b>:{' '}
+                  <span className={`font-semibold ${r.status === 'APPROVED' ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>
+                    {r.status === 'APPROVED' ? 'Approved' : 'Sent back'}
+                  </span>
+                  {r.responseNote && <div className="mt-0.5 whitespace-pre-line opacity-80">{r.responseNote}</div>}
+                </div>
+                <button className="shrink-0 text-xs font-semibold opacity-70 hover:underline" onClick={() => void dismissTimeOff(r.id)}
+                  title="Clears it from Home. It stays on your Time off page.">
+                  Dismiss
+                </button>
               </li>
             ))}
           </ul>

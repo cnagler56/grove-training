@@ -233,7 +233,9 @@ public final class Dtos {
 		String responseNote,
 		String decidedByName,
 		LocalDateTime decidedAt,
-		LocalDateTime createdAt) {}
+		LocalDateTime createdAt,
+		/** The employee cleared the answer from their Home page. */
+		boolean dismissed) {}
 
 	/** A day no one can ask for off, with the reason staff see. */
 	public record BlackoutView(LocalDate date, String note) {}
@@ -286,7 +288,8 @@ public final class Dtos {
 		List<DayNote> notes) {}
 
 	/** What an approver sees: requests waiting on them, and approved time off still to come. */
-	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved) {}
+	/** What approvers see: waiting requests, approved time off still to come, and the last 30 days' sent-back ones. */
+	public record TimeOffQueue(List<TimeOffView> waiting, List<TimeOffView> approved, List<TimeOffView> sentBack) {}
 
 	/** What an employee sends to ask for paid time off. */
 	public record VacationPayInput(BigDecimal hours, LocalDate checkDate) {}

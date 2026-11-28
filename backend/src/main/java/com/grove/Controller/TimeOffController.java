@@ -92,6 +92,22 @@ public class TimeOffController {
 		return timeOff.setNote(sessions.requireUser(token), date, body == null ? null : body.note());
 	}
 
+	/** Clear an answered request from your Home page. */
+	@PutMapping("/{id}/dismiss")
+	public TimeOffView dismiss(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable Long id) {
+		return timeOff.dismiss(sessions.requireUser(token), id);
+	}
+
+	/** Owners only: remove a request completely (e.g. a test), quietly. */
+	@DeleteMapping("/{id}/remove")
+	public ResponseEntity<Void> remove(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token,
+			@PathVariable Long id) {
+		sessions.requireOwner(token);
+		timeOff.delete(id);
+		return ResponseEntity.noContent().build();
+	}
+
 	@GetMapping("/queue")
 	public TimeOffQueue queue(@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
 		return timeOff.queue(sessions.requireUser(token));

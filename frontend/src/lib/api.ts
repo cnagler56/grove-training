@@ -247,6 +247,8 @@ export interface TimeOffRequest {
   decidedByName: string | null;
   decidedAt: string | null;
   createdAt: string | null;
+  /** The employee cleared the answer from their Home page (it stays in their history). */
+  dismissed: boolean;
 }
 
 /** One day's business. total is null until the day is saved. */
@@ -313,6 +315,8 @@ export interface TimeOffQueue {
   waiting: TimeOffRequest[];
   /** Approved time off that's still to come. */
   approved: TimeOffRequest[];
+  /** Sent back in the last 30 days. */
+  sentBack: TimeOffRequest[];
 }
 
 /** A request for paid time off hours. checkDate is "YYYY-MM-DD". */
@@ -1037,6 +1041,9 @@ export const api = {
   requestTimeOff: (r: { startDate: string; endDate: string; note: string | null }) =>
     send<TimeOffRequest>('/api/time-off', 'POST', r),
   cancelTimeOff: (id: number) => send<void>(`/api/time-off/${id}`, 'DELETE'),
+  dismissTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/dismiss`, 'PUT'),
+  /** Owners only: remove a request completely and quietly (e.g. a test). */
+  removeTimeOff: (id: number) => send<void>(`/api/time-off/${id}/remove`, 'DELETE'),
   salesSummaryRecipients: () => send<SummaryRecipient[]>('/api/owner/daily-sales/recipients'),
   setSalesSummaryRecipient: (userId: number, on: boolean) =>
     send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),

@@ -59,6 +59,10 @@ public class TimeOffRequest {
 	@Column(name = "created_at")
 	private LocalDateTime createdAt;
 
+	/** When the employee cleared the answer from their Home page; it stays in their history. */
+	@Column(name = "dismissed_at")
+	private LocalDateTime dismissedAt;
+
 	public Long getId() { return id; }
 
 	public Long getUserId() { return userId; }
@@ -87,4 +91,7 @@ public class TimeOffRequest {
 
 	public LocalDateTime getCreatedAt() { return createdAt; }
 	public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+	public LocalDateTime getDismissedAt() { return dismissedAt; }
+	public void setDismissedAt(LocalDateTime dismissedAt) { this.dismissedAt = dismissedAt; }
 }
