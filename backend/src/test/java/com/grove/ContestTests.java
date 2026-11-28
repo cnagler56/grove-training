@@ -223,7 +223,7 @@ class ContestTests {
 	@Test
 	void afterTheLastDayTheResultsAreAnnouncedOnce() throws Exception {
 		long id = create(manager, contest("Team Blitz", List.of("Oak", "Pine"), person(avaId, 0), person(miaId, 1)));
-		report("Ava Stone", 3, "Mia Cruz", 1);
+		report("Ava Stone", 1, "Mia Cruz", 3);
 		check(id);
 		var c = contests.findById(id).orElseThrow();
 		c.setStartDate(today.minusDays(10));
@@ -236,12 +236,14 @@ class ContestTests {
 		mvc.perform(get("/api/contests").cookie(ava)).andExpect(jsonPath("$[0].status").value("FINISHED"));
 		// A team contest ends with which team won, not anyone's own place.
 		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> Set.copyOf(to).equals(Set.of(avaId, miaId))),
-			eq("Team Blitz is over"), eq("Oak won, 3 to 1."), eq("/contests"));
+			eq("Team Blitz is over"), eq("Pine won, 3 to 1."), eq("/contests"));
 		verify(push, times(1)).notify(any(), any(), anyString(), anyString(), anyString());
 		assertThat(posts.count()).isEqualTo(postsBefore + 1);
 		String body = posts.findAll().stream().map(p -> p.getBody()).filter(b -> b != null && b.startsWith("Team Blitz results"))
 			.findFirst().orElseThrow();
-		assertThat(body).contains("1st: Ava Stone, 3 treatments", "2nd: Mia Cruz, 1 treatment", "Oak: 3 treatments", "Oak wins!");
+		// Only the team totals, the winning team first.
+		assertThat(body).contains("Pine: 3 treatments\nOak: 1 treatment\nPine wins!")
+			.doesNotContain("Ava Stone", "Mia Cruz", "1st", "2nd");
 
 		// Finished: not checked again, can't be changed.
 		clearInvocations(salonUltimate);
@@ -268,6 +270,11 @@ class ContestTests {
 		service.checkAll();
 		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Solo Blitz is over"),
 			eq("You finished tied for 1st with 3 treatments."), eq("/contests"));
+		// Without teams, the results post still lists everyone's place.
+		assertThat(posts.findAll()).extracting(p -> p.getBody()).anySatisfy(b -> assertThat(b)
+			.startsWith("Solo Blitz results").contains("tied for 1st: Ava Stone, 3 treatments", "tied for 1st: Mia Cruz, 3 treatments"));
+		assertThat(posts.findAll()).extracting(p -> p.getBody()).anySatisfy(b -> assertThat(b)
+			.startsWith("Tied Blitz results").contains("The teams tied!").doesNotContain("Ava Stone"));
 		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> Set.copyOf(to).equals(Set.of(avaId, miaId))),
 			eq("Tied Blitz is over"), eq("It ended in a tie, 3 to 3."), eq("/contests"));
 	}

@@ -306,8 +306,8 @@ public class ContestService {
 	}
 
 	/**
-	 * Final places to everyone in it (in a team contest, only which team won), and the
-	 * results on the team board.
+	 * Final places to everyone in it, and the results on the team board. A team contest
+	 * tells and posts only the team totals and which team won.
 	 */
 	private void announce(Contest c, List<ContestEntry> list, Map<Long, User> people, List<ContestTeam> teamList,
 			Map<Integer, Integer> totals, Integer leader) {
@@ -332,14 +332,17 @@ public class ContestService {
 			} + ".");
 		}
 		lines.add("");
-		list.stream().sorted(standingOrder(people)).forEach(e -> lines.add(place(e, list) + ": " + nameOf(people, e.getUserId()) + ", "
-			+ score(c, e) + (handicapped(c) ? ", worth " + unit(c, e) + " each" : "")));
-		if (!teamList.isEmpty()) {
-			lines.add("");
-			for (ContestTeam t : teamList) {
-				int total = totals.get(t.getPosition());
-				lines.add(t.getName() + ": " + (handicapped(c) ? String.format("%,d points", total) : c.getMetric().count(total)));
-			}
+		if (teamList.isEmpty()) {
+			list.stream().sorted(standingOrder(people)).forEach(e -> lines.add(place(e, list) + ": " + nameOf(people, e.getUserId()) + ", "
+				+ score(c, e) + (handicapped(c) ? ", worth " + unit(c, e) + " each" : "")));
+		} else {
+			// A team contest shows only the team totals, highest first, never anyone's own place.
+			teamList.stream()
+				.sorted(Comparator.comparing((ContestTeam t) -> totals.get(t.getPosition())).reversed())
+				.forEach(t -> {
+					int total = totals.get(t.getPosition());
+					lines.add(t.getName() + ": " + (handicapped(c) ? String.format("%,d points", total) : c.getMetric().count(total)));
+				});
 			lines.add(leader == null ? "The teams tied!" : teamName(teamList, leader) + " wins!");
 		}
 		if (c.getPrize() != null) {
