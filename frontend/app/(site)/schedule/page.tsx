@@ -2,17 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { api, type ShiftView, type WeekSchedule } from '@/src/lib/api';
-import { roleLabel } from '@/src/lib/roles';
-import {
-  addDays, dayLabel, entryHours, hoursLabel, isRequestedOff, shiftLabel, startsReceptionists, todayIso, weekDates, weekRangeLabel, weekStartOf,
-  scheduledThisWeek,
-} from '@/src/lib/schedule';
+import { api, type WeekSchedule } from '@/src/lib/api';
+import ScheduleSheet from '@/src/components/ScheduleSheet';
+import { addDays, scheduledThisWeek, todayIso, weekRangeLabel, weekStartOf } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 
 /**
- * The full salon schedule, one Saturday–Friday week at a time. Laid out like
- * the paper form: every scheduled person down the left, days across the top.
+ * The full salon schedule, one Saturday–Friday week at a time. Looks like the
+ * printed schedule: every scheduled person down the left, days across the top.
  */
 export default function SalonSchedulePage() {
   const { user } = useUser();
@@ -26,18 +23,9 @@ export default function SalonSchedulePage() {
   // While a newly picked week loads, the old one is still in state, so show it as loading.
   const current = week && week.weekStart === weekStart ? week : null;
 
-  const shiftsByCell = useMemo(() => {
-    const m = new Map<string, ShiftView>();
-    for (const s of current?.shifts ?? []) m.set(`${s.userId}|${s.date}`, s);
-    return m;
-  }, [current]);
-
   // Only people with a shift or RO this week; the editor still lists everyone.
   const people = useMemo(() => (current ? scheduledThisWeek(current.roster, current.shifts) : []), [current]);
-  // The MOD row: each day's manager on duty.
-  const modByDay = useMemo(() => new Map((current?.managersOnDuty ?? []).map((m) => [m.date, m])), [current]);
 
-  const days = weekDates(weekStart);
   const today = todayIso();
   const thisWeek = weekStartOf(today);
   // Builders and approvers see drafts and can open the editor.
@@ -87,80 +75,9 @@ export default function SalonSchedulePage() {
       ) : people.length === 0 ? (
         <div className="card mt-6 p-6 text-center opacity-80">No one is on the schedule this week yet.</div>
       ) : (
-        <div className="card mt-6 overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="border-b border-[var(--border)] text-xs uppercase tracking-wide">
-              <tr>
-                <th className="px-4 py-3 font-bold opacity-70">Name</th>
-                {days.map((d) => (
-                  <th key={d} className={`px-2 py-3 text-center font-bold ${d === today ? 'text-[var(--accent-strong)]' : 'opacity-70'}`}>
-                    {dayLabel(d)}
-                  </th>
-                ))}
-                <th className="px-3 py-3 text-right font-bold opacity-70">Hours</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {modByDay.size > 0 && (
-                <tr className="border-b-2 border-b-[var(--accent)]/40 bg-[var(--accent-soft)]">
-                  <td className="px-4 py-2.5">
-                    <div className="font-bold">MOD</div>
-                    <div className="text-xs opacity-60">Manager on duty</div>
-                  </td>
-                  {days.map((d) => {
-                    const mod = modByDay.get(d);
-                    const mine = !!mod && mod.userId === user?.userId;
-                    return (
-                      <td key={d} className="px-2 py-2.5 text-center text-sm font-bold">
-                        {mod ? <>{mod.name}{mine && <span className="font-normal opacity-60"> (you)</span>}</> : ''}
-                      </td>
-                    );
-                  })}
-                  <td />
-                </tr>
-              )}
-              {people.map((person, i) => {
-                const mine = person.userId === user?.userId;
-                const total = days.reduce((h, d) => {
-                  const s = shiftsByCell.get(`${person.userId}|${d}`);
-                  return h + (s ? entryHours(s) : 0);
-                }, 0);
-                return (
-                  <tr
-                    key={person.userId}
-                    className={`${mine ? 'bg-[var(--accent-soft)]' : ''} ${
-                      startsReceptionists(people, i) ? 'border-t-2 border-t-[var(--accent)]/40' : ''
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-bold">{person.name}{mine && <span className="font-normal opacity-60"> (you)</span>}</div>
-                      <div className="text-xs opacity-60">{person.active ? roleLabel(person.role) : 'No longer on staff'}</div>
-                    </td>
-                    {days.map((d) => {
-                      const s = shiftsByCell.get(`${person.userId}|${d}`);
-                      return (
-                        <td key={d} className={`px-2 py-3 text-center align-top ${d === today ? 'bg-[var(--surface-2)]/60' : ''}`}>
-                          {s ? (
-                            <>
-                              {isRequestedOff(s) ? (
-                                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-[var(--warn)]" title="Requested off">RO</span>
-                              ) : (
-                                <div className="whitespace-nowrap font-semibold">{shiftLabel(s.start!, s.end!)}</div>
-                              )}
-                              {s.note && <div className="text-xs opacity-60">{s.note}</div>}
-                            </>
-                          ) : (
-                            <span className="opacity-25">Off</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-3 text-right font-semibold">{total ? hoursLabel(total) : ''}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        // Same sheet as the printed schedule, plus your own row shaded, today marked, and shift notes.
+        <div className="mt-6 overflow-x-auto rounded-2xl bg-white p-4 text-[#1f2a33] shadow-lg sm:p-6">
+          <ScheduleSheet week={current} youId={user?.userId} today={today} notes />
         </div>
       )}
     </div>
