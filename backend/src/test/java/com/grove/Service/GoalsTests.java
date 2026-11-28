@@ -28,10 +28,13 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.grove.Domain.ClosedDay;
 import com.grove.Domain.DailySales;
+import com.grove.Domain.Holiday;
 import com.grove.Domain.Role;
 import com.grove.Domain.Shift;
 import com.grove.Repository.AppSettingRepository;
+import com.grove.Repository.ClosedDayRepository;
 import com.grove.Repository.DailySalesRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
@@ -50,6 +53,8 @@ class GoalsTests {
 	@Autowired ShiftRepository shifts;
 	@Autowired AppSettingRepository settings;
 	@Autowired GoalsService goals;
+	@Autowired ClosedDayService closedDays;
+	@Autowired ClosedDayRepository closedDayRepo;
 	@MockBean SalonUltimateClient salonUltimate;
 	@MockBean JavaMailSender mailSender;
 
@@ -63,7 +68,9 @@ class GoalsTests {
 	void setUp() throws Exception {
 		days.deleteAll();
 		shifts.deleteAll();
-		settings.findAll().stream().filter(s -> s.getKey().startsWith("goals.") || s.getKey().startsWith("permission."))
+		closedDayRepo.deleteAll();
+		settings.findAll().stream().filter(s -> s.getKey().startsWith("goals.") || s.getKey().startsWith("permission.")
+				|| s.getKey().equals(ClosedDayService.HOLIDAYS_KEY))
 			.forEach(settings::delete);
 		sessions.deleteAll();
 		users.deleteAll();
@@ -144,6 +151,26 @@ class GoalsTests {
 		assertThat(tue.sales()).isEqualByComparingTo("0");
 		assertThat(sat2.scheduled()).isFalse(); // next week isn't built: usual hours
 		assertThat(v.daysLeft()).isEqualTo(6); // Nov 20, 21, 22, 28, 29, 30
+	}
+
+	@Test
+	void aClosedDayNeedsNothingAndTheOpenDaysCarryTheRest() {
+		// Thanksgiving (Thu Nov 26) is checked on Settings; Fri Nov 27 is marked closed on the calendar.
+		closedDays.setHoliday(new ClosedDayService.HolidayInput(Holiday.THANKSGIVING, true));
+		closedDayRepo.save(new ClosedDay(LocalDate.of(2026, 11, 27), true, "Snow day", null, LocalDateTime.now()));
+		GoalsService.GoalsView v = goals.view(nov, today);
+		GoalsService.DayNeed thu = need(v, LocalDate.of(2026, 11, 26));
+		GoalsService.DayNeed fri = need(v, LocalDate.of(2026, 11, 27));
+		assertThat(thu.hours()).isEqualByComparingTo("0.0");
+		assertThat(thu.sales()).isEqualByComparingTo("0");
+		assertThat(thu.waxes()).isZero();
+		assertThat(thu.closedFor()).isEqualTo("Thanksgiving");
+		assertThat(fri.closedFor()).isEqualTo("Snow day");
+		assertThat(need(v, LocalDate.of(2026, 11, 21)).closedFor()).isNull();
+		assertThat(v.daysLeft()).isEqualTo(9);
+		// 11,000 over 440 - 80 = 360 hours. Saturday: 11,000 × 60/360.
+		assertThat(need(v, LocalDate.of(2026, 11, 21)).sales()).isEqualByComparingTo("1833");
+		assertThat(v.days().stream().mapToInt(GoalsService.DayNeed::waxes).sum()).isEqualTo(56);
 	}
 
 	@Test

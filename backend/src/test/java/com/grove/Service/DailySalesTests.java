@@ -224,7 +224,7 @@ class DailySalesTests {
 	void theMonthIsProjectedFromTheAverageOpenDay() {
 		YearMonth nov = YearMonth.of(2026, 11);
 		List<DailySales> month = List.of(open(1, "1000"), open(2, "2000"), closed(3), open(4, "3000"));
-		var p = DailySalesService.projection(month, nov);
+		var p = DailySalesService.projection(month, nov, java.util.Set.of());
 		assertThat(p.monthToDate()).isEqualByComparingTo("6000");
 		assertThat(p.openDaysSoFar()).isEqualTo(3);
 		assertThat(p.averagePerOpenDay()).isEqualByComparingTo("2000");
@@ -232,7 +232,18 @@ class DailySalesTests {
 		assertThat(p.openDaysInMonth()).isEqualTo(29);
 		assertThat(p.projected()).isEqualByComparingTo("58000");
 		// Nothing yet: nothing projected.
-		assertThat(DailySalesService.projection(List.of(), nov).projected()).isEqualByComparingTo("0");
+		assertThat(DailySalesService.projection(List.of(), nov, java.util.Set.of()).projected()).isEqualByComparingTo("0");
+	}
+
+	@Test
+	void daysMarkedClosedAheadAreLeftOutOfTheProjection() {
+		YearMonth nov = YearMonth.of(2026, 11);
+		List<DailySales> month = List.of(open(1, "1000"), open(2, "2000"), closed(3), open(4, "3000"));
+		// Thanksgiving (26th) is ahead; the 3rd is closed twice over; the 4th was marked closed but people worked.
+		var p = DailySalesService.projection(month, nov, java.util.Set.of(LocalDate.of(2026, 11, 26),
+			LocalDate.of(2026, 11, 3), LocalDate.of(2026, 11, 4), LocalDate.of(2026, 12, 25)));
+		assertThat(p.openDaysInMonth()).isEqualTo(28);
+		assertThat(p.projected()).isEqualByComparingTo("56000");
 	}
 
 	@Test

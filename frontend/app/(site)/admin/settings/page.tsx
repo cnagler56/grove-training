@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import PayRulesCard from '@/src/components/PayRulesCard';
 import AdpSettingsCard from '@/src/components/AdpSettingsCard';
 import SalesSummaryCard from '@/src/components/SalesSummaryCard';
+import HolidaysCard from '@/src/components/HolidaysCard';
 import MonthlyGoalsCard from '@/src/components/MonthlyGoalsCard';
 import { api, type PermissionKey, type PermissionRule, type UserRole } from '@/src/lib/api';
 import { ROLES } from '@/src/lib/roles';
@@ -104,6 +105,7 @@ export default function SettingsPage() {
 
       <MonthlyGoalsCard />
       <SalesSummaryCard />
+      <HolidaysCard />
       <PayRulesCard />
       <AdpSettingsCard />
     </div>

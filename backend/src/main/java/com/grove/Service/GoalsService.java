@@ -70,16 +70,19 @@ public class GoalsService {
 	private final UserRepository users;
 	private final DailySalesService dailySales;
 	private final SalonUltimateClient salonUltimate;
+	private final ClosedDayService closedDays;
 	private final ZoneId zone;
 
 	public GoalsService(AppSettingRepository settings, DailySalesRepository days, ShiftRepository shifts, UserRepository users,
-			DailySalesService dailySales, SalonUltimateClient salonUltimate, @Value("${app.time-zone:America/Chicago}") String zone) {
+			DailySalesService dailySales, SalonUltimateClient salonUltimate, ClosedDayService closedDays,
+			@Value("${app.time-zone:America/Chicago}") String zone) {
 		this.settings = settings;
 		this.days = days;
 		this.shifts = shifts;
 		this.users = users;
 		this.dailySales = dailySales;
 		this.salonUltimate = salonUltimate;
+		this.closedDays = closedDays;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -92,9 +95,12 @@ public class GoalsService {
 	public record GoalLine(String key, String label, boolean money, BigDecimal goal, BigDecimal done, BigDecimal left,
 		BigDecimal perDay, boolean met) {}
 
-	/** One remaining day: its weight in hours, whether that came from the schedule, and what it needs. */
+	/**
+	 * One remaining day: its weight in hours, whether that came from the schedule, and what it
+	 * needs. {@code closedFor}: why the salon is closed that day ("Christmas Day"), or null.
+	 */
 	public record DayNeed(LocalDate date, BigDecimal hours, boolean scheduled, BigDecimal sales, Integer waxes,
-		Integer treatments) {}
+		Integer treatments, String closedFor) {}
 
 	/** {@code countsThrough}: the last day the waxes and treatments include (null while they load). */
 	public record GoalsView(String month, String monthLabel, boolean hasGoals, List<GoalLine> lines, List<DayNeed> days,
@@ -237,8 +243,13 @@ public class GoalsService {
 		for (LocalDate d = firstLeft.isBefore(first) ? first : firstLeft; !d.isAfter(last); d = d.plusDays(1)) left.add(d);
 		History h = history(today);
 		Map<LocalDate, BigDecimal> scheduled = scheduledHours(left);
+		// A closed day (checked holiday, or marked on the time off calendar) needs nothing.
+		Map<LocalDate, String> closed = left.isEmpty() ? Map.of() : closedDays.closedBetween(left.get(0), last);
 		List<BigDecimal> weights = new ArrayList<>();
-		for (LocalDate d : left) weights.add(scheduled.containsKey(d) ? scheduled.get(d) : h.usualHours(d.getDayOfWeek()));
+		for (LocalDate d : left) {
+			weights.add(closed.containsKey(d) ? BigDecimal.ZERO
+				: scheduled.containsKey(d) ? scheduled.get(d) : h.usualHours(d.getDayOfWeek()));
+		}
 		BigDecimal totalWeight = weights.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 		int openLeft = (int) weights.stream().filter(w -> w.signum() > 0).count();
 
@@ -252,7 +263,8 @@ public class GoalsService {
 			BigDecimal daySales = salesLeft == null || totalWeight.signum() == 0 ? null
 				: salesLeft.multiply(w).divide(totalWeight, 0, RoundingMode.HALF_UP);
 			needs.add(new DayNeed(left.get(i), w.setScale(1, RoundingMode.HALF_UP), scheduled.containsKey(left.get(i)), daySales,
-				waxesPerDay == null ? null : waxesPerDay[i], treatmentsPerDay == null ? null : treatmentsPerDay[i]));
+				waxesPerDay == null ? null : waxesPerDay[i], treatmentsPerDay == null ? null : treatmentsPerDay[i],
+				closed.get(left.get(i))));
 		}
 
 		// Product per guest: retail ÷ guests. What the rest of the month needs to finish on the goal,

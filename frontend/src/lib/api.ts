@@ -378,6 +378,30 @@ export interface GoalDayNeed {
   sales: number | null;
   waxes: number | null;
   treatments: number | null;
+  /** Why the salon is closed that day ("Christmas Day"), or null when it's open. */
+  closedFor: string | null;
+}
+
+/**
+ * A day on the calendar that's closed, or a checked holiday opened for this year.
+ * `reason` is what to show ("Christmas Day", "Snow day"); `holiday` is the holiday on this date, if any.
+ */
+export interface ClosedDayMark {
+  date: string;
+  closed: boolean;
+  reason: string | null;
+  holiday: string | null;
+}
+
+export type HolidayKey = 'NEW_YEARS_DAY' | 'EASTER' | 'MEMORIAL_DAY' | 'INDEPENDENCE_DAY' | 'LABOR_DAY' | 'THANKSGIVING'
+  | 'CHRISTMAS_EVE' | 'CHRISTMAS_DAY' | 'NEW_YEARS_EVE';
+
+/** A holiday on Settings: its next date and whether the salon always closes for it. */
+export interface HolidayChoice {
+  holiday: HolidayKey;
+  label: string;
+  next: string;
+  on: boolean;
 }
 
 /** What's booked in Salon Ultimate's appointment book for a day. */
@@ -1058,6 +1082,11 @@ export const api = {
   blackOutDay: (date: string, note: string | null) => send<BlackoutDay>(`/api/time-off/blackouts/${date}`, 'PUT', { note }),
   setDayNote: (date: string, note: string | null) => send<{ date: string; text: string | null }>(`/api/time-off/notes/${date}`, 'PUT', { note }),
   clearBlackout: (date: string) => send<void>(`/api/time-off/blackouts/${date}`, 'DELETE'),
+  closedDays: (from: string, to: string) => send<ClosedDayMark[]>(`/api/closed-days?from=${from}&to=${to}`),
+  setClosedDay: (date: string, closed: boolean, note: string | null) =>
+    send<ClosedDayMark>(`/api/closed-days/${date}`, 'PUT', { closed, note }),
+  holidays: () => send<HolidayChoice[]>('/api/owner/holidays'),
+  setHoliday: (holiday: HolidayKey, on: boolean) => send<HolidayChoice[]>('/api/owner/holidays', 'PUT', { holiday, on }),
   timeOffQueue: () => send<TimeOffQueue>('/api/time-off/queue'),
   approveTimeOff: (id: number) => send<TimeOffRequest>(`/api/time-off/${id}/approve`, 'PUT', {}),
   sendBackTimeOff: (id: number, message: string) =>

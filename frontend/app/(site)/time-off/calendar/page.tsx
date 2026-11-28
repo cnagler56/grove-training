@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, type TimeOffCalendar, type TimeOffRequest } from '@/src/lib/api';
+import { api, type ClosedDayMark, type TimeOffCalendar, type TimeOffRequest } from '@/src/lib/api';
 import { addDays, longDayLabel, timeOffRange, todayIso, weekday } from '@/src/lib/schedule';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
@@ -13,6 +13,8 @@ const MAX_NAMES = 3;
 
 /** Blacked-out days are dark so they stand out from the rest of the month. */
 const DARK = 'bg-slate-800 text-white hover:bg-slate-700';
+/** Days the salon is closed: a solid warm shade, plainly different from blacked-out days. */
+const CLOSED = 'bg-rose-100 text-rose-950 hover:bg-rose-200';
 
 /** "2026-11" → the first day "2026-11-01". */
 const firstOf = (month: string) => `${month}-01`;
@@ -47,10 +49,13 @@ export default function TimeOffCalendarPage() {
   // Reloads when the month changes, and after each change (version goes up).
   const [version, setVersion] = useState(0);
   const load = () => setVersion((v) => v + 1);
+  const [closedMarks, setClosedMarks] = useState<ClosedDayMark[]>([]);
   useEffect(() => {
     api.timeOffCalendar(from, to).then(setCal).catch((e) => setError(e.message));
+    api.closedDays(from, to).then(setClosedMarks).catch((e) => setError(e.message));
   }, [from, to, version]);
 
+  const closedMark = (d: string) => closedMarks.find((c) => c.date === d) ?? null;
   const blackout = (d: string) => cal?.blackouts.find((b) => b.date === d) ?? null;
   const noteOn = (d: string) => cal?.notes.find((n) => n.date === d)?.text ?? null;
   const offOn = (d: string) => (cal?.timeOff ?? []).filter((r) => r.startDate <= d && r.endDate >= d);
@@ -65,7 +70,7 @@ export default function TimeOffCalendarPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Time off calendar</h1>
           <p className="mt-1 text-sm opacity-70">
-            Click a day to add a note, or to black it out so no one can ask for it off.
+            Click a day to add a note, mark the salon closed, or black it out so no one can ask for it off.
           </p>
         </div>
 
@@ -84,6 +89,7 @@ export default function TimeOffCalendarPage() {
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-[var(--accent)]" />Approved</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border-2 border-dashed border-[var(--warn)]" />Waiting for an answer</span>
           <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-slate-800" />Blacked out</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded border border-rose-300 bg-rose-100" />Salon closed</span>
         </div>
 
         {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
@@ -99,19 +105,24 @@ export default function TimeOffCalendarPage() {
           {days.map((d) => {
             const inMonth = d.slice(0, 7) === month;
             const b = blackout(d);
+            const c = closedMark(d);
             const note = noteOn(d);
             const off = offOn(d);
             const isToday = d === today;
             return (
               <button key={d} type="button" onClick={() => { setNotice(null); setError(null); setSelected(d); }}
                 className={`flex min-h-24 min-w-0 flex-col justify-start overflow-hidden border-b border-r border-[var(--border)] p-1.5 text-left transition-colors sm:min-h-28 lg:min-h-0 ${
-                  b ? DARK : 'hover:bg-[var(--surface-2)]'} ${inMonth ? '' : 'opacity-40'}`}>
+                  c?.closed ? CLOSED : b ? DARK : 'hover:bg-[var(--surface-2)]'} ${inMonth ? '' : 'opacity-40'}`}>
                 <div className="flex items-center justify-between gap-1">
                   <span className={`text-sm font-bold ${isToday ? 'rounded-full bg-[var(--accent)] px-1.5 text-white' : ''}`}>
                     {Number(d.slice(8, 10))}
                   </span>
-                  {b && <span className="truncate text-[10px] font-bold uppercase tracking-wide">Blacked out</span>}
+                  {c?.closed
+                    ? <span className="truncate text-[10px] font-bold uppercase tracking-wide">Closed</span>
+                    : b && <span className="truncate text-[10px] font-bold uppercase tracking-wide">Blacked out</span>}
                 </div>
+                {c?.closed && c.reason && <div className="mt-0.5 truncate text-[11px] font-semibold">{c.reason}</div>}
+                {c && !c.closed && <div className="mt-0.5 truncate text-[11px] font-semibold opacity-70">{c.holiday}: open</div>}
                 {b?.note && <div className="mt-0.5 truncate text-[11px] font-semibold opacity-80">{b.note}</div>}
                 {note && (
                   <div className={`mt-0.5 truncate rounded px-1 text-[11px] font-semibold ${b ? 'bg-white/15' : 'bg-[var(--surface-2)]'}`}
@@ -135,6 +146,7 @@ export default function TimeOffCalendarPage() {
         <DayPanel
           key={selected}
           date={selected}
+          closedMark={closedMark(selected)}
           blackoutNote={blackout(selected)?.note ?? null}
           blackedOut={!!blackout(selected)}
           note={noteOn(selected)}
@@ -148,8 +160,9 @@ export default function TimeOffCalendarPage() {
 }
 
 /** The panel for one day: who's off, its note, and its blackout. */
-function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved }: {
+function DayPanel({ date, closedMark, blackedOut, blackoutNote, note, off, onClose, onSaved }: {
   date: string;
+  closedMark: ClosedDayMark | null;
   blackedOut: boolean;
   blackoutNote: string | null;
   note: string | null;
@@ -159,6 +172,7 @@ function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved 
 }) {
   const [noteText, setNoteText] = useState(note ?? '');
   const [reason, setReason] = useState('');
+  const [closedReason, setClosedReason] = useState('');
   // The request being sent back, and the message for it.
   const [sendingBack, setSendingBack] = useState<number | null>(null);
   const [message, setMessage] = useState('');
@@ -254,6 +268,39 @@ function DayPanel({ date, blackedOut, blackoutNote, note, off, onClose, onSaved 
               </button>
             )}
           </div>
+        </section>
+
+        <section className="space-y-2 border-t border-[var(--border)] pt-4">
+          <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">Salon closed</h3>
+          {closedMark?.closed ? (
+            <>
+              <p className="text-sm">
+                The salon is closed{closedMark.reason ? `: ${closedMark.reason}` : ''}. It&apos;s left out of the
+                month&apos;s projected sales and gets a daily goal of zero.
+                {closedMark.holiday && ` ${closedMark.holiday} is closed every year (Settings); opening it here changes this year only.`}
+              </p>
+              <button className="btn-ghost" disabled={busy}
+                onClick={() => void act(() => api.setClosedDay(date, false, null), `The salon is open on ${label}.`)}>
+                Mark open
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm opacity-70">
+                {closedMark?.holiday
+                  ? `Usually closed for ${closedMark.holiday}, but open this year.`
+                  : 'Mark the salon closed this day. It will be left out of the month\'s projected sales and get a daily goal of zero.'}
+              </p>
+              {!closedMark?.holiday && (
+                <input className="input" maxLength={200} value={closedReason} placeholder='Reason (optional), like "Snow day"'
+                  onChange={(e) => setClosedReason(e.target.value)} />
+              )}
+              <button className="btn" disabled={busy}
+                onClick={() => void act(() => api.setClosedDay(date, true, closedReason.trim() || null), `The salon is closed on ${label}.`)}>
+                Mark the salon closed
+              </button>
+            </>
+          )}
         </section>
 
         <section className="space-y-2 border-t border-[var(--border)] pt-4">

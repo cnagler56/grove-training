@@ -10,9 +10,11 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
@@ -79,18 +81,20 @@ public class DailySalesService {
 	private final PushService push;
 	private final PermissionService perms;
 	private final NotificationSettingsService choices;
+	private final ClosedDayService closedDays;
 	private final StatsService weeks;
 	private final ZoneId zone;
 
 	public DailySalesService(DailySalesRepository days, UserRepository users, SalonUltimateClient salonUltimate,
-			PushService push, PermissionService perms, NotificationSettingsService choices, StatsService weeks,
-			@Value("${app.time-zone:America/Chicago}") String zone) {
+			PushService push, PermissionService perms, NotificationSettingsService choices, ClosedDayService closedDays,
+			StatsService weeks, @Value("${app.time-zone:America/Chicago}") String zone) {
 		this.days = days;
 		this.users = users;
 		this.salonUltimate = salonUltimate;
 		this.push = push;
 		this.perms = perms;
 		this.choices = choices;
+		this.closedDays = closedDays;
 		this.weeks = weeks;
 		this.zone = ZoneId.of(zone);
 	}
@@ -286,8 +290,7 @@ public class DailySalesService {
 	}
 
 	private void sendSummary(DailySales d) {
-		YearMonth month = YearMonth.from(d.getDate());
-		Projection p = projection(days.findByDateBetweenOrderByDateAsc(month.atDay(1), month.atEndOfMonth()), month);
+		Projection p = projection(YearMonth.from(d.getDate()));
 		StringBuilder body = new StringBuilder(money(d.total()) + " in sales: "
 			+ money(d.getNetServiceSales()) + " services, " + money(d.getRetailSales()) + " retail");
 		if (d.getClients() != null) body.append(", ").append(d.getClients()).append(" clients");
@@ -341,25 +344,37 @@ public class DailySalesService {
 
 	/**
 	 * Month to date, the average for days the salon was open, and that average across every day
-	 * the salon opens this month. Days not yet here count as open (the salon opens every day);
-	 * a past day that shows no one worked counts as closed.
+	 * the salon opens this month. Days not yet here count as open unless they're marked closed
+	 * (a checked holiday, or closed on the time off calendar); a past day that shows no one
+	 * worked counts as closed, and one where people did work counts as open even if marked.
 	 */
 	public record Projection(BigDecimal monthToDate, int openDaysSoFar, BigDecimal averagePerOpenDay, int openDaysInMonth,
 		BigDecimal projected) {}
 
-	static Projection projection(List<DailySales> monthDays, YearMonth month) {
+	/** This month's projection, leaving out its closed days. */
+	private Projection projection(YearMonth month) {
+		return projection(days.findByDateBetweenOrderByDateAsc(month.atDay(1), month.atEndOfMonth()), month,
+			closedDays.closedBetween(month.atDay(1), month.atEndOfMonth()).keySet());
+	}
+
+	static Projection projection(List<DailySales> monthDays, YearMonth month, Set<LocalDate> markedClosed) {
 		BigDecimal total = BigDecimal.ZERO;
 		int open = 0;
-		int closed = 0;
+		Set<LocalDate> openDates = new HashSet<>();
+		Set<LocalDate> closedDates = new HashSet<>();
 		for (DailySales d : monthDays) {
 			if (d.wasOpen()) {
 				total = total.add(d.total());
 				open++;
+				openDates.add(d.getDate());
 			} else if (d.getStatus() == Status.OK) {
-				closed++;
+				closedDates.add(d.getDate());
 			}
 		}
-		int openInMonth = month.lengthOfMonth() - closed;
+		for (LocalDate d : markedClosed) {
+			if (YearMonth.from(d).equals(month) && !openDates.contains(d)) closedDates.add(d);
+		}
+		int openInMonth = month.lengthOfMonth() - closedDates.size();
 		BigDecimal average = open == 0 ? BigDecimal.ZERO : total.divide(BigDecimal.valueOf(open), 2, RoundingMode.HALF_UP);
 		BigDecimal projected = average.multiply(BigDecimal.valueOf(openInMonth)).setScale(2, RoundingMode.HALF_UP);
 		return new Projection(total.setScale(2, RoundingMode.HALF_UP), open, average, openInMonth, projected);
@@ -373,7 +388,7 @@ public class DailySalesService {
 		LocalDate chartFrom = today.minusDays(CHART_DAYS - 1L);
 		List<DailySales> yearAgo = days.findByDateBetweenOrderByDateAsc(yearAgo(chartFrom), yearAgo(today));
 		YearMonth month = YearMonth.from(today);
-		Projection p = projection(days.findByDateBetweenOrderByDateAsc(month.atDay(1), month.atEndOfMonth()), month);
+		Projection p = projection(month);
 		DailySales latest = recent.stream().filter(DailySales::wasOpen).reduce((a, b) -> b).orElse(null);
 		DailySales todays = recent.stream().filter(d -> d.getDate().equals(today)).findFirst().orElse(null);
 		return new DailySalesView(
