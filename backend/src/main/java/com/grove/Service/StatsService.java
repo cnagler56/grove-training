@@ -71,12 +71,27 @@ public class StatsService {
 		this.zone = ZoneId.of(zone);
 	}
 
-	/** The Saturday that starts the most recent week that has fully ended. */
+	/** The Saturday that starts the most recent week that has ended. */
 	public LocalDate latestCompleteWeek() {
-		return LocalDate.now(zone).with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY)).minusWeeks(1);
+		return latestCompleteWeek(LocalDateTime.now(zone));
 	}
 
-	/** Saturday mornings, with retries in case a timecard was still open. */
+	/**
+	 * A Saturday-to-Friday week is over 30 minutes after Friday's closing, when the daily
+	 * pull runs ({@link DailySalesService#pullTime}); before that, it's the week before.
+	 */
+	public static LocalDate latestCompleteWeek(LocalDateTime now) {
+		LocalDate thisWeek = now.toLocalDate().with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY));
+		return now.isBefore(DailySalesService.pullTime(thisWeek.plusDays(6))) ? thisWeek.minusWeeks(1) : thisWeek;
+	}
+
+	/**
+	 * Friday at 6:30pm, 30 minutes after Friday's 6pm closing (the owner's choice), with retries
+	 * that night and Saturday in case a timecard was still open or Salon Ultimate didn't answer.
+	 * Once the week has pulled fine the later runs do nothing. Scheduled jobs run one at a time,
+	 * so this never overlaps the daily pull at the same minute.
+	 */
+	@Scheduled(cron = "0 30 18,20,22 * * FRI", zone = "${app.time-zone:America/Chicago}")
 	@Scheduled(cron = "0 0 6,10,14,18 * * SAT", zone = "${app.time-zone:America/Chicago}")
 	public void pullLastWeek() {
 		LocalDate week = latestCompleteWeek();

@@ -274,7 +274,9 @@ public final class Dtos {
 		int openDaysInMonth,
 		BigDecimal projectedMonth,
 		/** The same weekday 52 weeks before each chart day (364 days back), for comparison. */
-		List<DailySalesDay> yearAgo) {}
+		List<DailySalesDay> yearAgo,
+		/** The latest finished week's pull (payroll and leaderboards), so an open timecard shows; null before it's tried. */
+		StatsImportView week) {}
 
 	/** A note on one day of the calendar. */
 	public record DayNote(LocalDate date, String text) {}
@@ -431,8 +433,11 @@ public final class Dtos {
 	/** The owner setting the amount of one kind of bump: LEAD, LEAD_PROD, or MANAGER. */
 	public record BumpInput(String role, BigDecimal amount) {}
 
-	/** One of the two weeks a check pays for, and how its Salon Ultimate pull went (null: never pulled). */
-	public record PayrollWeek(LocalDate weekStart, StatsImportView pull) {}
+	/**
+	 * One of the two weeks a check pays for, whether it's over (30 minutes after Friday's closing),
+	 * and how its Salon Ultimate pull went (null: never pulled).
+	 */
+	public record PayrollWeek(LocalDate weekStart, boolean over, StatsImportView pull) {}
 
 	/** Someone's numbers for one week, as the payroll skill reports them for ADP. */
 	public record PayrollPayWeek(

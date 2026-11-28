@@ -118,7 +118,18 @@ public class PayrollService {
 	}
 
 	public PayPeriods periods() {
-		return periodsAround(LocalDate.now(zone));
+		return periodsAround(payrollDay(LocalDateTime.now(zone)));
+	}
+
+	/**
+	 * The day that picks the default period. A week is over 30 minutes after Friday's closing,
+	 * when it's pulled, so from then on Friday counts as Saturday and the new period shows.
+	 */
+	public static LocalDate payrollDay(LocalDateTime now) {
+		LocalDate today = now.toLocalDate();
+		boolean afterFridayPull = today.getDayOfWeek() == java.time.DayOfWeek.FRIDAY
+			&& !now.isBefore(DailySalesService.pullTime(today));
+		return afterFridayPull ? today.plusDays(1) : today;
 	}
 
 	/** Who notes can be written for: everyone active on the schedule, by name. */
@@ -342,7 +353,7 @@ public class PayrollService {
 			.flatMap(r -> java.util.stream.Stream.of(r.week1(), r.week2()))
 			.filter(Objects::nonNull).toList();
 		return new PayrollReport(pay.ratesLoaded(), statsService.isConfigured(),
-			List.of(new PayrollWeek(week1, statsService.importStatus(week1)), new PayrollWeek(week2, statsService.importStatus(week2))),
+			List.of(week(week1), week(week2)),
 			rows,
 			sum(all, PayrollPayWeek::floorHours), sum(all, PayrollPayWeek::offFloorHours),
 			sum(all, PayrollPayWeek::tips), sum(all, PayrollPayWeek::commission));
@@ -389,6 +400,10 @@ public class PayrollService {
 			e == null ? BigDecimal.ZERO : e.ptoHours(), e == null ? BigDecimal.ZERO : e.pendingPtoHours(),
 			e == null ? BigDecimal.ZERO : e.additions(), e == null ? BigDecimal.ZERO : e.deductions(),
 			e == null ? List.of() : e.notes());
+	}
+
+	private PayrollWeek week(LocalDate start) {
+		return new PayrollWeek(start, !start.isAfter(statsService.latestCompleteWeek()), statsService.importStatus(start));
 	}
 
 	/** Pull (or re-pull) one of the period's weeks from Salon Ultimate now. */

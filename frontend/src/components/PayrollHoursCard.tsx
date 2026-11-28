@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api, type PayrollPayWeek, type PayrollReport } from '@/src/lib/api';
 import { formatDate, formatDateTime, moneyCents } from '@/src/lib/format';
-import { addDays, todayIso } from '@/src/lib/schedule';
+import { addDays } from '@/src/lib/schedule';
 
 const hrs = (n: number) => n.toFixed(2);
 const weekRange = (start: string) => `${formatDate(start, false)} – ${formatDate(addDays(start, 6), false)}`;
@@ -50,7 +50,7 @@ export default function PayrollHoursCard({ checkDate }: { checkDate: string }) {
 
         <ul className="space-y-1 text-sm print:hidden">
           {report.weeks.map((w, i) => {
-            const over = addDays(w.weekStart, 6) < todayIso();
+            const over = w.over;
             const ok = w.pull?.status === 'OK';
             return (
               <li key={w.weekStart} className="flex flex-wrap items-center gap-x-3 gap-y-1">

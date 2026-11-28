@@ -47,6 +47,8 @@ class DailySalesTests {
 	@Autowired UserNotificationRepository inbox;
 	@Autowired DailySalesRepository days;
 	@Autowired DailySalesService service;
+	@Autowired StatsService weeks;
+	@Autowired com.grove.Repository.StatsImportRepository imports;
 	@Autowired com.grove.Repository.AppSettingRepository settings;
 	@MockBean SalonUltimateClient salonUltimate;
 	@MockBean JavaMailSender mailSender;
@@ -272,6 +274,22 @@ class DailySalesTests {
 			.andExpect(status().isBadRequest());
 		mvc.perform(post("/api/owner/daily-sales/" + yesterday.minusDays(60) + "/retry").cookie(owner))
 			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void updateAlsoPullsAWeekStuckOnAnOpenTimecard() throws Exception {
+		// Friday night: the week's pull (payroll and leaderboards) hit an open timecard.
+		LocalDate week = weeks.latestCompleteWeek();
+		imports.save(new com.grove.Domain.StatsImport(week, com.grove.Domain.StatsImport.Status.BLOCKED,
+			"Salon Ultimate won't run the report until these timecards are closed: Ava Stone", null, java.time.LocalDateTime.now()));
+		mvc.perform(get("/api/owner/daily-sales").cookie(owner))
+			.andExpect(jsonPath("$.week.status").value("BLOCKED"));
+
+		// She clocks out; the owner presses Update on that week's Friday.
+		mvc.perform(post("/api/owner/daily-sales/" + week.plusDays(6) + "/retry").cookie(owner))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.week.status").value("OK"));
+		assertThat(imports.findById(week).orElseThrow().getStatus()).isEqualTo(com.grove.Domain.StatsImport.Status.OK);
 	}
 
 	private static DailySales open(int dayOfMonth, String net) {

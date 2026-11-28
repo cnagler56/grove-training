@@ -87,6 +87,18 @@ class PayrollTests {
 		assertThat(PayrollService.defaultCheckDate(LocalDate.of(2026, 11, 20))).isEqualTo(LocalDate.of(2026, 11, 13));
 		assertThat(PayrollService.defaultCheckDate(LocalDate.of(2026, 11, 21))).isEqualTo(LocalDate.of(2026, 11, 27));
 
+		// A week is over 30 minutes after Friday's 6pm closing, when it's pulled: from Friday
+		// 6:30pm the new period is the default, and that week counts as the latest finished one.
+		var friday = LocalDate.of(2026, 11, 20);
+		assertThat(PayrollService.payrollDay(friday.atTime(18, 29))).isEqualTo(friday);
+		assertThat(PayrollService.payrollDay(friday.atTime(18, 30))).isEqualTo(friday.plusDays(1));
+		assertThat(PayrollService.defaultCheckDate(PayrollService.payrollDay(friday.atTime(18, 30)))).isEqualTo(LocalDate.of(2026, 11, 27));
+		assertThat(PayrollService.payrollDay(LocalDate.of(2026, 11, 19).atTime(23, 0))).isEqualTo(LocalDate.of(2026, 11, 19));
+		assertThat(com.grove.Service.StatsService.latestCompleteWeek(friday.atTime(18, 29))).isEqualTo(LocalDate.of(2026, 11, 7));
+		assertThat(com.grove.Service.StatsService.latestCompleteWeek(friday.atTime(18, 30))).isEqualTo(LocalDate.of(2026, 11, 14));
+		assertThat(com.grove.Service.StatsService.latestCompleteWeek(LocalDate.of(2026, 11, 21).atTime(6, 0))).isEqualTo(LocalDate.of(2026, 11, 14));
+		assertThat(com.grove.Service.StatsService.latestCompleteWeek(LocalDate.of(2026, 11, 18).atTime(12, 0))).isEqualTo(LocalDate.of(2026, 11, 7));
+
 		var periods = PayrollService.periodsAround(LocalDate.of(2026, 11, 11));
 		assertThat(periods.periods()).extracting(x -> x.checkDate()).contains(LocalDate.of(2026, 11, 13), LocalDate.of(2026, 10, 30));
 		assertThat(periods.periods().get(0).checkDate()).isAfter(periods.periods().get(1).checkDate());

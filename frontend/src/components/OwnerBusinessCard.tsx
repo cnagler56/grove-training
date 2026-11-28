@@ -28,6 +28,7 @@ export default function OwnerBusinessCard() {
     api.dailySales().then(setData).catch((e) => setError(e.message));
   }, []);
 
+  /** Pull a day again; when it's in the latest finished week, the server re-pulls a stuck week too. */
   async function retry(date: string) {
     setRetrying(date);
     setRetryResult(null);
@@ -35,11 +36,16 @@ export default function OwnerBusinessCard() {
       const next = await api.retryDailySales(date);
       setData(next);
       const day = next.days.find((d) => d.date === date);
-      setRetryResult(day?.status === 'OK'
-        ? { ok: true, text: `${longDayLabel(date)} is in now.` }
-        : { ok: false, text: `${longDayLabel(date)} still didn't come in${day?.message ? `: ${day.message}` : '.'}` });
+      const stillStuck = next.week != null && next.week.status !== 'OK';
+      if (day && day.status !== 'OK') {
+        setRetryResult({ ok: false, text: `${longDayLabel(date)} still didn't come in${day.message ? `: ${day.message}` : '.'}` });
+      } else if (stillStuck) {
+        setRetryResult({ ok: false, text: `The week still didn't come in${next.week?.message ? `: ${next.week.message}` : '.'}` });
+      } else {
+        setRetryResult({ ok: true, text: 'Updated. Everything is in now.' });
+      }
     } catch (e) {
-      setRetryResult({ ok: false, text: e instanceof Error ? e.message : 'Couldn’t try again' });
+      setRetryResult({ ok: false, text: e instanceof Error ? e.message : 'Couldn’t update' });
     } finally {
       setRetrying(null);
     }
@@ -53,6 +59,9 @@ export default function OwnerBusinessCard() {
   const latest = data.latest;
   // Days that didn't come in (open timecard, or Salon Ultimate couldn't be reached), newest first.
   const missed = data.days.filter((d) => d.status !== 'OK').reverse();
+  // The week's pull (payroll and leaderboards) is stuck too, e.g. on an open timecard Friday night.
+  const weekStuck = data.week != null && data.week.status !== 'OK' && data.week.status !== 'NOT_CONFIGURED';
+  const weekFriday = data.week ? addDays(data.week.weekStart, 6) : '';
 
   return (
     <section className="card space-y-4 p-5">
@@ -65,7 +74,7 @@ export default function OwnerBusinessCard() {
         </span>
       </div>
 
-      {missed.length > 0 && data.configured && (
+      {(missed.length > 0 || weekStuck) && data.configured && (
         <ul className="space-y-1.5 rounded-lg bg-amber-50 px-3 py-2 text-sm">
           {missed.map((d) => (
             <li key={d.date} className="flex flex-wrap items-center justify-between gap-2">
@@ -75,11 +84,23 @@ export default function OwnerBusinessCard() {
                 {d.message ? `: ${d.message}` : ''}
               </span>
               <button className="btn-ghost" disabled={retrying !== null} onClick={() => void retry(d.date)}>
-                {retrying === d.date ? 'Trying…' : 'Try again'}
+                {retrying === d.date ? 'Updating…' : 'Update'}
               </button>
             </li>
           ))}
-          <li className="text-xs opacity-70">Once the timecard is closed in Salon Ultimate, press Try again.</li>
+          {weekStuck && data.week && (
+            <li className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 font-semibold text-[var(--warn)]">
+                The week of {longDayLabel(data.week.weekStart)} (payroll and leaderboards)
+                {data.week.status === 'BLOCKED' ? ' is waiting on an open timecard' : ' didn’t come in'}
+                {data.week.message ? `: ${data.week.message}` : ''}
+              </span>
+              <button className="btn-ghost" disabled={retrying !== null} onClick={() => void retry(weekFriday)}>
+                {retrying === weekFriday ? 'Updating…' : 'Update'}
+              </button>
+            </li>
+          )}
+          <li className="text-xs opacity-70">Once everyone is clocked out in Salon Ultimate, press Update.</li>
         </ul>
       )}
       {retryResult && (

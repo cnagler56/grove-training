@@ -28,6 +28,7 @@ import com.grove.Domain.DailySales;
 import com.grove.Domain.DailySales.Status;
 import com.grove.Domain.Dtos.DailySalesDay;
 import com.grove.Domain.Dtos.DailySalesView;
+import com.grove.Domain.Dtos.StatsImportView;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
@@ -82,16 +83,19 @@ public class DailySalesService {
 	private final PushService push;
 	private final PermissionService perms;
 	private final AppSettingRepository settings;
+	private final StatsService weeks;
 	private final ZoneId zone;
 
 	public DailySalesService(DailySalesRepository days, UserRepository users, SalonUltimateClient salonUltimate,
-			PushService push, PermissionService perms, AppSettingRepository settings, @Value("${app.time-zone:America/Chicago}") String zone) {
+			PushService push, PermissionService perms, AppSettingRepository settings, StatsService weeks,
+			@Value("${app.time-zone:America/Chicago}") String zone) {
 		this.days = days;
 		this.users = users;
 		this.salonUltimate = salonUltimate;
 		this.push = push;
 		this.perms = perms;
 		this.settings = settings;
+		this.weeks = weeks;
 		this.zone = ZoneId.of(zone);
 	}
 
@@ -137,6 +141,12 @@ public class DailySalesService {
 				"Today's numbers can't be pulled until 30 minutes after closing");
 		}
 		pull(date, false);
+		// The same open timecard holds up the week's pull (payroll and leaderboards) on a Friday
+		// night, so Update re-runs that too when the day is in the latest finished week.
+		LocalDate week = weeks.latestCompleteWeek();
+		boolean inWeek = !date.isBefore(week) && !date.isAfter(week.plusDays(6));
+		StatsImportView w = weeks.importStatus(week);
+		if (inWeek && (w == null || !"OK".equals(w.status()))) weeks.importWeek(week);
 		return view();
 	}
 
@@ -390,7 +400,8 @@ public class DailySalesService {
 			latest == null ? null : day(latest),
 			todays == null ? null : day(todays),
 			p.monthToDate(), p.openDaysSoFar(), p.averagePerOpenDay(), p.openDaysInMonth(), p.projected(),
-			yearAgo.stream().map(DailySalesService::day).toList());
+			yearAgo.stream().map(DailySalesService::day).toList(),
+			weeks.importStatus(weeks.latestCompleteWeek()));
 	}
 
 	private static DailySalesDay day(DailySales d) {

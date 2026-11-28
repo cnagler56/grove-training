@@ -287,6 +287,8 @@ export interface DailySalesView {
   projectedMonth: number;
   /** The same weekday 52 weeks before each chart day (364 days back). */
   yearAgo: DailySalesDay[];
+  /** The latest finished week's pull (payroll and leaderboards); null before it's tried. */
+  week: StatsImport | null;
 }
 
 /** A day no one can ask for off. date is "YYYY-MM-DD". */
@@ -679,7 +681,8 @@ export interface PayrollEntry {
 export interface PayrollReport {
   ratesLoaded: boolean;
   salonUltimateConfigured: boolean;
-  weeks: { weekStart: string; pull: StatsImport | null }[];
+  /** over: the week has ended (30 minutes after Friday's closing). */
+  weeks: { weekStart: string; over: boolean; pull: StatsImport | null }[];
   rows: PayrollPayRow[];
   floorHours: number;
   offFloorHours: number;
