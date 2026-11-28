@@ -22,8 +22,8 @@ import com.grove.Repository.UserRepository;
 /**
  * Who can be picked as manager on duty (MOD) on the schedule. The owner checks
  * people on the Settings page; the list is stored in app_settings as employee ids.
- * Until she saves it, every general manager and manager can be MOD. Only people
- * who are on the schedule (not owners or customers) can be on the list.
+ * Until she saves it, every general manager and manager can be MOD. Only leads and
+ * up can be on the list, owners included; never stylists or receptionists.
  */
 @Service
 public class ManagerOnDutyService {
@@ -45,9 +45,14 @@ public class ManagerOnDutyService {
 		this.users = users;
 	}
 
-	/** Can be picked as MOD now: on the owner's list and on the schedule (not marked off it for time away). */
+	/** Leads, managers, general managers, and owners. Stylists and receptionists never are. */
+	public static boolean roleCanBeMod(Role role) {
+		return role == Role.LEAD || role.outranks(Role.LEAD);
+	}
+
+	/** Can be picked as MOD now: on the owner's list, and not marked off the schedule for time away. */
 	public boolean isEligible(User u) {
-		return u != null && u.isActive() && u.getRoles().isScheduled() && u.getInactiveSince() == null
+		return u != null && u.isActive() && roleCanBeMod(u.getRoles()) && u.getInactiveSince() == null
 			&& onList(u, saved());
 	}
 
@@ -58,7 +63,7 @@ public class ManagerOnDutyService {
 			.toList();
 	}
 
-	/** Everyone on the schedule, checked if they're on the MOD list: the owner's Settings card. */
+	/** Every lead and up (owners too), checked if they're on the MOD list: the owner's Settings card. */
 	public List<Candidate> candidates() {
 		Optional<Set<Long>> saved = saved();
 		return staff().stream()
@@ -74,8 +79,8 @@ public class ManagerOnDutyService {
 	public synchronized List<Candidate> set(CandidateInput input) {
 		if (input == null || input.userId() == null) throw bad("Pick someone");
 		User u = users.findById(input.userId()).orElseThrow(() -> bad("That person isn't on the team"));
-		if (input.on() && (!u.isActive() || !u.getRoles().isScheduled())) {
-			throw bad(name(u) + " isn't on the schedule, so they can't be manager on duty");
+		if (input.on() && (!u.isActive() || !roleCanBeMod(u.getRoles()))) {
+			throw bad("Only leads, managers, general managers, and owners can be manager on duty");
 		}
 		// The first change starts from the starting roles, so nobody drops off unexpectedly.
 		Optional<Set<Long>> saved = saved();
@@ -102,10 +107,10 @@ public class ManagerOnDutyService {
 		});
 	}
 
-	/** Active people on the schedule, A to Z. */
+	/** Active leads and up, owners included, A to Z. */
 	private List<User> staff() {
 		return users.findAll().stream()
-			.filter(u -> u.isActive() && u.getRoles().isScheduled())
+			.filter(u -> u.isActive() && roleCanBeMod(u.getRoles()))
 			.sorted(Comparator.comparing(u -> name(u).toLowerCase()))
 			.toList();
 	}

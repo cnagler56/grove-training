@@ -332,10 +332,11 @@ function ScheduleEditor() {
     ?? week.managersOnDuty.find((m) => m.userId === id)?.name
     ?? staff.find((m) => m.userId === id)?.name
     ?? 'Former employee';
-  // Days whose manager on duty has no working shift that day.
+  // Days whose manager on duty has no working shift that day. Owners aren't on the
+  // schedule, so an owner as MOD never has a shift and isn't flagged.
   const modNotWorking = days.flatMap((d) => {
     const id = mods[d];
-    if (!id) return [];
+    if (!id || !staff.some((m) => m.userId === id)) return [];
     const c = cells[key(id, d)];
     return c && !c.off ? [] : [`${modName(id)} on ${longDayLabel(d)}`];
   });

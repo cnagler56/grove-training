@@ -6,8 +6,8 @@ import { roleLabel } from '@/src/lib/roles';
 
 /**
  * Owner Settings: who can be picked as manager on duty (MOD) in the schedule
- * editor's MOD row. Until the owner changes it, general managers and managers
- * are checked. Each click saves right away.
+ * editor's MOD row. Lists leads and up, owners included. Until the owner changes
+ * it, general managers and managers are checked. Each click saves right away.
  */
 export default function ManagerOnDutyCard() {
   const [people, setPeople] = useState<ModCandidate[] | null>(null);
@@ -34,13 +34,14 @@ export default function ManagerOnDutyCard() {
     <section className="card mt-8 p-5">
       <h2 className="text-lg font-extrabold">Who can be manager on duty</h2>
       <p className="mt-1 text-sm opacity-70">
-        Check everyone who can be picked in the MOD row when the schedule is built. Days already saved keep their
-        manager on duty if you uncheck someone later.
+        Check everyone who can be picked in the MOD row when the schedule is built. Leads, managers, general
+        managers, and owners are listed; stylists and receptionists can&apos;t be manager on duty. Days already saved
+        keep their manager on duty if you uncheck someone later.
       </p>
       {!people ? (
         <p className="mt-3 text-sm opacity-60">{error ?? 'Loading…'}</p>
       ) : people.length === 0 ? (
-        <p className="mt-3 text-sm opacity-60">No one is on the schedule yet.</p>
+        <p className="mt-3 text-sm opacity-60">No leads, managers, or owners yet.</p>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           {people.map((p) => (

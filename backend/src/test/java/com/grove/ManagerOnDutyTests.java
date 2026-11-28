@@ -132,7 +132,7 @@ class ManagerOnDutyTests {
 			.andExpect(status().isBadRequest())
 			.andExpect(status().reason(containsString("Lou Park can't be manager on duty")));
 		save(gm, "[]", mod(week, avaId)).andExpect(status().isBadRequest());
-		// Nor is the owner, who isn't on the schedule.
+		// Nor is the owner until she checks herself.
 		save(gm, "[]", mod(week, ownerId)).andExpect(status().isBadRequest());
 		// One per day.
 		save(gm, "[]", mod(week, maxId) + "," + mod(week, giaId))
@@ -142,32 +142,36 @@ class ManagerOnDutyTests {
 		save(gm, "[]", mod(week.plusDays(7), maxId)).andExpect(status().isBadRequest());
 		assertThat(mods.count()).isZero();
 
-		// The owner's Settings card lists everyone on the schedule.
+		// The owner's Settings card lists leads and up, owners included, but no stylists.
 		mvc.perform(get("/api/owner/manager-on-duty").cookie(owner))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$[*].name").value(contains("Ava Stone", "Gia Ray", "Lou Park", "Max Hart")))
+			.andExpect(jsonPath("$[*].name").value(contains("Gia Ray", "Lou Park", "Max Hart", "Owner Person")))
 			.andExpect(jsonPath("$[?(@.name=='Max Hart')].on").value(true))
-			.andExpect(jsonPath("$[?(@.name=='Lou Park')].on").value(false));
+			.andExpect(jsonPath("$[?(@.name=='Lou Park')].on").value(false))
+			.andExpect(jsonPath("$[?(@.name=='Owner Person')].on").value(false));
 		// Only the owner changes it.
 		mvc.perform(put("/api/owner/manager-on-duty").cookie(gm).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"userId\":" + louId + ",\"on\":true}"))
 			.andExpect(status().isForbidden());
+		// A stylist can't be added.
 		mvc.perform(put("/api/owner/manager-on-duty").cookie(owner).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"userId\":" + ownerId + ",\"on\":true}"))
-			.andExpect(status().isBadRequest());
+				.content("{\"userId\":" + avaId + ",\"on\":true}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(status().reason(containsString("Only leads, managers, general managers, and owners")));
 
-		// The owner adds the lead: now the lead can be picked.
+		// The owner adds the lead and herself: now both can be picked.
 		modList(louId, true).andExpect(jsonPath("$[?(@.name=='Lou Park')].on").value(true));
-		save(gm, "[]", mod(week, louId) + "," + mod(week.plusDays(1), maxId))
+		modList(ownerId, true).andExpect(jsonPath("$[?(@.name=='Owner Person')].on").value(true));
+		save(gm, "[]", mod(week, louId) + "," + mod(week.plusDays(1), maxId) + "," + mod(week.plusDays(2), ownerId))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.managersOnDuty[*].name").value(contains("Lou Park", "Max Hart")));
+			.andExpect(jsonPath("$.managersOnDuty[*].name").value(contains("Lou Park", "Max Hart", "Owner Person")));
 
 		// The owner takes the manager off: the day already saved stays, but he can't be picked again.
 		modList(maxId, false)
 			.andExpect(jsonPath("$[?(@.name=='Max Hart')].on").value(false))
 			.andExpect(jsonPath("$[?(@.name=='Gia Ray')].on").value(true));
 		mvc.perform(get("/api/schedule").param("date", week.toString()).cookie(gm))
-			.andExpect(jsonPath("$.modChoices[*].name").value(contains("Gia Ray", "Lou Park")));
+			.andExpect(jsonPath("$.modChoices[*].name").value(contains("Gia Ray", "Lou Park", "Owner Person")));
 		save(gm, "[]", mod(week, louId) + "," + mod(week.plusDays(1), maxId)).andExpect(status().isOk());
 		save(gm, "[]", mod(week.plusDays(2), maxId))
 			.andExpect(status().isBadRequest())
