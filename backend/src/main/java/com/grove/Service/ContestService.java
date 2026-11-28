@@ -222,7 +222,8 @@ public class ContestService {
 
 	/**
 	 * Read the standings from Salon Ultimate, tell people whose place changed, and
-	 * after the last day, announce the final results. One check at a time.
+	 * after the last day, announce the final results. One check at a time. In a team
+	 * contest only the team standings are told: a new leading team, then who won.
 	 */
 	synchronized void check(Contest c) {
 		LocalDate today = today();
@@ -289,33 +290,35 @@ public class ContestService {
 		contests.save(c);
 		if (firstCheck) return;
 
-		for (ContestEntry e : list) {
-			Integer was = before.get(e.getId());
-			if (was == null || was.equals(e.getRank())) continue;
-			String place = place(e, list);
-			String text = (e.getRank() < was ? "You moved up to " + place : "You're now " + place)
-				+ " with " + score(c, e) + "." + toMoveUp(c, e, list);
-			push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName(), text, PAGE);
-		}
-		if (leader != null && !leader.equals(previousLeader)) {
-			int second = totals.entrySet().stream().filter(t -> !t.getKey().equals(leader))
-				.mapToInt(Map.Entry::getValue).max().orElse(0);
-			String margin = handicapped(c)
-				? String.format("%,d to %,d points", totals.get(leader), second)
-				: totals.get(leader) + " to " + second;
+		if (teamList.isEmpty()) {
+			for (ContestEntry e : list) {
+				Integer was = before.get(e.getId());
+				if (was == null || was.equals(e.getRank())) continue;
+				String place = place(e, list);
+				String text = (e.getRank() < was ? "You moved up to " + place : "You're now " + place)
+					+ " with " + score(c, e) + "." + toMoveUp(c, e, list);
+				push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName(), text, PAGE);
+			}
+		} else if (leader != null && !leader.equals(previousLeader)) {
 			push.notify(NotificationKind.CONTESTS, list.stream().map(ContestEntry::getUserId).toList(), c.getName(),
-				teamName(teamList, leader) + " took the lead, " + margin + ".", PAGE);
+				teamName(teamList, leader) + " took the lead, " + margin(c, totals, leader) + ".", PAGE);
 		}
 	}
 
-	/** Final places to everyone in it, and the results on the team board. */
+	/**
+	 * Final places to everyone in it (in a team contest, only which team won), and the
+	 * results on the team board.
+	 */
 	private void announce(Contest c, List<ContestEntry> list, Map<Long, User> people, List<ContestTeam> teamList,
 			Map<Integer, Integer> totals, Integer leader) {
-		String teamResult = teamList.isEmpty() ? ""
-			: leader == null ? " The teams tied." : " " + teamName(teamList, leader) + " won as a team.";
-		for (ContestEntry e : list) {
-			push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName() + " is over",
-				"You finished " + place(e, list) + " with " + score(c, e) + "." + teamResult, PAGE);
+		if (teamList.isEmpty()) {
+			for (ContestEntry e : list) {
+				push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName() + " is over",
+					"You finished " + place(e, list) + " with " + score(c, e) + ".", PAGE);
+			}
+		} else {
+			push.notify(NotificationKind.CONTESTS, list.stream().map(ContestEntry::getUserId).toList(), c.getName() + " is over",
+				(leader == null ? "It ended in a tie, " : teamName(teamList, leader) + " won, ") + margin(c, totals, leader) + ".", PAGE);
 		}
 
 		List<String> lines = new ArrayList<>();
@@ -590,6 +593,17 @@ public class ContestService {
 	}
 
 	/** The team ahead of the rest, or null when there are no teams or the top is tied. */
+	/**
+	 * The top team's total against the next best: "6 to 3", or "1,200 to 900 points" with a
+	 * handicap. With no single leader (a tie), the two equal top totals.
+	 */
+	private static String margin(Contest c, Map<Integer, Integer> totals, Integer leader) {
+		int top = totals.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+		int second = leader == null ? top
+			: totals.entrySet().stream().filter(t -> !t.getKey().equals(leader)).mapToInt(Map.Entry::getValue).max().orElse(0);
+		return handicapped(c) ? String.format("%,d to %,d points", top, second) : top + " to " + second;
+	}
+
 	private static Integer leader(Map<Integer, Integer> totals) {
 		int best = totals.values().stream().mapToInt(Integer::intValue).max().orElse(-1);
 		List<Integer> top = totals.entrySet().stream().filter(t -> t.getValue() == best).map(Map.Entry::getKey).toList();

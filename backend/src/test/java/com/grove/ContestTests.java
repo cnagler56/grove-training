@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -28,6 +29,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import jakarta.servlet.http.Cookie;
 
@@ -191,7 +193,7 @@ class ContestTests {
 	}
 
 	@Test
-	void teamsAreTotalledAndEveryoneHearsWhenTheLeadChanges() throws Exception {
+	void teamsAreTotalledAndOnlyTheTeamLeadIsNotified() throws Exception {
 		long id = create(manager, contest("Team Blitz", List.of("Oak", "Pine"),
 			person(avaId, 0), person(leeId, 0), person(miaId, 1), person(zoeId, 1)));
 		report("Ava Stone", 3, "Lee Moss", 0, "Mia Cruz", 1, "Zoe Park", 0);
@@ -204,10 +206,18 @@ class ContestTests {
 			.andExpect(jsonPath("$.teams[1].rank").value(2));
 		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 
+		// Mia moves up to 1st on her own, and Pine takes the lead: only the lead is told.
 		report("Ava Stone", 3, "Lee Moss", 0, "Mia Cruz", 5, "Zoe Park", 1);
 		check(id).andExpect(jsonPath("$.teams[1].rank").value(1));
 		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> to.size() == 4 && to.containsAll(List.of(avaId, leeId, miaId, zoeId))),
 			eq("Team Blitz"), eq("Pine took the lead, 6 to 3."), eq("/contests"));
+		verify(push, times(1)).notify(any(), any(), anyString(), anyString(), anyString());
+
+		// Lee and Zoe swap places but Pine still leads: nobody is told.
+		clearInvocations(push);
+		report("Ava Stone", 3, "Lee Moss", 2, "Mia Cruz", 5, "Zoe Park", 1);
+		check(id).andExpect(jsonPath("$.teams[1].rank").value(1));
+		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 	}
 
 	@Test
@@ -224,8 +234,10 @@ class ContestTests {
 		service.checkAll();
 		verify(salonUltimate).detailedServiceByEmployee(today.minusDays(10), today.minusDays(1));
 		mvc.perform(get("/api/contests").cookie(ava)).andExpect(jsonPath("$[0].status").value("FINISHED"));
-		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Team Blitz is over"),
-			eq("You finished 1st with 3 treatments. Oak won as a team."), eq("/contests"));
+		// A team contest ends with which team won, not anyone's own place.
+		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> Set.copyOf(to).equals(Set.of(avaId, miaId))),
+			eq("Team Blitz is over"), eq("Oak won, 3 to 1."), eq("/contests"));
+		verify(push, times(1)).notify(any(), any(), anyString(), anyString(), anyString());
 		assertThat(posts.count()).isEqualTo(postsBefore + 1);
 		String body = posts.findAll().stream().map(p -> p.getBody()).filter(b -> b != null && b.startsWith("Team Blitz results"))
 			.findFirst().orElseThrow();
@@ -237,6 +249,27 @@ class ContestTests {
 		verify(salonUltimate, never()).detailedServiceByEmployee(any(), any());
 		assertThat(posts.count()).isEqualTo(postsBefore + 1);
 		send(manager, put("/api/contests/" + id), contest("Again", List.of(), person(avaId, null), person(miaId, null)), status().isBadRequest());
+	}
+
+	@Test
+	void aContestWithoutTeamsEndsWithEachPersonsPlaceAndATeamTieSaysSo() throws Exception {
+		long solo = create(manager, contest("Solo Blitz", List.of(), person(avaId, null), person(miaId, null)));
+		long tied = create(manager, contest("Tied Blitz", List.of("Oak", "Pine"), person(avaId, 0), person(miaId, 1)));
+		report("Ava Stone", 3, "Mia Cruz", 3);
+		check(solo);
+		check(tied);
+		for (long id : List.of(solo, tied)) {
+			var c = contests.findById(id).orElseThrow();
+			c.setStartDate(today.minusDays(10));
+			c.setEndDate(today.minusDays(1));
+			contests.save(c);
+		}
+
+		service.checkAll();
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Solo Blitz is over"),
+			eq("You finished tied for 1st with 3 treatments."), eq("/contests"));
+		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> Set.copyOf(to).equals(Set.of(avaId, miaId))),
+			eq("Tied Blitz is over"), eq("It ended in a tie, 3 to 3."), eq("/contests"));
 	}
 
 	@Test
