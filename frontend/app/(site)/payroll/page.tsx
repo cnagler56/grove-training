@@ -9,6 +9,7 @@ import { longDayLabel } from '@/src/lib/schedule';
 import { useUser } from '@/src/lib/UserContext';
 import PayPeriodPicker, { workRange } from '@/src/components/PayPeriodPicker';
 import PayrollHoursCard from '@/src/components/PayrollHoursCard';
+import AdpFileCard from '@/src/components/AdpFileCard';
 
 const hrs = (h: number) => `${Number(h.toFixed(2))}`;
 
@@ -117,6 +118,7 @@ export default function PayrollPage() {
           )}
 
           <PayrollHoursCard key={checkDate} checkDate={checkDate} />
+          <AdpFileCard key={`adp-${checkDate}`} checkDate={checkDate} />
 
           <h2 className="pt-2 text-lg font-extrabold">Paid time off and payroll notes</h2>
           <div className="grid gap-3 sm:grid-cols-3">

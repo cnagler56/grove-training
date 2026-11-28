@@ -1,4 +1,4 @@
-import type { PayrollNote, PayrollNoteKind } from './api';
+import type { AdpHandLine, AdpLine, PayrollNote, PayrollNoteKind } from './api';
 import { formatDateTime, moneyCents } from './format';
 
 /** Where the owner signs in to ADP (RUN) to enter payroll. */
@@ -28,6 +28,30 @@ export const NOTE_KIND: Record<PayrollNoteKind, [string, string]> = {
 /** "-$25.50" / "+$40.00", or nothing for a comment. */
 export const signedAmount = (n: Pick<PayrollNote, 'kind' | 'amount'>) =>
   n.amount == null || n.kind === 'COMMENT' ? '' : `${n.kind === 'DEDUCTION' ? '-' : '+'}${moneyCents(n.amount)}`;
+
+/** What each ADP earnings code is called on ADP's screens. */
+export const ADP_EARNING: Record<AdpLine['earningsCode'], string> = {
+  REG: 'Regular',
+  VAC: 'Vacation',
+  CASHTIP: 'Cash tips',
+  COMM: 'Product commission',
+  BON: 'Bonus',
+};
+
+/** "Regular 11.80 hrs" or "Cash tips $163.00". */
+export function adpLineText(l: AdpLine) {
+  return `${ADP_EARNING[l.earningsCode]} ${l.hours != null ? `${l.hours.toFixed(2)} hrs` : moneyCents(l.dollars ?? 0)}`;
+}
+
+/** "Regular 12.93 hrs at $20.00" or "Deduction $35.87 (clippers)". */
+export function handLineText(h: AdpHandLine) {
+  const note = h.note ? ` (${h.note})` : '';
+  if (h.kind === 'REGULAR' || h.kind === 'VACATION') {
+    const rate = h.rate != null ? ` at ${moneyCents(h.rate)}` : '';
+    return `${h.kind === 'REGULAR' ? 'Regular' : 'Vacation'} ${(h.hours ?? 0).toFixed(2)} hrs${rate}${note}`;
+  }
+  return `${h.kind === 'ADDITION' ? 'Addition' : 'Deduction'} ${moneyCents(h.dollars ?? 0)}${note}`;
+}
 
 /** Where a note stands, in words, with a text color. */
 export function noteStatus(n: PayrollNote): [string, string] {

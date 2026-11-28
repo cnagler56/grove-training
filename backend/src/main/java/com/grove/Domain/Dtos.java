@@ -546,4 +546,43 @@ public final class Dtos {
 
 	/** One paid time off request on the Payroll tab. status is PENDING or APPROVED. */
 	public record PayrollPto(Long id, BigDecimal hours, String status, String finishedByName, LocalDateTime finishedAt) {}
+
+	/** The owner's ADP settings: the company code (ADP's IID) and each person's ADP details. */
+	public record AdpSettings(String companyCode, List<AdpPersonView> people) {}
+
+	/**
+	 * One person's ADP details on Settings. {@code standardRate} is what their vacation and
+	 * off-floor hours pay; their rate in ADP should match it, since imported hours use ADP's rate.
+	 */
+	public record AdpPersonView(String name, Role role, String employeeId, boolean salaried, BigDecimal monthlyBonus,
+		BigDecimal standardRate) {}
+
+	/** The owner changing one person's ADP details. A blank ID or a 0 bonus clears it. */
+	public record AdpPersonInput(String name, String employeeId, Boolean salaried, BigDecimal monthlyBonus) {}
+
+	public record AdpCompanyInput(String companyCode) {}
+
+	/** One row of the ADP file: REG or VAC hours, or CASHTIP, COMM, or BON dollars. */
+	public record AdpLine(String earningsCode, BigDecimal hours, BigDecimal dollars) {}
+
+	/**
+	 * Something the file can't carry, to type into ADP by hand. kind is REGULAR or VACATION
+	 * (hours at a rate), or ADDITION or DEDUCTION (dollars, with the payroll note).
+	 */
+	public record AdpHandLine(String kind, BigDecimal hours, BigDecimal rate, BigDecimal dollars, String note) {}
+
+	/**
+	 * One person in the ADP file. {@code adpRate} is the hourly rate ADP's review screen should show
+	 * for them when the file has hours for them (null otherwise).
+	 */
+	public record AdpFilePerson(String name, String employeeId, boolean salaried, BigDecimal adpRate,
+		List<AdpLine> lines, List<AdpHandLine> byHand) {}
+
+	/**
+	 * The ADP import file for one check, before downloading. The file can't be downloaded while
+	 * there are {@code problems}; {@code notices} are worth reading but don't stop it.
+	 */
+	public record AdpFile(PayPeriod period, String companyCode, boolean lastCheckOfMonth, String fileName,
+		List<String> problems, List<String> notices, List<AdpFilePerson> people,
+		BigDecimal regularHours, BigDecimal vacationHours, BigDecimal tips, BigDecimal commission, BigDecimal bonus) {}
 }

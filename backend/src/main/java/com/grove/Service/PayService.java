@@ -194,6 +194,21 @@ public class PayService {
 		return BigDecimal.ZERO;
 	}
 
+	/**
+	 * What vacation and off-floor hours pay: their base rate, plus their bump only when it's a
+	 * lead bump (lead or lead/prod). Manager and custom bumps are for floor hours only (the
+	 * owner's rule). This is the rate their ADP profile should have.
+	 */
+	public BigDecimal standardRate(String suName) {
+		Role role = roleOf(suName);
+		PayCode row = personalRow(suName);
+		String kind = row == null || row.getBumpKind() == null
+			? (role == Role.LEAD ? "LEAD" : null)
+			: row.getBumpKind();
+		BigDecimal bump = "LEAD".equals(kind) || "LEAD_PROD".equals(kind) ? kindBump(kind) : BigDecimal.ZERO;
+		return baseRate(suName, role).add(bump).setScale(2, RoundingMode.HALF_UP);
+	}
+
 	/** The amount the owner set for one kind of bump (LEAD, LEAD_PROD, MANAGER). */
 	public BigDecimal kindBump(String kind) {
 		String key = BUMP_KEYS.get(kind);

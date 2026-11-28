@@ -687,6 +687,76 @@ export interface PayrollReport {
   commission: number;
 }
 
+/** The owner's ADP settings: ADP's company code (IID) and each person's ADP details. */
+export interface AdpSettings {
+  companyCode: string | null;
+  people: AdpPerson[];
+}
+
+export interface AdpPerson {
+  /** As Salon Ultimate shows it ("First Last"). */
+  name: string;
+  role: UserRole | null;
+  /** Their employee ID in ADP (the Employee Codes report). */
+  employeeId: string | null;
+  /** ADP pays them a fixed amount; the file sends their hours only. */
+  salaried: boolean;
+  /** Paid on the last check of every month; null for none. */
+  monthlyBonus: number | null;
+  /** What their vacation and off-floor hours pay; their rate in ADP should match. */
+  standardRate: number;
+}
+
+export interface AdpPersonInput {
+  name: string;
+  employeeId: string | null;
+  salaried: boolean;
+  monthlyBonus: number | null;
+}
+
+/** One row of the ADP file: hours (REG, VAC) or dollars (CASHTIP, COMM, BON). */
+export interface AdpLine {
+  earningsCode: 'REG' | 'VAC' | 'CASHTIP' | 'COMM' | 'BON';
+  hours: number | null;
+  dollars: number | null;
+}
+
+/** Something to type into ADP by hand: hours at a rate, or a payroll note's dollars. */
+export interface AdpHandLine {
+  kind: 'REGULAR' | 'VACATION' | 'ADDITION' | 'DEDUCTION';
+  hours: number | null;
+  rate: number | null;
+  dollars: number | null;
+  note: string | null;
+}
+
+export interface AdpFilePerson {
+  /** "Last, First". */
+  name: string;
+  employeeId: string | null;
+  salaried: boolean;
+  /** The hourly rate ADP's review screen should show for them when the file has hours for them. */
+  adpRate: number | null;
+  lines: AdpLine[];
+  byHand: AdpHandLine[];
+}
+
+/** The ADP import file for one check. It can't be downloaded while there are problems. */
+export interface AdpFile {
+  period: PayPeriod;
+  companyCode: string | null;
+  lastCheckOfMonth: boolean;
+  fileName: string;
+  problems: string[];
+  notices: string[];
+  people: AdpFilePerson[];
+  regularHours: number;
+  vacationHours: number;
+  tips: number;
+  commission: number;
+  bonus: number;
+}
+
 /** The skill's matrix.json, as-is. */
 export interface PayRulesUpload {
   matrix: { pph: number; rate: number }[];
@@ -1062,6 +1132,27 @@ export const api = {
   payrollReport: (checkDate: string) => send<PayrollReport>(`/api/payroll/report?checkDate=${checkDate}`),
   pullPayrollWeek: (week: string) => send<StatsImport>(`/api/payroll/pull?week=${week}`, 'POST'),
   salonUltimateNames: () => send<SalonUltimateName[]>('/api/stats/names'),
+  adpSettings: () => send<AdpSettings>('/api/owner/adp'),
+  setAdpCompany: (companyCode: string) => send<AdpSettings>('/api/owner/adp/company', 'PUT', { companyCode }),
+  setAdpPerson: (p: AdpPersonInput) => send<AdpSettings>('/api/owner/adp/people', 'PUT', p),
+  adpFile: (checkDate: string) => send<AdpFile>(`/api/payroll/adp?checkDate=${checkDate}`),
+  /** Downloads the .csv to import into ADP; throws with the server's message if it can't be made yet. */
+  downloadAdpFile: async (checkDate: string, fileName: string) => {
+    const res = await fetch(`${BASE}/api/payroll/adp/file?checkDate=${checkDate}`, { credentials: 'include' });
+    if (!res.ok) {
+      let msg = `${res.status} ${res.statusText}`;
+      try { const j = await res.json(); msg = j.message || j.error || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
 
   resetPassword: (userId: number, password: string) =>
     send<void>(`/api/admin/team/${userId}/password`, 'POST', { password }),

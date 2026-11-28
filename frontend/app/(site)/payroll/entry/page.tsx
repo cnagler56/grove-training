@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, type PayrollEntry, type PayrollPayWeek } from '@/src/lib/api';
+import { api, type AdpFile, type PayrollEntry, type PayrollPayWeek } from '@/src/lib/api';
 import { formatDate, moneyCents } from '@/src/lib/format';
-import { ADP_SIGN_IN_URL, NOTE_KIND, halfScreen, signedAmount } from '@/src/lib/payroll';
+import { ADP_SIGN_IN_URL, NOTE_KIND, adpLineText, halfScreen, handLineText, signedAmount } from '@/src/lib/payroll';
 import { roleLabel } from '@/src/lib/roles';
 
 const hrs = (n: number) => n.toFixed(2);
@@ -51,6 +51,7 @@ function openAdp() {
  */
 export default function PayrollEntryPage() {
   const [entry, setEntry] = useState<PayrollEntry | null>(null);
+  const [adp, setAdp] = useState<AdpFile | null>(null);
   const [checkDate, setCheckDate] = useState('');
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,8 @@ export default function PayrollEntryPage() {
       setEntry(e);
       setCheckDate(d);
       setIndex(Math.min(savedSpot(d), Math.max(0, e.people.length - 1)));
+      // What the ADP file covers; without it the window works as before.
+      api.adpFile(d).then(setAdp).catch(() => setAdp(null));
     });
     (asked ? load(asked) : api.payPeriods().then((p) => load(p.defaultCheckDate)))
       .catch((e) => setError(e.message));
@@ -96,6 +99,10 @@ export default function PayrollEntryPage() {
 
   const p = entry.people[index];
   const last = index === entry.people.length - 1;
+  // Only once the file can be downloaded does "already in the file" mean anything.
+  const inFile = adp && adp.problems.length === 0
+    ? adp.people.find((x) => x.name.toLowerCase() === p?.name.toLowerCase()) ?? null
+    : null;
 
   return (
     <div className="mx-auto max-w-md space-y-3 text-sm">
@@ -154,6 +161,32 @@ export default function PayrollEntryPage() {
                   <Line label="Commission" w1={p.week1} w2={p.week2} show={(w) => moneyCents(w.commission)} />
                 </tbody>
               </table>
+            )}
+
+            {inFile && (inFile.lines.length > 0 || inFile.byHand.length > 0) && (
+              <div className="space-y-2 rounded-lg bg-[var(--surface-2)] p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide opacity-70">If you imported the ADP file</div>
+                {inFile.byHand.length > 0 ? (
+                  <div>
+                    <div className="text-xs font-bold text-[var(--warn)]">Type in ADP</div>
+                    <ul className="font-semibold tabular-nums">
+                      {inFile.byHand.map((h, i) => <li key={i}>{handLineText(h)}</li>)}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="text-xs font-bold text-[var(--success)]">Nothing to type for them</div>
+                )}
+                {inFile.lines.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold opacity-70">
+                      Already in the file{inFile.salaried ? ' (fixed pay)' : inFile.adpRate != null ? ` (ADP rate ${moneyCents(inFile.adpRate)})` : ''}
+                    </div>
+                    <ul className="tabular-nums opacity-80">
+                      {inFile.lines.map((l) => <li key={l.earningsCode}>{adpLineText(l)}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
 
             <dl className="grid grid-cols-3 gap-2 text-center">
