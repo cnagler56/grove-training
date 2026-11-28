@@ -34,6 +34,8 @@ export default function SalonSchedulePage() {
 
   // Only people with a shift or RO this week; the editor still lists everyone.
   const people = useMemo(() => (current ? scheduledThisWeek(current.roster, current.shifts) : []), [current]);
+  // The MOD row: each day's manager on duty.
+  const modByDay = useMemo(() => new Map((current?.managersOnDuty ?? []).map((m) => [m.date, m])), [current]);
 
   const days = weekDates(weekStart);
   const today = todayIso();
@@ -99,6 +101,24 @@ export default function SalonSchedulePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
+              {modByDay.size > 0 && (
+                <tr className="border-b-2 border-b-[var(--accent)]/40 bg-[var(--accent-soft)]">
+                  <td className="px-4 py-2.5">
+                    <div className="font-bold">MOD</div>
+                    <div className="text-xs opacity-60">Manager on duty</div>
+                  </td>
+                  {days.map((d) => {
+                    const mod = modByDay.get(d);
+                    const mine = !!mod && mod.userId === user?.userId;
+                    return (
+                      <td key={d} className="px-2 py-2.5 text-center text-sm font-bold">
+                        {mod ? <>{mod.name}{mine && <span className="font-normal opacity-60"> (you)</span>}</> : ''}
+                      </td>
+                    );
+                  })}
+                  <td />
+                </tr>
+              )}
               {people.map((person, i) => {
                 const mine = person.userId === user?.userId;
                 const total = days.reduce((h, d) => {

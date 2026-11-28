@@ -12,6 +12,13 @@ import {
 
 const DAY_NAMES = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
+/** "Jamie Rivera" as "Jamie R." so a name fits a day's narrow printed column. */
+function shortName(name: string) {
+  const [first, ...rest] = name.trim().split(/\s+/);
+  const last = rest.at(-1);
+  return last ? `${first} ${last[0]}.` : first;
+}
+
 export default function PrintSchedulePage() {
   // useSearchParams needs a Suspense boundary in the app router.
   return (
@@ -79,6 +86,8 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
   const cell = new Map(week.shifts.map((s) => [`${s.userId}|${s.date}`, s]));
   // Only people with a shift or RO this week; the editor still lists everyone.
   const people = scheduledThisWeek(week.roster, week.shifts);
+  // The MOD row, printed above everyone when any day has a manager on duty.
+  const mods = new Map((week.managersOnDuty ?? []).map((m) => [m.date, m.name]));
   const status = week.published ? null : week.canEdit ? 'Draft' : 'Not posted yet';
 
   return (
@@ -113,6 +122,20 @@ function PrintWeek({ week }: { week: WeekSchedule }) {
           </tr>
         </thead>
         <tbody>
+          {mods.size > 0 && (
+            <tr className="border-b-2 border-b-[#4682b4] bg-[#dce7f1]">
+              <td className="h-[0.42in] border-b border-[#d8dfe6] px-2.5 leading-tight">
+                <div className="font-extrabold text-[#2c5a82]">MOD</div>
+                <div className="text-[10px] font-semibold text-gray-500">Manager on duty</div>
+              </td>
+              {days.map((d) => (
+                <td key={d} className="border-b border-l border-[#d8dfe6] px-1 text-center text-[12px] font-bold leading-tight">
+                  {mods.has(d) ? shortName(mods.get(d)!) : ''}
+                </td>
+              ))}
+              <td className="border-b border-l border-[#d8dfe6]" />
+            </tr>
+          )}
           {people.map((person, i) => {
             const shifts = days.map((d) => cell.get(`${person.userId}|${d}`));
             const total = shifts.reduce((h, s) => h + (s ? entryHours(s) : 0), 0);

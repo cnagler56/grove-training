@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.grove.Domain.Dtos.ModDay;
+import com.grove.Domain.Dtos.ModInput;
 import com.grove.Domain.Dtos.PendingWeek;
 import com.grove.Domain.Dtos.Person;
 import com.grove.Domain.Dtos.RosterEntry;
@@ -25,6 +27,7 @@ import com.grove.Domain.Dtos.ShiftInput;
 import com.grove.Domain.Dtos.ShiftView;
 import com.grove.Domain.Dtos.TimeOffDay;
 import com.grove.Domain.Dtos.WeekSchedule;
+import com.grove.Domain.ManagerOnDuty;
 import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
@@ -34,6 +37,7 @@ import com.grove.Domain.Shift;
 import com.grove.Domain.ShiftType;
 import com.grove.Domain.TimeOffRequest;
 import com.grove.Domain.User;
+import com.grove.Repository.ManagerOnDutyRepository;
 import com.grove.Repository.ScheduleNoteRepository;
 import com.grove.Repository.ScheduleWeekRepository;
 import com.grove.Repository.ShiftRepository;
@@ -64,10 +68,12 @@ public class ScheduleService {
 	private final TimeOffRequestRepository timeOff;
 	private final ScheduleNoteRepository notes;
 	private final PushService push;
+	private final ManagerOnDutyRepository mods;
+	private final ManagerOnDutyService modRules;
 
 	public ScheduleService(ShiftRepository shifts, ScheduleWeekRepository weeks, UserRepository users,
 			PermissionService perms, Mailer mailer, TimeOffRequestRepository timeOff, ScheduleNoteRepository notes,
-			PushService push) {
+			PushService push, ManagerOnDutyRepository mods, ManagerOnDutyService modRules) {
 		this.shifts = shifts;
 		this.weeks = weeks;
 		this.users = users;
@@ -76,6 +82,8 @@ public class ScheduleService {
 		this.timeOff = timeOff;
 		this.notes = notes;
 		this.push = push;
+		this.mods = mods;
+		this.modRules = modRules;
 	}
 
 	/** The Saturday on or before {@code day}. */
@@ -108,7 +116,20 @@ public class ScheduleService {
 			w == null ? null : w.getReturnNote(),
 			w == null ? null : nameOf(w.getReturnedBy()),
 			seesDrafts ? approvers(viewer) : List.of(),
-			roster, list, daysOff, seesDrafts ? builderNotes(start) : Map.of());
+			roster, list, daysOff, seesDrafts ? builderNotes(start) : Map.of(),
+			visible ? managersOnDuty(start, end) : List.of(),
+			canEdit ? modRules.choices() : List.of());
+	}
+
+	/** The MOD row: each day this week that has a manager on duty. */
+	private List<ModDay> managersOnDuty(LocalDate start, LocalDate end) {
+		List<ManagerOnDuty> days = mods.findByDateBetweenOrderByDateAsc(start, end);
+		Map<Long, User> people = users.findAllById(days.stream().map(ManagerOnDuty::getUserId).distinct().toList())
+			.stream().collect(Collectors.toMap(User::getUserId, Function.identity()));
+		return days.stream().map(m -> {
+			User u = people.get(m.getUserId());
+			return new ModDay(m.getDate(), m.getUserId(), u == null ? "Former employee" : name(u));
+		}).toList();
 	}
 
 	private Map<Long, String> builderNotes(LocalDate start) {
@@ -194,9 +215,13 @@ public class ScheduleService {
 			.toList();
 	}
 
-	/** Replace a whole week with what the editor sent. */
+	/**
+	 * Replace a whole week with what the editor sent, including the MOD row
+	 * ({@code managersOnDuty} null leaves the saved managers on duty alone).
+	 */
 	@Transactional
-	public WeekSchedule saveWeek(User editor, LocalDate start, List<ShiftInput> input, Map<Long, String> builderNotes) {
+	public WeekSchedule saveWeek(User editor, LocalDate start, List<ShiftInput> input, Map<Long, String> builderNotes,
+			List<ModInput> managersOnDuty) {
 		requireSaturday(start);
 		ScheduleWeek existing = weeks.findById(start).orElse(null);
 		boolean canApprove = perms.has(editor, Permission.APPROVE_SCHEDULE);
@@ -229,6 +254,7 @@ public class ScheduleService {
 			if (!seen.add(s.userId() + "@" + s.date())) throw bad(name(u) + " has two shifts on " + s.date());
 			if (s.note() != null && s.note().length() > 100) throw bad("Shift notes are limited to 100 characters");
 		}
+		Map<LocalDate, Long> modPicks = managersOnDuty == null ? null : checkManagersOnDuty(start, end, managersOnDuty);
 
 		if (builderNotes != null) saveNotes(start, builderNotes);
 		shifts.deleteByDateBetween(start, end);
@@ -244,6 +270,7 @@ public class ScheduleService {
 			shift.setNote(s.note() == null || s.note().isBlank() ? null : s.note().trim());
 			shifts.save(shift);
 		}
+		if (modPicks != null) saveManagersOnDuty(start, end, modPicks);
 		ScheduleWeek w = existing != null ? existing : newWeek(start);
 		w.setUpdatedAt(LocalDateTime.now());
 		weeks.save(w);
@@ -343,6 +370,55 @@ public class ScheduleService {
 	}
 
 	// ---- helpers -------------------------------------------------------------
+
+	/**
+	 * The MOD row from the editor, by day. Each pick has to be someone the owner allows
+	 * as manager on duty. A day that keeps the person already saved for it is left
+	 * alone even if the owner has since taken them off the list, so changing a shift
+	 * on an older week doesn't fail.
+	 */
+	private Map<LocalDate, Long> checkManagersOnDuty(LocalDate start, LocalDate end, List<ModInput> input) {
+		Map<LocalDate, Long> saved = mods.findByDateBetweenOrderByDateAsc(start, end).stream()
+			.collect(Collectors.toMap(ManagerOnDuty::getDate, ManagerOnDuty::getUserId));
+		Map<Long, User> people = users.findAllById(input.stream()
+				.filter(m -> m != null && m.userId() != null).map(ModInput::userId).distinct().toList())
+			.stream().collect(Collectors.toMap(User::getUserId, Function.identity()));
+		Map<LocalDate, Long> picks = new java.util.TreeMap<>();
+		for (ModInput m : input) {
+			if (m == null || m.userId() == null) continue;
+			if (m.date() == null || m.date().isBefore(start) || m.date().isAfter(end)) {
+				throw bad("Every manager on duty has to fall between " + start + " and " + end);
+			}
+			if (picks.containsKey(m.date())) throw bad("There can only be one manager on duty on " + m.date());
+			User u = people.get(m.userId());
+			if (u == null || !u.isActive()) throw bad("One of the managers on duty isn't an active employee");
+			if (!m.userId().equals(saved.get(m.date())) && !modRules.isEligible(u)) {
+				throw bad(name(u) + " can't be manager on duty. The owner picks who can on the Settings page.");
+			}
+			picks.put(m.date(), m.userId());
+		}
+		return picks;
+	}
+
+	/** Make the saved MOD row for this week match {@code picks}. */
+	private void saveManagersOnDuty(LocalDate start, LocalDate end, Map<LocalDate, Long> picks) {
+		Set<LocalDate> kept = new HashSet<>();
+		for (ManagerOnDuty m : mods.findByDateBetweenOrderByDateAsc(start, end)) {
+			Long pick = picks.get(m.getDate());
+			if (pick == null) {
+				mods.delete(m);
+				continue;
+			}
+			kept.add(m.getDate());
+			if (!pick.equals(m.getUserId())) {
+				m.setUserId(pick);
+				mods.save(m);
+			}
+		}
+		picks.forEach((date, userId) -> {
+			if (!kept.contains(date)) mods.save(new ManagerOnDuty(date, userId));
+		});
+	}
 
 	/** Replace a week's private notes. Blank ones are dropped. */
 	private void saveNotes(LocalDate start, Map<Long, String> builderNotes) {

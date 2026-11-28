@@ -26,6 +26,7 @@ import com.grove.Domain.LoginDTO;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Repository.ContestEntryRepository;
+import com.grove.Repository.ManagerOnDutyRepository;
 import com.grove.Repository.ShiftRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.PushSubscriptionRepository;
@@ -66,6 +67,7 @@ public class UserService {
 	private final TodoAssignmentRepository todoRepo;
 	private final ContestEntryRepository contestEntryRepo;
 	private final UserNotificationRepository notificationRepo;
+	private final ManagerOnDutyRepository modRepo;
 	private final PasswordEncoder passwordEncoder;
 	private final String signupCode;
 	private final Set<String> adminEmails;
@@ -76,7 +78,7 @@ public class UserService {
 			PayrollNoteRepository payrollNoteRepo,
 			ScheduleNoteRepository scheduleNoteRepo, TeamPostLikeRepository teamLikeRepo,
 			PushSubscriptionRepository pushRepo, TodoAssignmentRepository todoRepo, ContestEntryRepository contestEntryRepo,
-			UserNotificationRepository notificationRepo, PasswordEncoder passwordEncoder,
+			UserNotificationRepository notificationRepo, ManagerOnDutyRepository modRepo, PasswordEncoder passwordEncoder,
 			@Value("${app.signup-code:}") String signupCode,
 			@Value("${app.admin-emails:}") String adminEmails) {
 		this.userRepo = userRepo;
@@ -93,6 +95,7 @@ public class UserService {
 		this.todoRepo = todoRepo;
 		this.contestEntryRepo = contestEntryRepo;
 		this.notificationRepo = notificationRepo;
+		this.modRepo = modRepo;
 		this.passwordEncoder = passwordEncoder;
 		this.signupCode = signupCode.trim();
 		this.adminEmails = Arrays.stream(adminEmails.split(","))
@@ -251,6 +254,7 @@ public class UserService {
 		sessionRepo.deleteByUserId(user.getUserId());
 		completionRepo.deleteByUserId(user.getUserId());
 		shiftRepo.deleteByUserId(user.getUserId());
+		modRepo.deleteByUserId(user.getUserId());
 		assignmentRepo.deleteByUserId(user.getUserId());
 		timeOffRepo.deleteByUserId(user.getUserId());
 		vacationPayRepo.deleteByUserId(user.getUserId());

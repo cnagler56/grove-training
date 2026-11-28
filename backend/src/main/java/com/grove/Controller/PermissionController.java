@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.grove.Domain.Dtos.MyPermissions;
 import com.grove.Domain.Dtos.PermissionRule;
 import com.grove.Domain.Dtos.PermissionUpdate;
+import com.grove.Service.ManagerOnDutyService;
 import com.grove.Service.PermissionService;
 import com.grove.Service.SessionService;
 
@@ -20,10 +21,27 @@ public class PermissionController {
 
 	private final PermissionService perms;
 	private final SessionService sessions;
+	private final ManagerOnDutyService mods;
 
-	public PermissionController(PermissionService perms, SessionService sessions) {
+	public PermissionController(PermissionService perms, SessionService sessions, ManagerOnDutyService mods) {
 		this.perms = perms;
 		this.sessions = sessions;
+		this.mods = mods;
+	}
+
+	/** Everyone on the schedule, checked if the owner lets them be manager on duty. */
+	@GetMapping("/api/owner/manager-on-duty")
+	public List<ManagerOnDutyService.Candidate> modList(
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireOwner(token);
+		return mods.candidates();
+	}
+
+	@PutMapping("/api/owner/manager-on-duty")
+	public List<ManagerOnDutyService.Candidate> setMod(@RequestBody ManagerOnDutyService.CandidateInput body,
+			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
+		sessions.requireOwner(token);
+		return mods.set(body);
 	}
 
 	@GetMapping("/api/me/permissions")

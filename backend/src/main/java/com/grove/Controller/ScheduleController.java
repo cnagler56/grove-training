@@ -71,7 +71,7 @@ public class ScheduleController {
 	public WeekSchedule save(@PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart,
 			@RequestBody WeekSave body,
 			@CookieValue(name = SessionService.COOKIE_NAME, required = false) String token) {
-		return schedule.saveWeek(sessions.requireUser(token), weekStart, body.shifts(), body.notes());
+		return schedule.saveWeek(sessions.requireUser(token), weekStart, body.shifts(), body.notes(), body.managersOnDuty());
 	}
 
 	@PostMapping("/{weekStart}/submit")

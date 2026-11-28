@@ -176,6 +176,17 @@ export interface WeekSchedule {
   timeOff: { userId: number; name: string; date: string }[];
   /** Private notes by employee id. Only sent to people who can build or approve the schedule. */
   builderNotes: Record<number, string>;
+  /** The MOD row: the manager on duty for each day that has one. */
+  managersOnDuty: ModDay[];
+  /** Who can be picked as manager on duty (only for people who can edit this week). */
+  modChoices: Person[];
+}
+
+/** The manager on duty (MOD) for one day. */
+export interface ModDay {
+  date: string;
+  userId: number;
+  name: string;
 }
 
 export interface Person {
@@ -272,6 +283,14 @@ export interface DailySalesDay {
 export interface SummaryRecipient {
   userId: number;
   name: string;
+  on: boolean;
+}
+
+/** One person on the owner's "Who can be manager on duty" card. */
+export interface ModCandidate {
+  userId: number;
+  name: string;
+  role: UserRole;
   on: boolean;
 }
 
@@ -1025,8 +1044,9 @@ export const api = {
 
   schedule: (date?: string) => send<WeekSchedule>(`/api/schedule${date ? `?date=${date}` : ''}`),
   mySchedule: () => send<ShiftView[]>('/api/schedule/mine'),
-  saveSchedule: (weekStart: string, shifts: ShiftInput[], notes: Record<number, string>) =>
-    send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts, notes }),
+  saveSchedule: (weekStart: string, shifts: ShiftInput[], notes: Record<number, string>,
+    managersOnDuty: { date: string; userId: number }[]) =>
+    send<WeekSchedule>(`/api/schedule/${weekStart}`, 'PUT', { shifts, notes, managersOnDuty }),
   publishSchedule: (weekStart: string, published: boolean) =>
     send<WeekSchedule>(`/api/schedule/${weekStart}/published`, 'PUT', { published }),
   submitSchedule: (weekStart: string, approverId: number) =>
@@ -1071,6 +1091,9 @@ export const api = {
   salesSummaryRecipients: () => send<SummaryRecipient[]>('/api/owner/daily-sales/recipients'),
   setSalesSummaryRecipient: (userId: number, on: boolean) =>
     send<SummaryRecipient[]>('/api/owner/daily-sales/recipients', 'PUT', { userId, on }),
+  modCandidates: () => send<ModCandidate[]>('/api/owner/manager-on-duty'),
+  setModCandidate: (userId: number, on: boolean) =>
+    send<ModCandidate[]>('/api/owner/manager-on-duty', 'PUT', { userId, on }),
   dailySales: () => send<DailySalesView>('/api/owner/daily-sales'),
   goals: () => send<GoalsView>('/api/goals'),
   booked: (date: string) => send<BookedDay>(`/api/goals/booked?date=${date}`),

@@ -166,7 +166,11 @@ public final class Dtos {
 		/** Every day this week someone is approved off (also merged into shifts as RO where the day is empty). */
 		List<TimeOffDay> timeOff,
 		/** Private notes by employee id. Only sent to people who can build or approve the schedule. */
-		Map<Long, String> builderNotes) {}
+		Map<Long, String> builderNotes,
+		/** The manager on duty for each day that has one (the MOD row). */
+		List<ModDay> managersOnDuty,
+		/** Who can be picked as manager on duty (only for people who can edit this week). */
+		List<Person> modChoices) {}
 
 	/** One row of the schedule. {@code active=false} only for a former employee with shifts that week. */
 	public record RosterEntry(Long userId, String name, Role role, boolean active) {}
@@ -174,9 +178,16 @@ public final class Dtos {
 	/** One cell from the schedule editor. {@code type} null means WORK; REQUESTED_OFF ignores the times. */
 	public record ShiftInput(Long userId, LocalDate date, ShiftType type, LocalTime start, LocalTime end, String note) {}
 
+	/** The manager on duty (MOD) for one day. */
+	public record ModDay(LocalDate date, Long userId, String name) {}
+
+	/** One day's manager on duty from the editor. A day left out (or with no userId) has none. */
+	public record ModInput(LocalDate date, Long userId) {}
+
 	/** The whole week from the editor; replaces whatever was saved before. */
 	/** {@code notes}: private notes by employee id. Left out, the saved notes stay as they are. */
-	public record WeekSave(List<ShiftInput> shifts, Map<Long, String> notes) {}
+	/** {@code managersOnDuty}: the MOD row. Left out, the saved managers on duty stay as they are. */
+	public record WeekSave(List<ShiftInput> shifts, Map<Long, String> notes, List<ModInput> managersOnDuty) {}
 
 	public record WeekPublish(boolean published) {}
 

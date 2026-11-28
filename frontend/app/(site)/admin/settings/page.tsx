@@ -6,6 +6,7 @@ import AdpSettingsCard from '@/src/components/AdpSettingsCard';
 import SalesSummaryCard from '@/src/components/SalesSummaryCard';
 import HolidaysCard from '@/src/components/HolidaysCard';
 import MonthlyGoalsCard from '@/src/components/MonthlyGoalsCard';
+import ManagerOnDutyCard from '@/src/components/ManagerOnDutyCard';
 import { api, type PermissionKey, type PermissionRule, type UserRole } from '@/src/lib/api';
 import { ROLES } from '@/src/lib/roles';
 
@@ -103,6 +104,7 @@ export default function SettingsPage() {
         {dirty && <span className="text-sm font-semibold text-[var(--warn)]">Unsaved changes</span>}
       </div>
 
+      <ManagerOnDutyCard />
       <MonthlyGoalsCard />
       <SalesSummaryCard />
       <HolidaysCard />

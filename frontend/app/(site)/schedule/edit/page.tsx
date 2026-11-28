@@ -61,6 +61,8 @@ function ScheduleEditor() {
   const [approverId, setApproverId] = useState<number | null>(null);
   // Private notes by employee id: only people who build or approve the schedule see them.
   const [notes, setNotes] = useState<Record<number, string>>({});
+  // The MOD row: the manager on duty's id by date.
+  const [mods, setMods] = useState<Record<string, number>>({});
   const { user } = useUser();
   const dialogs = useDialogs();
 
@@ -98,6 +100,7 @@ function ScheduleEditor() {
         setWeek(w);
         setCells(next);
         setNotes(w.builderNotes ?? {});
+        setMods(Object.fromEntries((w.managersOnDuty ?? []).map((m) => [m.date, m.userId])));
         // Default "send to": whoever it was last sent to, or the only approver.
         setApproverId(w.submittedToId ?? (w.approvers.length === 1 ? w.approvers[0].userId : null));
         setDirty(false);
@@ -121,6 +124,17 @@ function ScheduleEditor() {
     setCells((c) => {
       const next = { ...c };
       if (cell) next[k] = cell; else delete next[k];
+      return next;
+    });
+    setDirty(true);
+    setNotice(null);
+  }
+
+  /** Pick (or clear, with null) the manager on duty for one day. */
+  function setMod(date: string, userId: number | null) {
+    setMods((m) => {
+      const next = { ...m };
+      if (userId) next[date] = userId; else delete next[date];
       return next;
     });
     setDirty(true);
@@ -182,9 +196,9 @@ function ScheduleEditor() {
   }
 
   async function copyLastWeek() {
-    if (Object.keys(cells).length && !(await dialogs.confirm({
+    if ((Object.keys(cells).length || Object.keys(mods).length) && !(await dialogs.confirm({
       title: 'Copy last week?',
-      message: 'This replaces everything on this week with last week’s shifts.',
+      message: 'This replaces everything on this week with last week’s shifts and managers on duty.',
       confirmLabel: 'Replace',
     }))) return;
     try {
@@ -198,6 +212,11 @@ function ScheduleEditor() {
         }
       }
       setCells({ ...next, ...approvedDays() });
+      // Managers on duty carry over too, as long as they can still be picked.
+      const allowed = new Set((week?.modChoices ?? []).map((p) => p.userId));
+      setMods(Object.fromEntries((prev.managersOnDuty ?? [])
+        .filter((m) => allowed.has(m.userId))
+        .map((m) => [addDays(m.date, 7), m.userId])));
       setDirty(true);
       setEditing(null);
       setNotice(prev.shifts.length ? 'Copied last week. Review it, then save.' : 'Last week had no shifts to copy.');
@@ -216,7 +235,8 @@ function ScheduleEditor() {
           ? { userId: Number(userId), date, type: 'REQUESTED_OFF' as const, note: c.note || null }
           : { userId: Number(userId), date, type: 'WORK' as const, start: c.start, end: c.end, note: c.note || null };
       });
-      setWeek(await api.saveSchedule(weekStart, shifts, notes));
+      const managersOnDuty = Object.entries(mods).map(([date, userId]) => ({ date, userId }));
+      setWeek(await api.saveSchedule(weekStart, shifts, notes, managersOnDuty));
       setDirty(false);
       setEditing(null);
       setNotice('Saved.');
@@ -306,6 +326,19 @@ function ScheduleEditor() {
     const c = cells[key(d.userId, d.date)];
     return c && !c.off;
   });
+  // The MOD row's picker lists only people the owner allows as manager on duty.
+  const modChoiceIds = new Set(week.modChoices.map((p) => p.userId));
+  const modName = (id: number) => week.modChoices.find((p) => p.userId === id)?.name
+    ?? week.managersOnDuty.find((m) => m.userId === id)?.name
+    ?? staff.find((m) => m.userId === id)?.name
+    ?? 'Former employee';
+  // Days whose manager on duty has no working shift that day.
+  const modNotWorking = days.flatMap((d) => {
+    const id = mods[d];
+    if (!id) return [];
+    const c = cells[key(id, d)];
+    return c && !c.off ? [] : [`${modName(id)} on ${longDayLabel(d)}`];
+  });
 
   return (
     <div className="-mt-4">
@@ -352,6 +385,12 @@ function ScheduleEditor() {
         </Banner>
       )}
 
+      {modNotWorking.length > 0 && (
+        <Banner tone="warn">
+          <b>Manager on duty without a shift:</b> {modNotWorking.join(', ')}. Give them a shift that day or pick someone else.
+        </Banner>
+      )}
+
       {!readOnly && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <button className="btn-ghost" onClick={() => void copyLastWeek()} disabled={busy}>Copy last week</button>
@@ -359,10 +398,10 @@ function ScheduleEditor() {
             className="btn-ghost"
             onClick={() => void dialogs.confirm({
               title: 'Clear this week?',
-              message: 'This removes every shift and RO on this week, except approved time off. Nothing is saved until you click Save.',
+              message: 'This removes every shift, RO, and manager on duty on this week, except approved time off. Nothing is saved until you click Save.',
               confirmLabel: 'Clear week',
               danger: true,
-            }).then((ok) => { if (ok) { setCells(approvedDays()); setDirty(true); setEditing(null); } })}
+            }).then((ok) => { if (ok) { setCells(approvedDays()); setMods({}); setDirty(true); setEditing(null); } })}
             disabled={busy}
           >
             Clear week
@@ -433,6 +472,39 @@ function ScheduleEditor() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
+            {/* The MOD row: one manager on duty per day, picked from the owner's list. */}
+            <tr className="border-b-2 border-b-[var(--accent)]/40 bg-[var(--accent-soft)]">
+              <td className="sticky left-0 z-10 whitespace-nowrap bg-[var(--accent-soft)] px-4 py-1">
+                <div className="font-bold">MOD</div>
+                <div className="text-xs opacity-60">Manager on duty</div>
+              </td>
+              {days.map((d) => {
+                const id = mods[d];
+                return (
+                  <td key={d} className="px-1 py-1 align-middle">
+                    {readOnly ? (
+                      <span className="px-2 text-xs font-bold">{id ? modName(id) : ''}</span>
+                    ) : (
+                      <select
+                        className="input px-2 py-1 text-xs"
+                        aria-label={`Manager on duty, ${longDayLabel(d)}`}
+                        value={id ?? ''}
+                        onChange={(e) => setMod(d, e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">No MOD</option>
+                        {/* Someone saved earlier who's no longer on the list stays shown so they aren't lost. */}
+                        {id && !modChoiceIds.has(id) && <option value={id}>{modName(id)} (not on the MOD list)</option>}
+                        {week.modChoices.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+                      </select>
+                    )}
+                  </td>
+                );
+              })}
+              <td />
+              <td className="px-2 py-1 text-xs opacity-60">
+                {!readOnly && week.modChoices.length === 0 && 'No one can be MOD yet. The owner picks who on the Settings page.'}
+              </td>
+            </tr>
             {staff.map((m, i) => {
               const total = days.reduce((h, d) => {
                 const c = cells[key(m.userId, d)];
@@ -541,7 +613,7 @@ function ScheduleEditor() {
         <span className="rounded bg-amber-100 px-2 py-0.5 text-[var(--warn)]">RO</span>
       </div>
       <p className="mt-1 text-xs opacity-60">
-        Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Click RO for a day someone requested off. Approved time off shows as RO on its own.
+        Click a day to add or change a shift. New shifts start with the salon&apos;s hours for that day. Click RO for a day someone requested off. Approved time off shows as RO on its own. Pick each day&apos;s manager on duty in the MOD row.
       </p>
     </div>
   );
