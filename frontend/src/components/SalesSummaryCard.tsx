@@ -33,7 +33,8 @@ export default function SalesSummaryCard() {
       <h2 className="text-lg font-extrabold">Daily sales summary</h2>
       <p className="mt-1 text-sm opacity-70">
         A notification 30 minutes after closing with that day&apos;s sales. Turn it off for anyone who doesn&apos;t want it;
-        the Business card on Home stays either way.
+        the Business card on Home stays either way. This is the same switch as Daily sales summary under
+        Notifications on each owner&apos;s My account, so a change in either place shows in both.
       </p>
       {!people ? (
         <p className="mt-3 text-sm opacity-60">{error ?? 'Loading…'}</p>

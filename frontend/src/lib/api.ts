@@ -923,6 +923,27 @@ export interface AppNotification {
   read: boolean;
 }
 
+export type NotificationKind =
+  | 'TIME_OFF_REQUESTS'
+  | 'PTO_REQUESTS'
+  | 'MY_REQUESTS'
+  | 'SCHEDULE'
+  | 'PAYROLL_NOTES'
+  | 'VIDEOS'
+  | 'CONTESTS'
+  | 'TEAM_BOARD'
+  | 'OPEN_TIMECARDS'
+  | 'DAILY_SALES'
+  | 'JOB_APPLICATIONS';
+
+/** One kind of notification on My account, and whether this person gets it. */
+export interface NotificationChoice {
+  kind: NotificationKind;
+  label: string;
+  description: string;
+  on: boolean;
+}
+
 export interface AdminStatus {
   bunnyConfigured: boolean;
   signupOpen: boolean;
@@ -1092,6 +1113,10 @@ export const api = {
   notificationsSeen: (path: string) => send<{ unread: number }>('/api/notifications/seen', 'POST', { path }),
   readNotification: (id: number) => send<void>(`/api/notifications/${id}/read`, 'PUT', {}),
   readAllNotifications: () => send<void>('/api/notifications/read-all', 'PUT', {}),
+  /** My account: the kinds of notifications that can reach you, and which you get. */
+  notificationChoices: () => send<NotificationChoice[]>('/api/notifications/choices'),
+  setNotificationChoice: (kind: NotificationKind, on: boolean) =>
+    send<NotificationChoice[]>('/api/notifications/choices', 'PUT', { kind, on }),
 
   contests: () => send<Contest[]>('/api/contests'),
   contestPeople: () => send<{ userId: number; name: string }[]>('/api/contests/people'),

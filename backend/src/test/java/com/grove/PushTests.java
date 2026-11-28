@@ -30,6 +30,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Role;
 import com.grove.Repository.AppSettingRepository;
 import com.grove.Repository.ScheduleWeekRepository;
@@ -94,11 +95,11 @@ class PushTests {
 		String body = mvc.perform(post("/api/time-off").cookie(ava).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"startDate\":\"" + week + "\",\"endDate\":\"" + week + "\"}"))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-		verify(push).notify(to(ownerId, gmId), eq("Time off request"), anyString(), eq("/time-off"));
+		verify(push).notify(eq(NotificationKind.TIME_OFF_REQUESTS), to(ownerId, gmId), eq("Time off request"), anyString(), eq("/time-off"));
 
 		long id = Long.parseLong(body.replaceAll(".*?\"id\":(\\d+).*", "$1"));
 		mvc.perform(put("/api/time-off/" + id + "/approve").cookie(gm)).andExpect(status().isOk());
-		verify(push).notify(to(avaId), org.mockito.ArgumentMatchers.startsWith("Time off approved"), anyString(), eq("/time-off"));
+		verify(push).notify(eq(NotificationKind.MY_REQUESTS), to(avaId), org.mockito.ArgumentMatchers.startsWith("Time off approved"), anyString(), eq("/time-off"));
 	}
 
 	@Test
@@ -106,13 +107,13 @@ class PushTests {
 		mvc.perform(put("/api/schedule/" + week + "/published").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"published\":true}"))
 			.andExpect(status().isOk());
-		verify(push).notify(to(gmId, avaId), eq("New schedule posted"), anyString(), eq("/schedule"));
+		verify(push).notify(eq(NotificationKind.SCHEDULE), to(gmId, avaId), eq("New schedule posted"), anyString(), eq("/schedule"));
 
 		reset(push);
 		mvc.perform(put("/api/schedule/" + week + "/published").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"published\":true}"))
 			.andExpect(status().isOk());
-		verify(push, never()).notify(any(), eq("New schedule posted"), anyString(), anyString());
+		verify(push, never()).notify(any(), any(), eq("New schedule posted"), anyString(), anyString());
 	}
 
 	@Test
@@ -120,12 +121,12 @@ class PushTests {
 		mvc.perform(post("/api/schedule/" + week + "/submit").cookie(gm).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"approverId\":" + ownerId + "}"))
 			.andExpect(status().isOk());
-		verify(push).notify(to(ownerId), eq("Schedule to approve"), anyString(), anyString());
+		verify(push).notify(eq(NotificationKind.SCHEDULE), to(ownerId), eq("Schedule to approve"), anyString(), anyString());
 
 		mvc.perform(post("/api/schedule/" + week + "/send-back").cookie(owner).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"note\":\"Fix Tuesday\"}"))
 			.andExpect(status().isOk());
-		verify(push).notify(to(gmId), eq("Schedule sent back"), org.mockito.ArgumentMatchers.contains("Fix Tuesday"), anyString());
+		verify(push).notify(eq(NotificationKind.SCHEDULE), to(gmId), eq("Schedule sent back"), org.mockito.ArgumentMatchers.contains("Fix Tuesday"), anyString());
 	}
 
 	@Test
@@ -134,20 +135,20 @@ class PushTests {
 		String created = mvc.perform(post("/api/team-board").cookie(gm).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"body\":\"Staff meeting Monday\"}"))
 			.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-		verify(push).notify(to(ownerId, avaId), eq("Gia Ray posted on the team board"), eq("Staff meeting Monday"), eq("/home"));
+		verify(push).notify(eq(NotificationKind.TEAM_BOARD), to(ownerId, avaId), eq("Gia Ray posted on the team board"), eq("Staff meeting Monday"), eq("/home"));
 
 		long postId = Long.parseLong(created.replaceAll("\\D", ""));
 		mvc.perform(post("/api/team-board/" + postId + "/comments").cookie(ava).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"body\":\"Got it\"}"))
 			.andExpect(status().isCreated());
-		verify(push).notify(to(gmId), eq("Ava Stone commented on your post"), eq("Got it"), eq("/home"));
+		verify(push).notify(eq(NotificationKind.TEAM_BOARD), to(gmId), eq("Ava Stone commented on your post"), eq("Got it"), eq("/home"));
 
 		// Commenting on your own post doesn't notify you.
 		reset(push);
 		mvc.perform(post("/api/team-board/" + postId + "/comments").cookie(gm).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"body\":\"Thanks\"}"))
 			.andExpect(status().isCreated());
-		verify(push, never()).notify(any(), anyString(), anyString(), anyString());
+		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 	}
 
 	private static Collection<Long> to(Long... ids) {

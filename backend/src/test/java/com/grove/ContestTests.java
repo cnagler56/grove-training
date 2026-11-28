@@ -45,6 +45,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Role;
 import com.grove.Repository.ContestEntryRepository;
 import com.grove.Repository.ContestRepository;
@@ -170,7 +171,7 @@ class ContestTests {
 			.andExpect(jsonPath("$.standings[0].rank").value(1))
 			.andExpect(jsonPath("$.standings[2].name").value("Lee Moss"))
 			.andExpect(jsonPath("$.standings[2].rank").value(3));
-		verify(push, never()).notify(any(), anyString(), anyString(), anyString());
+		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 
 		// Only treatments count: Lee's colors don't help.
 		report("Ava Stone", 2, "Mia Cruz", 4, "Lee Moss", 2, 50);
@@ -178,15 +179,15 @@ class ContestTests {
 			.andExpect(jsonPath("$.standings[0].name").value("Mia Cruz"))
 			.andExpect(jsonPath("$.standings[1].rank").value(2))
 			.andExpect(jsonPath("$.standings[2].rank").value(2));
-		verify(push).notify(eq(List.of(miaId)), eq("Treatment Blitz"), eq("You moved up to 1st with 4 treatments."), eq("/contests"));
-		verify(push).notify(eq(List.of(avaId)), eq("Treatment Blitz"),
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(miaId)), eq("Treatment Blitz"), eq("You moved up to 1st with 4 treatments."), eq("/contests"));
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Treatment Blitz"),
 			eq("You're now tied for 2nd with 2 treatments. 2 more treatments to move up."), eq("/contests"));
-		verify(push).notify(eq(List.of(leeId)), eq("Treatment Blitz"), contains("You moved up to tied for 2nd"), eq("/contests"));
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(leeId)), eq("Treatment Blitz"), contains("You moved up to tied for 2nd"), eq("/contests"));
 
 		// No change, no notification.
 		clearInvocations(push);
 		check(id);
-		verify(push, never()).notify(any(), anyString(), anyString(), anyString());
+		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 	}
 
 	@Test
@@ -201,11 +202,11 @@ class ContestTests {
 			.andExpect(jsonPath("$.teams[0].members").value(2))
 			.andExpect(jsonPath("$.teams[1].total").value(1))
 			.andExpect(jsonPath("$.teams[1].rank").value(2));
-		verify(push, never()).notify(any(), anyString(), anyString(), anyString());
+		verify(push, never()).notify(any(), any(), anyString(), anyString(), anyString());
 
 		report("Ava Stone", 3, "Lee Moss", 0, "Mia Cruz", 5, "Zoe Park", 1);
 		check(id).andExpect(jsonPath("$.teams[1].rank").value(1));
-		verify(push).notify(argThat((Collection<Long> to) -> to.size() == 4 && to.containsAll(List.of(avaId, leeId, miaId, zoeId))),
+		verify(push).notify(eq(NotificationKind.CONTESTS), argThat((Collection<Long> to) -> to.size() == 4 && to.containsAll(List.of(avaId, leeId, miaId, zoeId))),
 			eq("Team Blitz"), eq("Pine took the lead, 6 to 3."), eq("/contests"));
 	}
 
@@ -223,7 +224,7 @@ class ContestTests {
 		service.checkAll();
 		verify(salonUltimate).detailedServiceByEmployee(today.minusDays(10), today.minusDays(1));
 		mvc.perform(get("/api/contests").cookie(ava)).andExpect(jsonPath("$[0].status").value("FINISHED"));
-		verify(push).notify(eq(List.of(avaId)), eq("Team Blitz is over"),
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Team Blitz is over"),
 			eq("You finished 1st with 3 treatments. Oak won as a team."), eq("/contests"));
 		assertThat(posts.count()).isEqualTo(postsBefore + 1);
 		String body = posts.findAll().stream().map(p -> p.getBody()).filter(b -> b != null && b.startsWith("Team Blitz results"))
@@ -355,8 +356,8 @@ class ContestTests {
 		check(id)
 			.andExpect(jsonPath("$.standings[0].name").value("Mia Cruz"))
 			.andExpect(jsonPath("$.standings[0].points").value(400));
-		verify(push).notify(eq(List.of(miaId)), eq("Treatment Blitz"), eq("You moved up to 1st with 400 points (2 treatments)."), eq("/contests"));
-		verify(push).notify(eq(List.of(avaId)), eq("Treatment Blitz"),
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(miaId)), eq("Treatment Blitz"), eq("You moved up to 1st with 400 points (2 treatments)."), eq("/contests"));
+		verify(push).notify(eq(NotificationKind.CONTESTS), eq(List.of(avaId)), eq("Treatment Blitz"),
 			eq("You're now 2nd with 300 points (3 treatments). 1 more treatment to move up."), eq("/contests"));
 
 		// A new week of stats mid-contest doesn't change anyone's value.

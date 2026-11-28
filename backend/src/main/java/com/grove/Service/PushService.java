@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.grove.Domain.Dtos.PushSubscribeInput;
 import com.grove.Domain.Dtos.PushTestResult;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.PushSubscription;
 import com.grove.Domain.User;
 import com.grove.Repository.PushSubscriptionRepository;
@@ -49,6 +50,7 @@ public class PushService {
 	private final PushSubscriptionRepository subscriptions;
 	private final UserRepository users;
 	private final NotificationService inbox;
+	private final NotificationSettingsService choices;
 	private final String publicKey;
 	private final String privateKey;
 	private final String subject;
@@ -56,12 +58,14 @@ public class PushService {
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
 	public PushService(PushSubscriptionRepository subscriptions, UserRepository users, NotificationService inbox,
+			NotificationSettingsService choices,
 			@Value("${app.push.public-key:}") String publicKey,
 			@Value("${app.push.private-key:}") String privateKey,
 			@Value("${app.push.subject:}") String subject) {
 		this.subscriptions = subscriptions;
 		this.users = users;
 		this.inbox = inbox;
+		this.choices = choices;
 		this.publicKey = publicKey.trim();
 		this.privateKey = privateKey.trim();
 		this.subject = subject.trim();
@@ -98,13 +102,15 @@ public class PushService {
 	}
 
 	/**
-	 * Tell these people, on every device they've turned on. Disabled accounts are
-	 * skipped. Each one also goes on their Notifications list, phone or not.
+	 * Tell these people, on every device they've turned on. Disabled accounts, and anyone
+	 * who turned this kind off on My account, are skipped. Each one also goes on their
+	 * Notifications list, phone or not.
 	 */
-	public void notify(Collection<Long> userIds, String title, String body, String url) {
+	public void notify(NotificationKind kind, Collection<Long> userIds, String title, String body, String url) {
 		if (userIds == null || userIds.isEmpty()) return;
+		Set<Long> off = choices.off(kind);
 		Set<Long> active = users.findAllById(userIds).stream()
-			.filter(User::isActive).map(User::getUserId).collect(Collectors.toSet());
+			.filter(User::isActive).map(User::getUserId).filter(id -> !off.contains(id)).collect(Collectors.toSet());
 		if (active.isEmpty()) return;
 		inbox.save(active, title, body, url);
 		if (!isConfigured()) return;

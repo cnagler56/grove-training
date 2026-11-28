@@ -20,6 +20,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.PushSubscription;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
@@ -77,7 +78,7 @@ class PushDeliveryTest {
 		device(ava, "/gone");
 		device(gone, "/disabled");
 
-		push.notify(List.of(ava.getUserId(), gone.getUserId()), "New schedule posted", "The week of Nov 7 is up.", "/schedule");
+		push.notify(NotificationKind.SCHEDULE, List.of(ava.getUserId(), gone.getUserId()), "New schedule posted", "The week of Nov 7 is up.", "/schedule");
 
 		await().atMost(Duration.ofSeconds(10)).until(() -> received.containsKey("/live")
 			&& subscriptions.findByEndpoint(base() + "/gone").isEmpty());

@@ -25,6 +25,7 @@ import com.grove.Domain.Dtos.VideoDetail;
 import com.grove.Domain.Dtos.VideoRequest;
 import com.grove.Domain.Dtos.VideoLinkRequest;
 import com.grove.Domain.Dtos.VideoSummary;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.User;
 import com.grove.Domain.Video;
 import com.grove.Domain.VideoAssignment;
@@ -226,7 +227,7 @@ public class VideoService {
 		v.setAssignedOnly(!everyone);
 		videoRepo.save(v);
 		List<Long> newlyAssigned = ids.stream().filter(uid -> !alreadyAssigned.contains(uid)).toList();
-		push.notify(newlyAssigned, "New video assigned to you", v.getTitle(), "/videos/" + v.getId());
+		push.notify(NotificationKind.VIDEOS, newlyAssigned, "New video assigned to you", v.getTitle(), "/videos/" + v.getId());
 		return audience(id);
 	}
 

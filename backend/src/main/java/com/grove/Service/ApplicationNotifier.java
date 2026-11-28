@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.grove.Domain.JobApplication;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Repository.UserRepository;
@@ -29,7 +30,7 @@ public class ApplicationNotifier {
 			.map(User::getEmail)
 			.toList();
 		String who = a.getFirstName() + " " + a.getLastName();
-		push.notify(users.findAll().stream().filter(u -> u.getRoles() == Role.OWNER).map(User::getUserId).toList(),
+		push.notify(NotificationKind.JOB_APPLICATIONS, users.findAll().stream().filter(u -> u.getRoles() == Role.OWNER).map(User::getUserId).toList(),
 			"New job application", who + " applied for " + a.getPosition() + ".", "/admin/applicants/" + a.getId());
 		mailer.send(owners, "New job application: " + who + " (" + a.getPosition() + ")", String.join("\n",
 			who + " applied for " + a.getPosition() + " at Grove Salons.",

@@ -25,6 +25,7 @@ import com.grove.Domain.Dtos.ShiftInput;
 import com.grove.Domain.Dtos.ShiftView;
 import com.grove.Domain.Dtos.TimeOffDay;
 import com.grove.Domain.Dtos.WeekSchedule;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
 import com.grove.Domain.ScheduleNote;
@@ -270,7 +271,7 @@ public class ScheduleService {
 		weeks.save(w);
 
 		String range = range(start);
-		push.notify(List.of(approver.getUserId()), "Schedule to approve",
+		push.notify(NotificationKind.SCHEDULE, List.of(approver.getUserId()), "Schedule to approve",
 			name(builder) + " sent you the week of " + range + ".", "/schedule/edit?week=" + start);
 		mailer.send(List.of(approver.getEmail()), "Schedule to approve: week of " + range, String.join("\n",
 			name(builder) + " sent you the schedule for the week of " + range + " to approve.",
@@ -300,7 +301,7 @@ public class ScheduleService {
 			Set<Long> viewers = users.findAll().stream()
 				.filter(u -> !u.getUserId().equals(approver.getUserId()) && perms.has(u, Permission.VIEW_SCHEDULE))
 				.map(User::getUserId).collect(Collectors.toSet());
-			push.notify(viewers, "New schedule posted", "The week of " + range(start) + " is up.", "/schedule");
+			push.notify(NotificationKind.SCHEDULE, viewers, "New schedule posted", "The week of " + range(start) + " is up.", "/schedule");
 		}
 
 		// Let the builder know their week went up.
@@ -328,7 +329,7 @@ public class ScheduleService {
 		weeks.save(w);
 
 		if (builderId != null) {
-			push.notify(List.of(builderId), "Schedule sent back",
+			push.notify(NotificationKind.SCHEDULE, List.of(builderId), "Schedule sent back",
 				name(approver) + ": " + trimmed, "/schedule/edit?week=" + start);
 			users.findById(builderId).ifPresent(b -> mailer.send(List.of(b.getEmail()),
 				"Schedule sent back: week of " + range(start), String.join("\n",

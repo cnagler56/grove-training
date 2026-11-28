@@ -18,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.grove.Domain.Dtos.TimeOffInput;
 import com.grove.Domain.Dtos.TimeOffQueue;
 import com.grove.Domain.Dtos.TimeOffView;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Shift;
 import com.grove.Domain.BlackoutDate;
@@ -112,7 +113,7 @@ public class TimeOffService {
 			.filter(u -> !u.getUserId().equals(employee.getUserId()) && perms.has(u, Permission.APPROVE_TIME_OFF))
 			.toList();
 		List<String> approvers = approverList.stream().map(User::getEmail).toList();
-		push.notify(approverList.stream().map(User::getUserId).toList(), "Time off request",
+		push.notify(NotificationKind.TIME_OFF_REQUESTS, approverList.stream().map(User::getUserId).toList(), "Time off request",
 			name(employee) + ": " + range(saved), "/time-off");
 		mailer.send(approvers, "Time off request: " + name(employee), String.join("\n",
 			name(employee) + " asked for time off: " + range(saved) + ".",
@@ -207,7 +208,7 @@ public class TimeOffService {
 		List<User> approverList = users.findAll().stream()
 			.filter(u -> !u.getUserId().equals(employee.getUserId()) && perms.has(u, Permission.APPROVE_TIME_OFF))
 			.toList();
-		push.notify(approverList.stream().map(User::getUserId).toList(), "Approved time off cancelled",
+		push.notify(NotificationKind.TIME_OFF_REQUESTS, approverList.stream().map(User::getUserId).toList(), "Approved time off cancelled",
 			name(employee) + ": " + range(r), "/schedule");
 		mailer.send(approverList.stream().map(User::getEmail).toList(), "Approved time off cancelled: " + name(employee), String.join("\n",
 			name(employee) + " cancelled their approved time off: " + range(r) + ".",
@@ -276,7 +277,7 @@ public class TimeOffService {
 	}
 
 	private void tell(TimeOffRequest r, String subject, String firstLine) {
-		push.notify(List.of(r.getUserId()), subject, r.getResponseNote() == null ? firstLine : r.getResponseNote(), "/time-off");
+		push.notify(NotificationKind.MY_REQUESTS, List.of(r.getUserId()), subject, r.getResponseNote() == null ? firstLine : r.getResponseNote(), "/time-off");
 		users.findById(r.getUserId()).ifPresent(u -> mailer.send(List.of(u.getEmail()), subject, String.join("\n",
 			firstLine,
 			r.getResponseNote() == null ? "" : "\n\"" + r.getResponseNote() + "\"\n",

@@ -23,16 +23,15 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import com.grove.Domain.AppSetting;
 import com.grove.Domain.DailySales;
 import com.grove.Domain.DailySales.Status;
 import com.grove.Domain.Dtos.DailySalesDay;
 import com.grove.Domain.Dtos.DailySalesView;
 import com.grove.Domain.Dtos.StatsImportView;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Permission;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
-import com.grove.Repository.AppSettingRepository;
 import com.grove.Repository.DailySalesRepository;
 import com.grove.Repository.UserRepository;
 
@@ -72,9 +71,6 @@ public class DailySalesService {
 	static final int BACKFILL_PER_RUN = 3;
 	/** A past day that didn't save is tried again after this long. */
 	static final int RETRY_HOURS = 24;
-	/** Owners who turned off the daily summary notification. */
-	static final String SUMMARY_OFF_KEY = "dailySales.summaryOff";
-
 	private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US);
 
 	private final DailySalesRepository days;
@@ -82,19 +78,19 @@ public class DailySalesService {
 	private final SalonUltimateClient salonUltimate;
 	private final PushService push;
 	private final PermissionService perms;
-	private final AppSettingRepository settings;
+	private final NotificationSettingsService choices;
 	private final StatsService weeks;
 	private final ZoneId zone;
 
 	public DailySalesService(DailySalesRepository days, UserRepository users, SalonUltimateClient salonUltimate,
-			PushService push, PermissionService perms, AppSettingRepository settings, StatsService weeks,
+			PushService push, PermissionService perms, NotificationSettingsService choices, StatsService weeks,
 			@Value("${app.time-zone:America/Chicago}") String zone) {
 		this.days = days;
 		this.users = users;
 		this.salonUltimate = salonUltimate;
 		this.push = push;
 		this.perms = perms;
-		this.settings = settings;
+		this.choices = choices;
 		this.weeks = weeks;
 		this.zone = ZoneId.of(zone);
 	}
@@ -231,7 +227,7 @@ public class DailySalesService {
 				d.setTimecardAlertSent(true);
 			}
 			if (live && !d.isSummarySent()) {
-				push.notify(summaryRecipients(), "Today's business: waiting on a timecard",
+				push.notify(NotificationKind.DAILY_SALES, summaryRecipients(), "Today's business: waiting on a timecard",
 					"Salon Ultimate won't give " + date.format(DAY) + "'s numbers until this timecard is closed: " + blocked,
 					"/home");
 				d.setSummarySent(true);
@@ -284,7 +280,7 @@ public class DailySalesService {
 		List<Long> managers = users.findAll().stream()
 			.filter(u -> perms.has(u, Permission.TIMECARD_ALERTS))
 			.map(User::getUserId).toList();
-		push.notify(managers, "Open timecard",
+		push.notify(NotificationKind.OPEN_TIMECARDS, managers, "Open timecard",
 			"Still clocked in after closing on " + date.format(DAY) + ": " + who + ". Please close it in Salon Ultimate.",
 			"/home");
 	}
@@ -296,20 +292,25 @@ public class DailySalesService {
 			+ money(d.getNetServiceSales()) + " services, " + money(d.getRetailSales()) + " retail");
 		if (d.getClients() != null) body.append(", ").append(d.getClients()).append(" clients");
 		body.append(". Month so far ").append(money(p.monthToDate())).append(", on pace for ").append(money(p.projected())).append('.');
-		push.notify(summaryRecipients(), "Today's business, " + d.getDate().format(DAY), body.toString(), "/home");
+		push.notify(NotificationKind.DAILY_SALES, summaryRecipients(), "Today's business, " + d.getDate().format(DAY), body.toString(), "/home");
 	}
 
-	/** Owners who get the daily summary: every active owner, unless they've turned it off in Settings. */
+	/**
+	 * Every active owner. Anyone who turned the summary off (on My account, or for them on
+	 * Settings) is skipped by {@link PushService#notify}.
+	 */
 	private List<Long> summaryRecipients() {
-		var off = summaryOff();
 		return users.findAll().stream()
-			.filter(u -> u.isActive() && u.getRoles() == Role.OWNER && !off.contains(u.getUserId()))
+			.filter(u -> u.isActive() && u.getRoles() == Role.OWNER)
 			.map(User::getUserId).toList();
 	}
 
-	/** Owners and whether each gets the daily summary, for Settings. */
+	/**
+	 * Owners and whether each gets the daily summary, for Settings. This is the same switch
+	 * as "Daily sales summary" on each owner's My account.
+	 */
 	public List<SummaryRecipient> recipients() {
-		var off = summaryOff();
+		var off = choices.off(NotificationKind.DAILY_SALES);
 		return users.findAll().stream()
 			.filter(u -> u.isActive() && u.getRoles() == Role.OWNER)
 			.sorted(java.util.Comparator.comparing(DailySalesService::name, String.CASE_INSENSITIVE_ORDER))
@@ -324,26 +325,8 @@ public class DailySalesService {
 			throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
 				"Only owners get the daily sales summary");
 		}
-		var off = new java.util.TreeSet<>(summaryOff());
-		if (on) off.remove(userId);
-		else off.add(userId);
-		settings.save(new AppSetting(SUMMARY_OFF_KEY, String.join(",", off.stream().map(String::valueOf).toList())));
+		choices.set(userId, NotificationKind.DAILY_SALES, on);
 		return recipients();
-	}
-
-	/** Owners who turned the summary off, kept as "3,7" in app_settings. */
-	private java.util.Set<Long> summaryOff() {
-		java.util.Set<Long> out = new java.util.HashSet<>();
-		settings.findById(SUMMARY_OFF_KEY).ifPresent(s -> {
-			for (String part : s.getValue().split(",")) {
-				try {
-					if (!part.isBlank()) out.add(Long.parseLong(part.trim()));
-				} catch (NumberFormatException e) {
-					// Not an id: ignore it.
-				}
-			}
-		});
-		return out;
 	}
 
 	private static String name(User u) {

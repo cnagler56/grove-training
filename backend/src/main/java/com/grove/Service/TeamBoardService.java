@@ -20,6 +20,7 @@ import com.grove.Domain.Dtos.TeamCommentView;
 import com.grove.Domain.Dtos.TeamFeed;
 import com.grove.Domain.Dtos.TeamPostInput;
 import com.grove.Domain.Dtos.TeamPostView;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Permission;
 import com.grove.Domain.TeamPost;
 import com.grove.Domain.TeamPostComment;
@@ -112,7 +113,7 @@ public class TeamBoardService {
 		p.setBody(body);
 		p.setCreatedAt(LocalDateTime.now(zone));
 		Long id = posts.save(p).getId();
-		push.notify(push.staffExcept(author.getUserId()), displayName(author) + " posted on the team board",
+		push.notify(NotificationKind.TEAM_BOARD, push.staffExcept(author.getUserId()), displayName(author) + " posted on the team board",
 			body == null ? "Shared photos" : preview(body), "/home");
 		return id;
 	}
@@ -176,7 +177,7 @@ public class TeamBoardService {
 		if (body.length() > MAX_COMMENT) throw bad("Comments are limited to " + MAX_COMMENT + " characters");
 		comments.save(new TeamPostComment(postId, author.getUserId(), body, LocalDateTime.now(zone)));
 		if (!post.getAuthorId().equals(author.getUserId())) {
-			push.notify(List.of(post.getAuthorId()), displayName(author) + " commented on your post", preview(body), "/home");
+			push.notify(NotificationKind.TEAM_BOARD, List.of(post.getAuthorId()), displayName(author) + " commented on your post", preview(body), "/home");
 		}
 	}
 

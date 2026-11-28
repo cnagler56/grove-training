@@ -31,6 +31,7 @@ import com.grove.Domain.Contest.Handicap;
 import com.grove.Domain.Contest.Metric;
 import com.grove.Domain.ContestEntry;
 import com.grove.Domain.ContestTeam;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.Role;
 import com.grove.Domain.User;
 import com.grove.Domain.WeeklyStat;
@@ -294,7 +295,7 @@ public class ContestService {
 			String place = place(e, list);
 			String text = (e.getRank() < was ? "You moved up to " + place : "You're now " + place)
 				+ " with " + score(c, e) + "." + toMoveUp(c, e, list);
-			push.notify(List.of(e.getUserId()), c.getName(), text, PAGE);
+			push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName(), text, PAGE);
 		}
 		if (leader != null && !leader.equals(previousLeader)) {
 			int second = totals.entrySet().stream().filter(t -> !t.getKey().equals(leader))
@@ -302,7 +303,7 @@ public class ContestService {
 			String margin = handicapped(c)
 				? String.format("%,d to %,d points", totals.get(leader), second)
 				: totals.get(leader) + " to " + second;
-			push.notify(list.stream().map(ContestEntry::getUserId).toList(), c.getName(),
+			push.notify(NotificationKind.CONTESTS, list.stream().map(ContestEntry::getUserId).toList(), c.getName(),
 				teamName(teamList, leader) + " took the lead, " + margin + ".", PAGE);
 		}
 	}
@@ -313,7 +314,7 @@ public class ContestService {
 		String teamResult = teamList.isEmpty() ? ""
 			: leader == null ? " The teams tied." : " " + teamName(teamList, leader) + " won as a team.";
 		for (ContestEntry e : list) {
-			push.notify(List.of(e.getUserId()), c.getName() + " is over",
+			push.notify(NotificationKind.CONTESTS, List.of(e.getUserId()), c.getName() + " is over",
 				"You finished " + place(e, list) + " with " + score(c, e) + "." + teamResult, PAGE);
 		}
 

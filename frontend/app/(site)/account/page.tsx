@@ -3,8 +3,12 @@
 import { useState } from 'react';
 import { api } from '@/src/lib/api';
 import NotificationsCard from '@/src/components/NotificationsCard';
+import NotificationChoices from '@/src/components/NotificationChoices';
 
-/** Anyone on staff changes their own password here. Linked from the site header. */
+/**
+ * Anyone on staff changes their own password and picks which notifications they get here.
+ * Linked from the site header.
+ */
 export default function AccountPage() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -53,9 +57,22 @@ export default function AccountPage() {
         </button>
       </form>
 
-      <section className="card mt-6 space-y-3 p-5">
-        <h2 className="text-lg font-bold">Notifications on this device</h2>
-        <NotificationsCard always />
+      <section className="card mt-6 p-5">
+        <h2 className="text-lg font-bold">Notifications</h2>
+
+        <h3 className="mt-4 text-sm font-bold">This device</h3>
+        <div className="mt-2">
+          <NotificationsCard always />
+        </div>
+
+        <h3 className="mt-6 text-sm font-bold">What you get notified about</h3>
+        <p className="mt-1 text-sm opacity-70">
+          Turn off anything you don&apos;t want to hear about. This is just for you, counts on every phone or
+          computer you use, and also keeps those off your Notifications list.
+        </p>
+        <div className="mt-2">
+          <NotificationChoices />
+        </div>
       </section>
     </div>
   );

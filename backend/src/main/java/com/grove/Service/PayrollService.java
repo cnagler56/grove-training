@@ -33,6 +33,7 @@ import com.grove.Domain.Dtos.PayrollNoteView;
 import com.grove.Domain.Dtos.PayrollPto;
 import com.grove.Domain.Dtos.PayrollSummary;
 import com.grove.Domain.Dtos.Person;
+import com.grove.Domain.NotificationKind;
 import com.grove.Domain.PayrollNote;
 import com.grove.Domain.PayrollNote.Kind;
 import com.grove.Domain.Permission;
@@ -231,7 +232,7 @@ public class PayrollService {
 		r.setFinishedAt(LocalDateTime.now(zone));
 		vacationPay.save(r);
 		String hours = r.getHours().stripTrailingZeros().toPlainString();
-		push.notify(List.of(r.getUserId()), "Paid time off entered into payroll",
+		push.notify(NotificationKind.MY_REQUESTS, List.of(r.getUserId()), "Paid time off entered into payroll",
 			name(approver) + " entered your " + hours + " hours of paid time off into payroll for the "
 				+ r.getCheckDate().format(java.time.format.DateTimeFormatter.ofPattern("MMM d")) + " check.",
 			"/paid-time-off");
@@ -259,12 +260,12 @@ public class PayrollService {
 		List<Long> to = users.findAll().stream()
 			.filter(u -> u.isActive() && roles.contains(u.getRoles()) && !u.getUserId().equals(actor.getUserId()))
 			.map(User::getUserId).toList();
-		push.notify(to, title, name(actor) + ": " + describe(n, names), "/payroll");
+		push.notify(NotificationKind.PAYROLL_NOTES, to, title, name(actor) + ": " + describe(n, names), "/payroll");
 	}
 
 	private void tellAuthor(User actor, PayrollNote n, Map<Long, String> names, String title, String verb) {
 		if (n.getCreatedBy() == null || n.getCreatedBy().equals(actor.getUserId())) return;
-		push.notify(List.of(n.getCreatedBy()), title, name(actor) + verb + describe(n, names), "/payroll-notes");
+		push.notify(NotificationKind.PAYROLL_NOTES, List.of(n.getCreatedBy()), title, name(actor) + verb + describe(n, names), "/payroll-notes");
 	}
 
 	/** "Ava Stone, deduction $25.50 (Uniform shirt)". */

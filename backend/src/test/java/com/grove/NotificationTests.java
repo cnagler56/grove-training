@@ -25,6 +25,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.grove.Domain.NotificationKind;
 import com.grove.Repository.UserNotificationRepository;
 import com.grove.Repository.UserRepository;
 import com.grove.Repository.UserSessionRepository;
@@ -63,8 +64,8 @@ class NotificationTests {
 
 	@Test
 	void everythingSentIsListedNewestFirstEvenWithoutPhoneNotifications() throws Exception {
-		push.notify(List.of(avaId), "Time off approved", "Owner approved Dec 7", "/time-off");
-		push.notify(List.of(avaId, miaId), "Treatment Blitz", "You moved up to 1st", "/contests");
+		push.notify(NotificationKind.MY_REQUESTS, List.of(avaId), "Time off approved", "Owner approved Dec 7", "/time-off");
+		push.notify(NotificationKind.CONTESTS, List.of(avaId, miaId), "Treatment Blitz", "You moved up to 1st", "/contests");
 
 		mvc.perform(get("/api/notifications").cookie(ava))
 			.andExpect(jsonPath("$.unread").value(2))
@@ -95,16 +96,16 @@ class NotificationTests {
 		var mia = users.findById(miaId).orElseThrow();
 		mia.setActive(false);
 		users.save(mia);
-		push.notify(List.of(avaId, miaId), "Hi", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId, miaId), "Hi", null, "/home");
 		assertThat(notifications.findAll()).hasSize(1);
 	}
 
 	@Test
 	void openingOneOrItsPageOrMarkingAllReadClearsTheCount() throws Exception {
-		push.notify(List.of(avaId), "Time off approved", null, "/time-off");
-		push.notify(List.of(avaId), "Time off sent back", null, "/time-off");
-		push.notify(List.of(avaId), "Treatment Blitz", null, "/contests");
-		push.notify(List.of(avaId), "New video", null, "/videos");
+		push.notify(NotificationKind.MY_REQUESTS, List.of(avaId), "Time off approved", null, "/time-off");
+		push.notify(NotificationKind.MY_REQUESTS, List.of(avaId), "Time off sent back", null, "/time-off");
+		push.notify(NotificationKind.CONTESTS, List.of(avaId), "Treatment Blitz", null, "/contests");
+		push.notify(NotificationKind.VIDEOS, List.of(avaId), "New video", null, "/videos");
 
 		// Opening a page marks what points to it read.
 		mvc.perform(post("/api/notifications/seen").cookie(ava).contentType(MediaType.APPLICATION_JSON).content("{\"path\":\"/time-off\"}"))
@@ -112,7 +113,7 @@ class NotificationTests {
 		mvc.perform(post("/api/notifications/seen").cookie(ava).contentType(MediaType.APPLICATION_JSON).content("{\"path\":\"/schedule\"}"))
 			.andExpect(jsonPath("$.unread").value(2));
 		// Home is where the app opens, so landing there doesn't count as seeing team board posts.
-		push.notify(List.of(avaId), "Owner posted on the team board", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId), "Owner posted on the team board", null, "/home");
 		mvc.perform(post("/api/notifications/seen").cookie(ava).contentType(MediaType.APPLICATION_JSON).content("{\"path\":\"/home\"}"))
 			.andExpect(jsonPath("$.unread").value(3));
 		long home = notifications.findAll().stream().filter(n -> n.getUrl().equals("/home")).findFirst().orElseThrow().getId();
@@ -134,9 +135,9 @@ class NotificationTests {
 
 	@Test
 	void theListGoesBackThirtyDaysAndOldOnesAreCleanedUp() throws Exception {
-		push.notify(List.of(avaId), "Recent", null, "/home");
-		push.notify(List.of(avaId), "Last month", null, "/home");
-		push.notify(List.of(avaId), "Long ago", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId), "Recent", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId), "Last month", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId), "Long ago", null, "/home");
 		LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Chicago"));
 		notifications.findAll().forEach(n -> {
 			if (n.getTitle().equals("Last month")) n.setCreatedAt(now.minusDays(40));
@@ -152,7 +153,7 @@ class NotificationTests {
 
 	@Test
 	void deletingAnAccountDeletesTheirNotifications() throws Exception {
-		push.notify(List.of(avaId, ownerId), "Hi", null, "/home");
+		push.notify(NotificationKind.TEAM_BOARD, List.of(avaId, ownerId), "Hi", null, "/home");
 		mvc.perform(delete("/api/admin/team/" + avaId).cookie(owner)).andExpect(status().is2xxSuccessful());
 		assertThat(notifications.findAll()).hasSize(1);
 	}
